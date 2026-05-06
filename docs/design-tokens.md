@@ -2,6 +2,8 @@
 
 Dark-mode-first design system. All colors designed for readability on dark backgrounds.
 
+![Color Palette](shadowbrain-palette.png)
+
 ---
 
 ## Brand
