@@ -1,0 +1,73 @@
+<h2>Browse page with integrated search + filters</h2>
+<p class="subtitle">Search and basic filters always visible. Advanced filters collapse when not needed.</p>
+
+<div class="mockup" style="max-width:700px;margin:0 auto">
+  <div class="mockup-header" style="height:44px;background:#0F0D15;border-bottom:1px solid #282430">
+    <span style="color:#C4B8FF;font-weight:600">ShadowBrain</span>
+  </div>
+
+  <!-- Search + Filters Bar -->
+  <div style="background:#0F0D15;padding:12px 16px;border-bottom:1px solid #282430">
+    <!-- Search Input -->
+    <div style="margin-bottom:12px">
+      <input class="mock-input" placeholder="Search by keyword..." style="width:100%;background:#1A1722;border:1px solid #282430;padding:10px 12px;border-radius:6px;color:#E4E0EC">
+    </div>
+
+    <!-- Quick Filters -->
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="color:#9894A4;font-size:12px">Type:</span>
+      <span class="mock-button" style="padding:4px 10px;font-size:12px;background:#7C5CFC;color:#F5F3F9;border:none;border-radius:12px">All</span>
+      <span class="mock-button" style="padding:4px 10px;font-size:12px;background:#282430;color:#9894A4;border:none;border-radius:12px">Notes</span>
+      <span class="mock-button" style="padding:4px 10px;font-size:12px;background:#282430;color:#9894A4;border:none;border-radius:12px">Journal</span>
+      <span class="mock-button" style="padding:4px 10px;font-size:12px;background:#282430;color:#9894A4;border:none;border-radius:12px">Bookmarks</span>
+
+      <span style="margin-left:auto;color:#7C5CFC;font-size:12px;cursor:pointer">+ Advanced ▼</span>
+    </div>
+  </div>
+
+  <!-- Content Feed -->
+  <div style="background:#08060D;height:280px;padding:16px;overflow:hidden">
+    <div class="placeholder" style="height:80px;margin-bottom:8px;background:#1A1722;border-radius:4px"></div>
+    <div class="placeholder" style="height:80px;margin-bottom:8px;background:#1A1722;border-radius:4px"></div>
+    <div class="placeholder" style="height:80px;background:#1A1722;border-radius:4px"></div>
+  </div>
+</div>
+
+<div style="max-width:700px;margin:24px auto 0">
+  <h3>How it works</h3>
+  <ul style="color:#BDB8C8;line-height:1.6">
+    <li><strong>Search bar</strong> — Always visible. Searches content as you type (debounced). Results appear in the feed below.</li>
+    <li><strong>Type tabs</strong> — Quick filter by content type. Changes feed content instantly.</li>
+    <li><strong>+ Advanced</strong> — Click to reveal: tag multi-select, date range, source filter.</li>
+    <li><strong>Infinite scroll</strong> — Feed loads more as you scroll. Respects current filters.</li>
+  </ul>
+
+  <h3 style="margin-top:20px">Advanced panel (expanded)</h3>
+</div>
+
+<div class="mockup" style="max-width:700px;margin:12px auto 0">
+  <div style="background:#0F0D15;padding:12px 16px;border:1px solid #282430;border-radius:0 0 6px 6px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <label style="color:#9894A4;font-size:11px;display:block;margin-bottom:4px">TAGS</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <span class="mock-button" style="padding:4px 10px;font-size:12px;background:#7C5CFC;color:#F5F3F9;border:none;border-radius:12px">docker <span style="margin-left:6px">×</span></span>
+          <span class="mock-button" style="padding:4px 10px;font-size:12px;background:#7C5CFC;color:#F5F3F9;border:none;border-radius:12px">ideas <span style="margin-left:6px">×</span></span>
+          <input class="mock-input" placeholder="Add tag..." style="background:#1A1722;border:1px solid #282430;padding:4px 8px;border-radius:12px;font-size:12px;width:80px">
+        </div>
+      </div>
+      <div>
+        <label style="color:#9894A4;font-size:11px;display:block;margin-bottom:4px">DATE RANGE</label>
+        <input class="mock-input" placeholder="Last 30 days" style="background:#1A1722;border:1px solid #282430;padding:6px 10px;border-radius:6px;font-size:12px;width:100%">
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span class="mock-button" style="padding:4px 10px;font-size:12px;background:#282430;color:#9894A4;border:none;border-radius:12px">Source: Any ▼</span>
+      <span class="mock-button" style="padding:6px 16px;font-size:12px;background:#282430;color:#9894A4;border:none;border-radius:4px">Clear all</span>
+    </div>
+  </div>
+</div>
+
+<div style="max-width:700px;margin:24px auto 0">
+  <p style="color:#9894A4;font-size:13px">Click the type tabs above to see them in action, or tell me what you'd adjust.</p>
+</div>
