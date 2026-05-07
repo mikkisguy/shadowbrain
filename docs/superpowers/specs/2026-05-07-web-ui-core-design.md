@@ -73,6 +73,7 @@ Each section is its own page with clear URL structure. Full content width availa
 ```
 
 **Elements:**
+
 - Type badge (colored by content type)
 - Title (truncated if long)
 - Content preview (2-3 lines, ~150 chars)
@@ -80,6 +81,7 @@ Each section is its own page with clear URL structure. Full content width availa
 - Timestamp (relative: 2h ago, 1d ago)
 
 **Interaction:**
+
 - Click card → navigate to `/item/[id]`
 - Click tag → add to filter (multi-select)
 - Click type badge → filter by type
@@ -227,6 +229,7 @@ Hamburger menu opens: Browse, Search, Tags, Settings.
 ### Mobile Cards
 
 Compact mode on mobile:
+
 - Single-line title
 - 1-line preview
 - Tags hidden (show count instead: "3 tags")

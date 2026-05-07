@@ -9,7 +9,7 @@ ShadowBrain is a personal knowledge management system that treats every thought 
 ## What Makes It Different
 
 - **Everything in one database** — no split between "journal here" and "notes there." One query across your entire brain.
-- **Semantic search** — find thoughts by *meaning*, not just keywords.
+- **Semantic search** — find thoughts by _meaning_, not just keywords.
 - **Typed links** — `inspired by`, `contradicts`, `builds upon`, `involves`, `bookmarked for` — not just "related to."
 - **Frictionless capture** — Discord, web, voice. Under 3 seconds from thought to saved.
 - **Hermes is the interface** — your AI assistant is the primary interaction layer. Talk to it like a person.
@@ -19,15 +19,15 @@ ShadowBrain is a personal knowledge management system that treats every thought 
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| **Database** | SQLite + `sqlite-vec` (semantic search) + FTS5 (full-text) |
-| **Backend** | Next.js (App Router, TypeScript) |
-| **Frontend** | React 19 + Tailwind CSS + shadcn/ui |
-| **AI Interface** | Hermes Agent (primary user layer) |
-| **Capture** | Discord WebSocket listener, Web UI, API |
-| **AI Processing** | OpenRouter (configurable model) |
-| **Deployment** | Docker Compose + nginx reverse proxy |
+| Layer             | Technology                                                 |
+| ----------------- | ---------------------------------------------------------- |
+| **Database**      | SQLite + `sqlite-vec` (semantic search) + FTS5 (full-text) |
+| **Backend**       | Next.js (App Router, TypeScript)                           |
+| **Frontend**      | React 19 + Tailwind CSS + shadcn/ui                        |
+| **AI Interface**  | Hermes Agent (primary user layer)                          |
+| **Capture**       | Discord WebSocket listener, Web UI, API                    |
+| **AI Processing** | OpenRouter (configurable model)                            |
+| **Deployment**    | Docker Compose + nginx reverse proxy                       |
 
 ---
 

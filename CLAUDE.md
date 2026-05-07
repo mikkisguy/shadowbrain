@@ -4,9 +4,9 @@ Personal knowledge graph + journal, local-first, with Hermes (Nous Research's au
 
 ## Quick start
 
-pnpm dev      # Start dev server
-pnpm test     # Run tests
-pnpm lint     # Lint
+pnpm dev # Start dev server
+pnpm test # Run tests
+pnpm lint # Lint
 
 ## Key docs
 
