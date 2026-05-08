@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3';
-import { readFileSync, readdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import Database from "better-sqlite3";
+import { readFileSync, readdirSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -15,14 +15,19 @@ interface Migration {
 
 function getMigrations(): Migration[] {
   const files = readdirSync(MIGRATIONS_DIR)
-    .filter(f => f.endsWith('.sql') && f !== 'migrate.ts')
+    .filter((f) => f.endsWith(".sql"))
     .sort();
 
   const migrations: Migration[] = [];
 
   for (const filename of files) {
-    const number = parseInt(filename.split('_')[0], 10);
-    const sql = readFileSync(join(MIGRATIONS_DIR, filename), 'utf-8');
+    const number = parseInt(filename.split("_")[0], 10);
+    if (isNaN(number)) {
+      throw new Error(
+        `Invalid migration filename: ${filename} (must start with a number)`
+      );
+    }
+    const sql = readFileSync(join(MIGRATIONS_DIR, filename), "utf-8");
     migrations.push({ filename, number, sql });
   }
 
@@ -38,14 +43,16 @@ export function runMigrations(db: Database.Database): void {
   `);
 
   const currentVersion = db
-    .prepare('SELECT MAX(version) as v FROM schema_migrations')
+    .prepare("SELECT MAX(version) as v FROM schema_migrations")
     .get() as { v: number | null };
   const currentVersionNumber = currentVersion?.v ?? 0;
 
-  const pendingMigrations = getMigrations().filter((m) => m.number > currentVersionNumber);
+  const pendingMigrations = getMigrations().filter(
+    (m) => m.number > currentVersionNumber
+  );
 
   if (pendingMigrations.length === 0) {
-    console.log('No pending migrations.');
+    console.log("No pending migrations.");
     return;
   }
 
@@ -56,12 +63,14 @@ export function runMigrations(db: Database.Database): void {
 
     const transaction = db.transaction(() => {
       db.exec(migration.sql);
-      db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(migration.number);
+      db.prepare("INSERT INTO schema_migrations (version) VALUES (?)").run(
+        migration.number
+      );
     });
 
     transaction();
     console.log(`  ✓ ${migration.filename} applied.`);
   }
 
-  console.log('Migrations complete.');
+  console.log("Migrations complete.");
 }

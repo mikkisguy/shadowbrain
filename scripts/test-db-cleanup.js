@@ -1,12 +1,13 @@
-const { unlinkSync, existsSync } = require('fs');
-const { join, resolve } = require('path');
+/* eslint-disable @typescript-eslint/no-require-imports */
+const { unlinkSync, existsSync } = require("fs");
+const { join, resolve } = require("path");
 
-const PROJECT_ROOT = resolve(__dirname, '..');
+const PROJECT_ROOT = resolve(__dirname, "..");
 const TEST_DB_FILES = [
-  'shadowbrain.test.db',
-  'shadowbrain.test.db-wal',
-  'shadowbrain.test.db-shm',
-].map(f => join(PROJECT_ROOT, f));
+  "shadowbrain.test.db",
+  "shadowbrain.test.db-wal",
+  "shadowbrain.test.db-shm",
+].map((f) => join(PROJECT_ROOT, f));
 
 function cleanupTestDb() {
   let removed = 0;
@@ -20,12 +21,12 @@ function cleanupTestDb() {
   return removed;
 }
 
-console.log('Cleaning up test database files...\n');
+console.log("Cleaning up test database files...\n");
 
 const removed = cleanupTestDb();
 
 if (removed === 0) {
-  console.log('No test database files found.');
+  console.log("No test database files found.");
 } else {
   console.log(`\n✓ Removed ${removed} test database file(s).`);
 }

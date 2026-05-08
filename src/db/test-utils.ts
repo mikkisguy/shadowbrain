@@ -1,9 +1,17 @@
-import Database from 'better-sqlite3';
-import { join } from 'path';
-import { unlinkSync, existsSync, readFileSync, readdirSync } from 'fs';
-import { getDbPath } from './index';
+import Database from "better-sqlite3";
+import { unlinkSync, existsSync } from "fs";
+import { closeDb, getDbPath } from "./index";
+import { runMigrations } from "./migrations/migrate";
 
-const TEST_DB_PATH = getDbPath('test');
+const TEST_DB_PATH = getDbPath("test");
+
+const VALID_TABLE_NAME = /^[a-zA-Z0-9_]+$/;
+
+function validateTableName(name: string): void {
+  if (!VALID_TABLE_NAME.test(name)) {
+    throw new Error(`Invalid table name: ${name}`);
+  }
+}
 
 /**
  * Creates a fresh test database with all migrations applied.
@@ -12,33 +20,10 @@ const TEST_DB_PATH = getDbPath('test');
 export function createTestDb(): Database.Database {
   const db = new Database(TEST_DB_PATH);
 
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
 
-  // Run migrations
-  const migrationsDir = join(__dirname, 'migrations');
-  const files = readdirSync(migrationsDir)
-    .filter((f: string) => f.endsWith('.sql'))
-    .sort();
-
-  // Create schema_migrations table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      version INTEGER PRIMARY KEY,
-      applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Apply all migrations
-  for (const filename of files) {
-    const sql = readFileSync(join(migrationsDir, filename), 'utf-8');
-    const number = parseInt(filename.split('_')[0], 10);
-
-    db.transaction(() => {
-      db.exec(sql);
-      db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(number);
-    })();
-  }
+  runMigrations(db);
 
   return db;
 }
@@ -48,13 +33,18 @@ export function createTestDb(): Database.Database {
  * while preserving the schema. Faster than recreating the DB.
  */
 export function resetTestDb(db: Database.Database): void {
-  const tables = db.prepare(`
+  const tables = db
+    .prepare(
+      `
     SELECT name FROM sqlite_master
     WHERE type='table' AND name NOT LIKE 'sqlite_%'
-  `).all() as Array<{ name: string }>;
+  `
+    )
+    .all() as Array<{ name: string }>;
 
   for (const { name } of tables) {
-    if (name !== 'schema_migrations') {
+    validateTableName(name);
+    if (name !== "schema_migrations") {
       db.exec(`DELETE FROM ${name}`);
     }
   }
@@ -64,6 +54,7 @@ export function resetTestDb(db: Database.Database): void {
  * Clears a specific table in the test database.
  */
 export function clearTable(db: Database.Database, tableName: string): void {
+  validateTableName(tableName);
   db.exec(`DELETE FROM ${tableName}`);
 }
 
@@ -72,18 +63,23 @@ export function clearTable(db: Database.Database, tableName: string): void {
  * Useful for testing schema migrations.
  */
 export function dropAllTables(db: Database.Database): void {
-  db.exec('PRAGMA foreign_keys = OFF');
+  db.exec("PRAGMA foreign_keys = OFF");
 
-  const tables = db.prepare(`
+  const tables = db
+    .prepare(
+      `
     SELECT name FROM sqlite_master
     WHERE type='table' AND name NOT LIKE 'sqlite_%'
-  `).all() as Array<{ name: string }>;
+  `
+    )
+    .all() as Array<{ name: string }>;
 
   for (const { name } of tables) {
+    validateTableName(name);
     db.exec(`DROP TABLE IF EXISTS ${name}`);
   }
 
-  db.exec('PRAGMA foreign_keys = ON');
+  db.exec("PRAGMA foreign_keys = ON");
 }
 
 /**
@@ -91,9 +87,12 @@ export function dropAllTables(db: Database.Database): void {
  * Call this in afterAll or cleanup hooks.
  */
 export function cleanupTestDb(): void {
+  // Close any cached test DB connection before deleting files
+  closeDb("test");
+
   const dbPath = TEST_DB_PATH;
-  const walPath = dbPath + '-wal';
-  const shmPath = dbPath + '-shm';
+  const walPath = dbPath + "-wal";
+  const shmPath = dbPath + "-shm";
 
   if (existsSync(dbPath)) {
     unlinkSync(dbPath);
@@ -109,31 +108,50 @@ export function cleanupTestDb(): void {
 /**
  * Inserts test data into the test database.
  */
-export function seedTestDb(db: Database.Database, data: {
-  contentItems?: Array<any>;
-  tags?: Array<any>;
-  contentTags?: Array<any>;
-  links?: Array<any>;
-}): void {
+export function seedTestDb(
+  db: Database.Database,
+  data: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    contentItems?: Array<any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tags?: Array<any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    contentTags?: Array<any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    links?: Array<any>;
+  }
+): void {
   if (data.contentItems) {
     const insertItem = db.prepare(`
       INSERT INTO content_items (id, type, title, content, source, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     for (const item of data.contentItems) {
-      insertItem.run(item.id, item.type, item.title, item.content, item.source, item.created_at, item.updated_at);
+      insertItem.run(
+        item.id,
+        item.type,
+        item.title,
+        item.content,
+        item.source,
+        item.created_at,
+        item.updated_at
+      );
     }
   }
 
   if (data.tags) {
-    const insertTag = db.prepare('INSERT INTO tags (id, name, created_at) VALUES (?, ?, ?)');
+    const insertTag = db.prepare(
+      "INSERT INTO tags (id, name, created_at) VALUES (?, ?, ?)"
+    );
     for (const tag of data.tags) {
       insertTag.run(tag.id, tag.name, tag.created_at);
     }
   }
 
   if (data.contentTags) {
-    const insertCT = db.prepare('INSERT INTO content_tags (content_id, tag_id, created_at) VALUES (?, ?, ?)');
+    const insertCT = db.prepare(
+      "INSERT INTO content_tags (content_id, tag_id, created_at) VALUES (?, ?, ?)"
+    );
     for (const ct of data.contentTags) {
       insertCT.run(ct.content_id, ct.tag_id, ct.created_at);
     }
@@ -145,7 +163,13 @@ export function seedTestDb(db: Database.Database, data: {
       VALUES (?, ?, ?, ?, ?)
     `);
     for (const link of data.links) {
-      insertLink.run(link.id, link.source_id, link.target_id, link.link_type, link.created_at);
+      insertLink.run(
+        link.id,
+        link.source_id,
+        link.target_id,
+        link.link_type,
+        link.created_at
+      );
     }
   }
 }
@@ -154,13 +178,20 @@ export function seedTestDb(db: Database.Database, data: {
  * Asserts that the test database is empty (except for schema_migrations).
  */
 export function assertTestDbEmpty(db: Database.Database): void {
-  const tables = db.prepare(`
+  const tables = db
+    .prepare(
+      `
     SELECT name FROM sqlite_master
     WHERE type='table' AND name NOT IN ('schema_migrations', 'sqlite_%')
-  `).all() as Array<{ name: string }>;
+  `
+    )
+    .all() as Array<{ name: string }>;
 
   for (const { name } of tables) {
-    const count = db.prepare(`SELECT COUNT(*) as c FROM ${name}`).get() as { c: number };
+    validateTableName(name);
+    const count = db.prepare(`SELECT COUNT(*) as c FROM ${name}`).get() as {
+      c: number;
+    };
     if (count.c > 0) {
       throw new Error(`Table ${name} is not empty: ${count.c} rows found`);
     }
@@ -170,7 +201,13 @@ export function assertTestDbEmpty(db: Database.Database): void {
 /**
  * Gets a row count for a specific table.
  */
-export function getTableRowCount(db: Database.Database, tableName: string): number {
-  const result = db.prepare(`SELECT COUNT(*) as c FROM ${tableName}`).get() as { c: number };
+export function getTableRowCount(
+  db: Database.Database,
+  tableName: string
+): number {
+  validateTableName(tableName);
+  const result = db.prepare(`SELECT COUNT(*) as c FROM ${tableName}`).get() as {
+    c: number;
+  };
   return result.c;
 }

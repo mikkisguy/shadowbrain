@@ -60,6 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_ct_content ON content_tags(content_id);
 CREATE INDEX IF NOT EXISTS idx_ct_tag ON content_tags(tag_id);
 
 -- Journal Periods - 4 AM boundary data
+-- One-to-one with content_items: each journal entry has at most one period
 CREATE TABLE IF NOT EXISTS journal_periods (
     content_id   TEXT PRIMARY KEY,
     period_start DATETIME NOT NULL,
