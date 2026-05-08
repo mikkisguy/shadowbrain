@@ -5,6 +5,7 @@
 ShadowBrain is a **personal knowledge graph** disguised as a journal. It captures every thought — fleeting ideas, daily reflections, research notes, bookmarks, project plans, and questions — and weaves them into a searchable, browsable, AI-assisted network.
 
 Most knowledge tools force a choice:
+
 - **Notion/Obsidian**: Great for notes, weak for structured journaling
 - **Day One/Journey**: Great for journaling, weak for knowledge management
 - **Pinboard/Raindrop**: Great for bookmarks, disconnected from everything else
@@ -23,7 +24,7 @@ The database is a single SQLite file. Backup with `cp`. Migrate with `scp`. Expo
 
 ### 3. Hermes is the Primary Interface
 
-The web UI is beautiful and full-featured, but the *primary* interaction model is natural language through Hermes. "Save this thought." "What was I working on last Tuesday?" "Find notes similar to this one." Hermes is the voice of ShadowBrain.
+The web UI is beautiful and full-featured, but the _primary_ interaction model is natural language through Hermes. "Save this thought." "What was I working on last Tuesday?" "Find notes similar to this one." Hermes is the voice of ShadowBrain.
 
 ### 4. Everything Connects
 

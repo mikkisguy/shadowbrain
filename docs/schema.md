@@ -35,17 +35,17 @@ CREATE INDEX idx_content_updated ON content_items(updated_at);
 
 ### Content Types (`type` column)
 
-| Type | Description | Example | Metadata JSON (optional) |
-|------|-------------|---------|--------------------------|
-| `raw` | Quick capture, fleeting thought | "Need to fix the nginx timeout setting" | `null` |
-| `journal` | AI-compiled daily summary | "You reflected on deployment automation..." | `null` |
-| `note` | Permanent knowledge note | "Docker Networking Deep Dive" | `null` |
-| `bookmark` | Saved URL + notes | Article about Postgres indexing | `{"url":"https://...", "favicon":null, "read":false}` |
-| `person` | Someone you interact with | "Sarah (DevOps lead)" | `{"email":"...", "github":"...", "role":"..."}` |
-| `project` | A project or initiative | "BranchForge" | `{"status":"active", "repo":"https://...", "started":"2026-01"}` |
-| `question` | A question you're exploring | "Should we use Kafka or NATS?" | `{"status":"open", "answered_by":null}` |
-| `event` | A timestamped occurrence | "Deployed v2.3 to production" | `{"event_date":"2026-04-12", "duration":null}` |
-| `dream` | Dream journal entry | "I was flying over a city made of..." | `{"mood":"surreal", "lucidity":3}` |
+| Type       | Description                     | Example                                     | Metadata JSON (optional)                                         |
+| ---------- | ------------------------------- | ------------------------------------------- | ---------------------------------------------------------------- |
+| `raw`      | Quick capture, fleeting thought | "Need to fix the nginx timeout setting"     | `null`                                                           |
+| `journal`  | AI-compiled daily summary       | "You reflected on deployment automation..." | `null`                                                           |
+| `note`     | Permanent knowledge note        | "Docker Networking Deep Dive"               | `null`                                                           |
+| `bookmark` | Saved URL + notes               | Article about Postgres indexing             | `{"url":"https://...", "favicon":null, "read":false}`            |
+| `person`   | Someone you interact with       | "Sarah (DevOps lead)"                       | `{"email":"...", "github":"...", "role":"..."}`                  |
+| `project`  | A project or initiative         | "BranchForge"                               | `{"status":"active", "repo":"https://...", "started":"2026-01"}` |
+| `question` | A question you're exploring     | "Should we use Kafka or NATS?"              | `{"status":"open", "answered_by":null}`                          |
+| `event`    | A timestamped occurrence        | "Deployed v2.3 to production"               | `{"event_date":"2026-04-12", "duration":null}`                   |
+| `dream`    | Dream journal entry             | "I was flying over a city made of..."       | `{"mood":"surreal", "lucidity":3}`                               |
 
 ### Why a single table?
 
@@ -80,17 +80,17 @@ CREATE INDEX idx_links_type ON content_links(link_type);
 
 ### Link Types
 
-| Type | Meaning | Example |
-|------|---------|---------|
-| `reference` | General connection | Note → related note |
-| `inspired_by` | This came from that | Note → bookmark that sparked it |
-| `contradicts` | These disagree | Note A → Note B |
-| `builds_upon` | Extends or refines | Note → earlier note |
-| `involves` | Person/project participation | Project → Person |
-| `bookmarked_for` | Saved for a project | Bookmark → Project |
-| `answers` | Question resolved | Note → Question |
-| `happened_during` | Event context | Event → Project |
-| `is_prerequisite` | Must do before | Task → Task |
+| Type              | Meaning                      | Example                         |
+| ----------------- | ---------------------------- | ------------------------------- |
+| `reference`       | General connection           | Note → related note             |
+| `inspired_by`     | This came from that          | Note → bookmark that sparked it |
+| `contradicts`     | These disagree               | Note A → Note B                 |
+| `builds_upon`     | Extends or refines           | Note → earlier note             |
+| `involves`        | Person/project participation | Project → Person                |
+| `bookmarked_for`  | Saved for a project          | Bookmark → Project              |
+| `answers`         | Question resolved            | Note → Question                 |
+| `happened_during` | Event context                | Event → Project                 |
+| `is_prerequisite` | Must do before               | Task → Task                     |
 
 ---
 
@@ -232,6 +232,7 @@ WHERE period_start IS NOT NULL;
 ## Query Examples
 
 **"Everything about Docker across all content types"**
+
 ```sql
 SELECT * FROM content_items
 WHERE content_fts MATCH 'docker'
@@ -239,6 +240,7 @@ ORDER BY created_at DESC;
 ```
 
 **"Find notes semantically similar to this one"**
+
 ```sql
 SELECT ci.*, cv.distance
 FROM content_vectors cv
@@ -250,6 +252,7 @@ LIMIT 10;
 ```
 
 **"What projects is this bookmark connected to?"**
+
 ```sql
 SELECT ci.* FROM content_items ci
 JOIN content_links cl ON cl.target_id = ci.id
@@ -257,6 +260,7 @@ WHERE cl.source_id = ? AND ci.type = 'project' AND cl.link_type = 'bookmarked_fo
 ```
 
 **"Orphan detection — notes with zero connections"**
+
 ```sql
 SELECT * FROM content_items
 WHERE type IN ('note', 'bookmark')
@@ -266,6 +270,7 @@ ORDER BY created_at DESC;
 ```
 
 **"Most used tags"**
+
 ```sql
 SELECT t.name, COUNT(*) as cnt
 FROM tags t

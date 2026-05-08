@@ -141,4 +141,3 @@ _I am the voice of ShadowBrain._
 | **P1** | Phase 2 — important, builds on P0       |
 | **P2** | Phase 3 — makes it great                |
 | **P3** | Phase 4+ — nice to have, future roadmap |
-

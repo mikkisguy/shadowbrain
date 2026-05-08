@@ -135,4 +135,3 @@ Every interaction path should satisfy:
 - **Real-time collaboration** — single-user system
 - **Public sharing / publishing** — Phase 4 at earliest
 - **Plugin marketplace** — composable API enables this later if needed
-

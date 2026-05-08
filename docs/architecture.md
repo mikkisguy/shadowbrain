@@ -111,4 +111,3 @@
 - Single `docker-compose.yml` with app + cron containers
 - Data mounted as volumes (DB, images, markdown exports)
 - `.env` for secrets (API keys, tokens)
-

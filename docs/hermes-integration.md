@@ -215,4 +215,3 @@ def build_context(topic: str, days: int = 30) -> list[dict]:
 - **Don't read settings** unless user asks to configure AI providers
 - **Write operations** always go through API for validation — never raw SQL INSERT
 - **Backups** are the user's responsibility; Hermes can remind but won't execute db dumps
-
