@@ -2,31 +2,89 @@ import Database from 'better-sqlite3';
 import { join } from 'path';
 import { runMigrations } from './migrations';
 
-const DB_PATH = join(process.cwd(), 'shadowbrain.db');
+export type NodeEnv = 'development' | 'production' | 'test';
 
-let dbInstance: Database.Database | null = null;
+export function getDbPath(env: NodeEnv = process.env.NODE_ENV as NodeEnv || 'development'): string {
+  const projectName = 'shadowbrain';
+  const suffix = env === 'test' ? '.test' : env === 'development' ? '.dev' : '';
+  const filename = `${projectName}${suffix}.db`;
 
-export function getDb(): Database.Database {
-  if (dbInstance) {
-    return dbInstance;
+  // Use absolute path to avoid process.cwd() issues when requiring better-sqlite3
+  // Import.meta.url would be ideal but this is CommonJS, so we use __dirname
+  const projectRoot = join(__dirname, '..', '..');
+  return join(projectRoot, filename);
+}
+
+export interface DbConfig {
+  env?: NodeEnv;
+  path?: string;
+  wal?: boolean;
+  foreignKeys?: boolean;
+  migrate?: boolean;
+}
+
+const instances = new Map<string, Database.Database>();
+
+export function getDb(config: DbConfig = {}): Database.Database {
+  const {
+    env = process.env.NODE_ENV as NodeEnv || 'development',
+    path: customPath,
+    wal = true,
+    foreignKeys = true,
+    migrate = true,
+  } = config;
+
+  const dbPath = customPath || getDbPath(env);
+  const cacheKey = `${dbPath}:${env}`;
+
+  if (instances.has(cacheKey)) {
+    return instances.get(cacheKey)!;
   }
 
-  const db = new Database(DB_PATH);
+  const db = new Database(dbPath);
 
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  if (wal) {
+    db.pragma('journal_mode = WAL');
+  }
+  if (foreignKeys) {
+    db.pragma('foreign_keys = ON');
+  }
 
-  runMigrations(db);
+  if (migrate) {
+    runMigrations(db);
+  }
 
-  dbInstance = db;
+  instances.set(cacheKey, db);
   return db;
 }
 
-export function closeDb(): void {
-  if (dbInstance) {
-    dbInstance.close();
-    dbInstance = null;
+export function closeDb(env?: NodeEnv): void {
+  if (env) {
+    const dbPath = getDbPath(env);
+    const cacheKey = `${dbPath}:${env}`;
+    const db = instances.get(cacheKey);
+    if (db) {
+      db.close();
+      instances.delete(cacheKey);
+    }
+  } else {
+    for (const [key, db] of instances.entries()) {
+      db.close();
+    }
+    instances.clear();
   }
+}
+
+export function getDevelopmentDb(): Database.Database {
+  return getDb({ env: 'development' });
+}
+
+export function getTestDb(): Database.Database {
+  return getDb({ env: 'test' });
+}
+
+export function getProductionDb(): Database.Database {
+  return getDb({ env: 'production' });
 }
 
 export const contentItems = {

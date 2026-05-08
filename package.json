@@ -7,6 +7,11 @@
     "build": "next build",
     "start": "next start",
     "setup": "node scripts/setup-db.js",
+    "setup:dev": "NODE_ENV=development node scripts/setup-db.js",
+    "setup:test": "NODE_ENV=test node scripts/setup-db.js",
+    "setup:prod": "NODE_ENV=production node scripts/setup-db.js",
+    "test:db:reset": "node scripts/test-db-reset.js",
+    "test:db:cleanup": "node scripts/test-db-cleanup.js",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit"

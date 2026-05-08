@@ -1,11 +1,26 @@
 const Database = require('better-sqlite3');
 const { readFileSync, readdirSync } = require('fs');
-const { join, resolve, dirname } = require('path');
+const { join, resolve } = require('path');
 
 // Get the project root directory (parent of scripts/)
 const PROJECT_ROOT = resolve(__dirname, '..');
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
-const DB_PATH = join(PROJECT_ROOT, 'shadowbrain.db');
+// Determine database filename based on environment
+const getDbFilename = (env) => {
+  const projectName = 'shadowbrain';
+  switch (env) {
+    case 'test':
+      return `${projectName}.test.db`;
+    case 'development':
+      return `${projectName}.dev.db`;
+    case 'production':
+    default:
+      return `${projectName}.db`;
+  }
+};
+
+const DB_PATH = join(PROJECT_ROOT, getDbFilename(NODE_ENV));
 const MIGRATIONS_DIR = join(PROJECT_ROOT, 'src', 'db', 'migrations');
 
 function runMigrations(db) {
@@ -56,14 +71,14 @@ function runMigrations(db) {
 }
 
 function main() {
-  console.log('Setting up ShadowBrain database...\n');
+  console.log(`Setting up ShadowBrain database (${NODE_ENV})...\n`);
 
   const db = new Database(DB_PATH);
 
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
-  console.log('✓ Database initialized at: shadowbrain.db');
+  console.log(`✓ Database initialized at: ${getDbFilename(NODE_ENV)}`);
   console.log('✓ WAL mode enabled for concurrent access');
   console.log('✓ Foreign keys enabled');
 
