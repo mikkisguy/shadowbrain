@@ -1,0 +1,54 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Next.js
+.next
+out
+dist
+
+# Database (mounted as volume)
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+docker-compose*.yml
+Dockerfile*
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+*.log
+README.md
+AGENTS.md
+CLAUDE.md
+docs/
+.github/
+.superpowers/

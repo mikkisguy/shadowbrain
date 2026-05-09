@@ -9,7 +9,8 @@
 *.db-shm
 
 # Data
-data/
+data/*
+!data/.gitkeep
 pgdata/
 
 # Dependencies
@@ -41,6 +42,7 @@ logs/
 # Cache
 .cache/
 .turbo/
+*.tsbuildinfo
 
 # Session/brainstorm data
 .superpowers/

@@ -40,3 +40,40 @@ ShadowBrain is a personal knowledge management system that treats every thought 
 - [Interaction Methods](docs/interaction-methods.md)
 - [Hermes Integration](docs/hermes-integration.md)
 - [Implementation Phases](docs/phases.md)
+
+---
+
+## Docker Deployment
+
+ShadowBrain includes Docker Compose configuration for production deployment with nginx reverse proxy.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- A `.env` file (copy from `.env.example` and fill in your values)
+
+### Running with Docker
+
+```bash
+# Start all services (app + nginx)
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop services
+docker compose down
+
+# Stop and remove volumes (cleans database)
+docker compose down -v
+```
+
+The app will be available at `http://localhost` (ports 80/443).
+
+### Services
+
+- **app**: Next.js application on port 3000 (internal)
+- **nginx**: Reverse proxy on ports 80 and 443
+- **data**: Persistent volume for SQLite database and uploads
+
+---

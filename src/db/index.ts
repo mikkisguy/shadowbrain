@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { join } from "path";
+import { join, resolve } from "path";
 import { runMigrations } from "./migrations";
 
 export type NodeEnv = "development" | "production" | "test";
@@ -57,8 +57,10 @@ export function getDbPath(
 
   // Use absolute path to avoid process.cwd() issues when requiring better-sqlite3
   // Import.meta.url would be ideal but this is CommonJS, so we use __dirname
-  const projectRoot = join(__dirname, "..", "..");
-  return join(projectRoot, filename);
+  const dataDir = process.env.DATA_DIR
+    ? resolve(process.env.DATA_DIR)
+    : join(__dirname, "..", "..");
+  return join(dataDir, filename);
 }
 
 export interface DbConfig {
