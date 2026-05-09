@@ -32,7 +32,6 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./data:/app/data:ro
     depends_on:
       - app
     networks:
@@ -41,6 +40,3 @@ services:
 networks:
   shadowbrain-network:
     driver: bridge
-
-volumes:
-  data:
