@@ -425,3 +425,61 @@ export const journalPeriods = {
     return stmt.get(contentId) as JournalPeriod | undefined;
   },
 };
+
+export interface SearchResult {
+  id: string;
+  type: string;
+  title: string | null;
+  content: string;
+  image_path: string | null;
+  source: string;
+  source_url: string | null;
+  metadata: string | null;
+  is_private: number;
+  created_at: string;
+  updated_at: string;
+  rank: number;
+}
+
+export const search = {
+  query: (
+    db: Database.Database,
+    query: string,
+    options?: { limit?: number; offset?: number }
+  ): SearchResult[] => {
+    const limit = options?.limit ?? 50;
+    const offset = options?.offset ?? 0;
+
+    const stmt = db.prepare(`
+      SELECT ci.*, bm25(content_items_search) as rank
+      FROM content_items ci
+      JOIN content_items_search cis ON ci.rowid = cis.rowid
+      WHERE content_items_search MATCH ?
+      ORDER BY rank
+      LIMIT ? OFFSET ?
+    `);
+
+    return stmt.all(query, limit, offset) as SearchResult[];
+  },
+
+  queryByType: (
+    db: Database.Database,
+    query: string,
+    type: string,
+    options?: { limit?: number; offset?: number }
+  ): SearchResult[] => {
+    const limit = options?.limit ?? 50;
+    const offset = options?.offset ?? 0;
+
+    const stmt = db.prepare(`
+      SELECT ci.*, bm25(content_items_search) as rank
+      FROM content_items ci
+      JOIN content_items_search cis ON ci.rowid = cis.rowid
+      WHERE content_items_search MATCH ? AND ci.type = ?
+      ORDER BY rank
+      LIMIT ? OFFSET ?
+    `);
+
+    return stmt.all(query, type, limit, offset) as SearchResult[];
+  },
+};
