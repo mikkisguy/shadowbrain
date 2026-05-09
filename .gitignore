@@ -9,7 +9,8 @@
 *.db-shm
 
 # Data
-data/
+data/*
+!data/.gitkeep
 pgdata/
 
 # Dependencies
