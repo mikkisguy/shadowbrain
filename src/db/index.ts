@@ -445,13 +445,14 @@ function sanitizeFts5Query(query: string): string {
   // Escape double quotes by doubling them, then wrap each term in quotes
   // to prevent unmatched-quote syntax errors in FTS5.
   // Preserve trailing * for prefix search: hello* -> "hello"*
+  // Normalize multiple asterisks to a single prefix operator: test*** -> "test"*
   return query
     .trim()
     .split(/\s+/)
     .filter(Boolean)
     .map((term) => {
-      const hasPrefix = term.endsWith("*");
-      const raw = hasPrefix ? term.slice(0, -1) : term;
+      const hasPrefix = /\*+$/.test(term);
+      const raw = hasPrefix ? term.replace(/\*+$/, "") : term;
       if (!raw) return null;
       const escaped = raw.replace(/"/g, '""');
       const quoted = `"${escaped}"`;
