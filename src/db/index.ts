@@ -441,6 +441,26 @@ export interface SearchResult {
   rank: number;
 }
 
+function sanitizeFts5Query(query: string): string {
+  // Escape double quotes by doubling them, then wrap each term in quotes
+  // to prevent unmatched-quote syntax errors in FTS5.
+  // Preserve trailing * for prefix search: hello* -> "hello"*
+  return query
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((term) => {
+      const hasPrefix = term.endsWith("*");
+      const raw = hasPrefix ? term.slice(0, -1) : term;
+      if (!raw) return null;
+      const escaped = raw.replace(/"/g, '""');
+      const quoted = `"${escaped}"`;
+      return hasPrefix ? `${quoted}*` : quoted;
+    })
+    .filter((term): term is string => term !== null)
+    .join(" ");
+}
+
 export const search = {
   query: (
     db: Database.Database,
@@ -459,7 +479,7 @@ export const search = {
       LIMIT ? OFFSET ?
     `);
 
-    return stmt.all(query, limit, offset) as SearchResult[];
+    return stmt.all(sanitizeFts5Query(query), limit, offset) as SearchResult[];
   },
 
   queryByType: (
@@ -480,6 +500,11 @@ export const search = {
       LIMIT ? OFFSET ?
     `);
 
-    return stmt.all(query, type, limit, offset) as SearchResult[];
+    return stmt.all(
+      sanitizeFts5Query(query),
+      type,
+      limit,
+      offset
+    ) as SearchResult[];
   },
 };

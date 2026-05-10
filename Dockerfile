@@ -29,6 +29,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/src/db/migrations ./src/db/migrations
 
 # Create data directory for database
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data

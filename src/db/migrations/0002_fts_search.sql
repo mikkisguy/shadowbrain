@@ -10,6 +10,10 @@ CREATE VIRTUAL TABLE IF NOT EXISTS content_items_search USING fts5(
     content_rowid=rowid
 );
 
+-- Backfill existing content_items into the FTS index
+INSERT INTO content_items_search(rowid, title, content)
+SELECT rowid, title, content FROM content_items;
+
 -- Trigger: Insert new content items into FTS index
 CREATE TRIGGER IF NOT EXISTS content_items_ai AFTER INSERT ON content_items BEGIN
     INSERT INTO content_items_search(rowid, title, content)

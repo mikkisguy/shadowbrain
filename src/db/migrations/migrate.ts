@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const MIGRATIONS_DIR = __dirname;
+const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || __dirname;
 
 interface Migration {
   filename: string;
