@@ -6,8 +6,7 @@
 CREATE VIRTUAL TABLE IF NOT EXISTS content_items_search USING fts5(
     title,
     content,
-    content=content_items,
-    content_rowid=rowid
+    tokenize = "porter unicode61"
 );
 
 -- Backfill existing content_items into the FTS index
@@ -23,15 +22,13 @@ CREATE TRIGGER IF NOT EXISTS content_items_ai AFTER INSERT ON content_items BEGI
 END;
 
 -- Trigger: Remove deleted content items from FTS index
-CREATE TRIGGER IF NOT EXISTS content_items_ad AFTER DELETE ON content_items BEGIN
-    INSERT INTO content_items_search(content_items_search, rowid, title, content)
-    VALUES('delete', old.rowid, old.title, old.content);
+CREATE TRIGGER IF NOT EXISTS content_items_ad BEFORE DELETE ON content_items BEGIN
+    DELETE FROM content_items_search WHERE rowid = old.rowid;
 END;
 
 -- Trigger: Update FTS index when title or content changes
 CREATE TRIGGER IF NOT EXISTS content_items_au AFTER UPDATE OF title, content ON content_items BEGIN
-    INSERT INTO content_items_search(content_items_search, rowid, title, content)
-    VALUES('delete', old.rowid, old.title, old.content);
+    DELETE FROM content_items_search WHERE rowid = old.rowid;
     INSERT INTO content_items_search(rowid, title, content)
     VALUES (new.rowid, new.title, new.content);
 END;

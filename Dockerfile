@@ -31,6 +31,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/src/db/migrations ./src/db/migrations
 
+# Verify better-sqlite3 native module is functional
+RUN node -e "const sqlite = require('better-sqlite3'); const db = new sqlite(':memory:'); db.exec('CREATE TABLE test (id INTEGER)'); db.prepare('INSERT INTO test (id) VALUES (1)').run(); const row = db.prepare('SELECT * FROM test').get(); if (!row || row.id !== 1) { process.exit(1); } console.log('SQLite native module verification passed'); db.close();"
+
 # Create data directory for database
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 

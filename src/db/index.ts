@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { join, resolve } from "path";
+import { join, isAbsolute } from "path";
 import { runMigrations } from "./migrations";
 
 export type NodeEnv = "development" | "production" | "test";
@@ -57,9 +57,12 @@ export function getDbPath(
 
   // Use absolute path to avoid process.cwd() issues when requiring better-sqlite3
   // Import.meta.url would be ideal but this is CommonJS, so we use __dirname
+  const projectRoot = join(__dirname, "..", "..");
   const dataDir = process.env.DATA_DIR
-    ? resolve(process.env.DATA_DIR)
-    : join(__dirname, "..", "..");
+    ? isAbsolute(process.env.DATA_DIR)
+      ? process.env.DATA_DIR
+      : join(projectRoot, process.env.DATA_DIR)
+    : projectRoot;
   return join(dataDir, filename);
 }
 
@@ -441,7 +444,7 @@ export interface SearchResult {
   rank: number;
 }
 
-function sanitizeFts5Query(query: string): string {
+export function sanitizeFts5Query(query: string): string {
   // Escape double quotes by doubling them, then wrap each term in quotes
   // to prevent unmatched-quote syntax errors in FTS5.
   // Preserve trailing * for prefix search: hello* -> "hello"*

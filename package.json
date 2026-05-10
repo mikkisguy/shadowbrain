@@ -12,6 +12,8 @@
     "setup:prod": "NODE_ENV=production node scripts/setup-db.js",
     "test:db:reset": "node scripts/test-db-reset.js",
     "test:db:cleanup": "node scripts/test-db-cleanup.js",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit"
