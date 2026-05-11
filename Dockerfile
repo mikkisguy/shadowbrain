@@ -1,4 +1,4 @@
-FROM node:20-slim AS base
+FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -29,6 +29,10 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/src/db/migrations ./src/db/migrations
+
+# Verify better-sqlite3 native module is functional
+RUN node -e "const sqlite = require('better-sqlite3'); const db = new sqlite(':memory:'); db.exec('CREATE TABLE test (id INTEGER)'); db.prepare('INSERT INTO test (id) VALUES (1)').run(); const row = db.prepare('SELECT * FROM test').get(); if (!row || row.id !== 1) { process.exit(1); } console.log('SQLite native module verification passed'); db.close();"
 
 # Create data directory for database
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
