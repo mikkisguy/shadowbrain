@@ -7,6 +7,15 @@ function createFreshTestDb(): Database.Database {
   const db = new Database(":memory:");
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+
+  // Try to load sqlite-vec extension if available
+  const extensionPath = process.env.SQLITE_VEC_EXTENSION_PATH || "/mnt/md/extra/projects/shadowbrain/dist/extensions/vec0.so";
+  try {
+    db.loadExtension(extensionPath);
+  } catch {
+    // Extension not available, that's OK for these tests
+  }
+
   runMigrations(db);
   return db;
 }
