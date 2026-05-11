@@ -1,5 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
-import Database from "better-sqlite3";
+import { describe, it, expect } from "vitest";
 import {
   vectorSearch,
   upsertEmbedding,
@@ -8,24 +7,10 @@ import {
   isVecExtensionLoaded,
   getVectorCount,
 } from "../index";
-import { runMigrations } from "../migrations";
+import { createTestDb } from "./helpers";
 
-function createFreshTestDb(): Database.Database {
-  const db = new Database(":memory:");
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-
-  // Load sqlite-vec extension if available
-  const extensionPath = process.env.SQLITE_VEC_EXTENSION_PATH || "/mnt/md/extra/projects/shadowbrain/dist/extensions/vec0.so";
-  try {
-    db.loadExtension(extensionPath);
-    console.log("✓ Loaded sqlite-vec extension for tests");
-  } catch (err) {
-    console.warn("Failed to load sqlite-vec extension for tests:", err);
-  }
-
-  runMigrations(db);
-  return db;
+function createFreshTestDb(): ReturnType<typeof createTestDb> {
+  return createTestDb({ requireVecExtension: true });
 }
 
 describe("isVecExtensionLoaded", () => {

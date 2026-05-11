@@ -1,24 +1,6 @@
 import { describe, it, expect } from "vitest";
-import Database from "better-sqlite3";
 import { search, sanitizeFts5Query } from "../index";
-import { runMigrations } from "../migrations";
-
-function createFreshTestDb(): Database.Database {
-  const db = new Database(":memory:");
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-
-  // Try to load sqlite-vec extension if available
-  const extensionPath = process.env.SQLITE_VEC_EXTENSION_PATH || "/mnt/md/extra/projects/shadowbrain/dist/extensions/vec0.so";
-  try {
-    db.loadExtension(extensionPath);
-  } catch {
-    // Extension not available, that's OK for these tests
-  }
-
-  runMigrations(db);
-  return db;
-}
+import { createTestDb } from "./helpers";
 
 describe("sanitizeFts5Query", () => {
   it("handles empty string", () => {
@@ -69,14 +51,14 @@ describe("sanitizeFts5Query", () => {
 
 describe("search.query", () => {
   it("returns empty array for no matches", () => {
-    const db = createFreshTestDb();
+    const db = createTestDb();
     const results = search.query(db, "nonexistent query that wont match");
     expect(results).toEqual([]);
     db.close();
   });
 
   it("returns results in BM25 rank order", () => {
-    const db = createFreshTestDb();
+    const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(crypto.randomUUID(), "note", "test title", "test content here", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
@@ -93,7 +75,7 @@ describe("search.query", () => {
   });
 
   it("respects limit parameter", () => {
-    const db = createFreshTestDb();
+    const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(crypto.randomUUID(), "note", "test title", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
@@ -107,7 +89,7 @@ describe("search.query", () => {
   });
 
   it("respects offset parameter", () => {
-    const db = createFreshTestDb();
+    const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(crypto.randomUUID(), "note", "test title", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
@@ -123,7 +105,7 @@ describe("search.query", () => {
   });
 
   it("handles NULL title fields", () => {
-    const db = createFreshTestDb();
+    const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(crypto.randomUUID(), "note", null, "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
@@ -137,7 +119,7 @@ describe("search.query", () => {
 
 describe("search.queryByType", () => {
   it("filters by type correctly", () => {
-    const db = createFreshTestDb();
+    const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(crypto.randomUUID(), "note", "test note", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
@@ -156,7 +138,7 @@ describe("search.queryByType", () => {
   });
 
   it("returns empty array when type has no matches", () => {
-    const db = createFreshTestDb();
+    const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(crypto.randomUUID(), "note", "test note", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
@@ -167,7 +149,7 @@ describe("search.queryByType", () => {
   });
 
   it("respects limit and offset with type filtering", () => {
-    const db = createFreshTestDb();
+    const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(crypto.randomUUID(), "note", "test 1", "content 1", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
@@ -187,7 +169,7 @@ describe("search.queryByType", () => {
 
 describe("FTS5 triggers integration", () => {
   it("auto-indexes new content items on INSERT", () => {
-    const db = createFreshTestDb();
+    const db = createTestDb();
     const id = crypto.randomUUID();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -200,7 +182,7 @@ describe("FTS5 triggers integration", () => {
   });
 
   it("updates search index on UPDATE of title or content", () => {
-    const db = createFreshTestDb();
+    const db = createTestDb();
     const id = crypto.randomUUID();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -222,7 +204,7 @@ describe("FTS5 triggers integration", () => {
   });
 
   it("removes items from search index on DELETE", () => {
-    const db = createFreshTestDb();
+    const db = createTestDb();
     const id = crypto.randomUUID();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`

@@ -4,7 +4,8 @@
 
 -- Create vec0 virtual table for vector similarity search
 -- Stores float32 embeddings (384 dimensions) for content_items
--- This will fail if the vec0 extension is not loaded, which is acceptable
+-- If the vec0 extension is not loaded, the application skips this migration
+-- gracefully so startup does not crash.
 CREATE VIRTUAL TABLE IF NOT EXISTS content_vectors USING vec0(
     embedding float[384]
 );

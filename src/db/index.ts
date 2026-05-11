@@ -146,6 +146,19 @@ export function getDb(config: DbConfig = {}): Database.Database {
   loadVecExtension(db);
 
   if (migrate) {
+    // If the vec0 extension is not available, mark the vector search
+    // migration as applied so runMigrations does not crash on startup.
+    if (!isVecExtensionLoaded(db)) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+          version INTEGER PRIMARY KEY,
+          applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      db.prepare(
+        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)"
+      ).run(3);
+    }
     runMigrations(db);
   }
 
@@ -651,7 +664,7 @@ export function vectorSearch(
     ORDER BY v.distance
   `;
 
-  let params: any[] = [embeddingJson, k];
+  let params: (string | number)[] = [embeddingJson, k];
 
   if (options?.type) {
     sql = `

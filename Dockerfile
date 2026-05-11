@@ -2,7 +2,7 @@ FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e16
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apt-get update && apt-get install -y python3 make g++ curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y python3 make g++ curl gettext-base && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml ./
@@ -16,17 +16,26 @@ COPY . .
 
 # Build sqlite-vec extension
 RUN echo "Building sqlite-vec extension..." && \
-    curl -sL "https://github.com/asg017/sqlite-vec/archive/refs/tags/v0.1.1.tar.gz" | tar xz -C /tmp --strip-components=1 && \
-    cd /tmp && \
+    curl -sL "https://github.com/asg017/sqlite-vec/archive/refs/tags/v0.1.1.tar.gz" | tar xz -C /tmp && \
+    cd /tmp/sqlite-vec-* && \
     VERSION=$(cat VERSION) && \
     DATE=$(date -r VERSION +'%FT%TZ%z' 2>/dev/null || date +'%FT%TZ%z') && \
     SOURCE="docker-build" && \
     export VERSION DATE SOURCE && \
     envsubst < sqlite-vec.h.tmpl > sqlite-vec.h && \
-    gcc -fPIC -shared -I. -DSQLITE_THREADSAFE=1 -O3 -mavx -DSQLITE_VEC_ENABLE_AVX \
+    ARCH=$(uname -m) && \
+    CFLAGS="-O3 -Wall -Wextra" && \
+    if [ "$ARCH" = "x86_64" ]; then \
+      echo "Enabling AVX for x86_64" && \
+      CFLAGS="$CFLAGS -mavx -DSQLITE_VEC_ENABLE_AVX"; \
+    elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+      echo "Enabling NEON for ARM64" && \
+      CFLAGS="$CFLAGS -mcpu=apple-m1 -DSQLITE_VEC_ENABLE_NEON"; \
+    fi && \
+    gcc -fPIC -shared -I. -DSQLITE_THREADSAFE=1 $CFLAGS \
         -o /app/dist/extensions/vec0.so sqlite-vec.c -lm && \
     echo "✓ Extension built: /app/dist/extensions/vec0.so" && \
-    rm -rf /tmp/sqlite-vec*
+    rm -rf /tmp/sqlite-vec-*
 
 RUN corepack enable pnpm && pnpm build
 
