@@ -30,7 +30,7 @@ RUN echo "Building sqlite-vec extension..." && \
       CFLAGS="$CFLAGS -mavx -DSQLITE_VEC_ENABLE_AVX"; \
     elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
       echo "Enabling NEON for ARM64" && \
-      CFLAGS="$CFLAGS -mcpu=apple-m1 -DSQLITE_VEC_ENABLE_NEON"; \
+      CFLAGS="$CFLAGS -DSQLITE_VEC_ENABLE_NEON"; \
     fi && \
     gcc -fPIC -shared -I. -DSQLITE_THREADSAFE=1 $CFLAGS \
         -o /app/dist/extensions/vec0.so sqlite-vec.c -lm && \

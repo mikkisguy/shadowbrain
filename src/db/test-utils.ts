@@ -1,7 +1,8 @@
 import Database from "better-sqlite3";
 import { unlinkSync, existsSync } from "fs";
-import { closeDb, getDbPath } from "./index";
-import { runMigrations } from "./migrations/migrate";
+import { join } from "path";
+import { closeDb, getDbPath, isVecExtensionLoaded } from "./index";
+import { runMigrations, VECTOR_SEARCH_MIGRATION_VERSION } from "./migrations/migrate";
 
 const TEST_DB_PATH = getDbPath("test");
 
@@ -11,6 +12,18 @@ function validateTableName(name: string): void {
   if (!VALID_TABLE_NAME.test(name)) {
     throw new Error(`Invalid table name: ${name}`);
   }
+}
+
+function getTestExtensionPath(): string {
+  const basePath = join(__dirname, "..", "..", "dist", "extensions", "vec0");
+  const suffixes = [".so", ".dylib", ".dll"];
+  for (const suffix of suffixes) {
+    const path = basePath + suffix;
+    if (existsSync(path)) {
+      return path;
+    }
+  }
+  return basePath + ".so";
 }
 
 /**
@@ -23,7 +36,23 @@ export function createTestDb(): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 
-  runMigrations(db);
+  // Load sqlite-vec extension if available
+  const extensionPath = getTestExtensionPath();
+  try {
+    db.loadExtension(extensionPath);
+    console.log("✓ Loaded sqlite-vec extension for tests");
+  } catch {
+    console.warn(
+      "sqlite-vec extension not available. Vector search functionality will be unavailable."
+    );
+  }
+
+  // Skip vector search migration if extension is not loaded
+  const skipVersions = !isVecExtensionLoaded(db)
+    ? [VECTOR_SEARCH_MIGRATION_VERSION]
+    : undefined;
+
+  runMigrations(db, { skipVersions });
 
   return db;
 }

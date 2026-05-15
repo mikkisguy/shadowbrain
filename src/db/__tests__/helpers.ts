@@ -1,12 +1,27 @@
 import Database from "better-sqlite3";
 import { join } from "path";
-import { runMigrations } from "../migrations";
+import { existsSync } from "fs";
+import {
+  runMigrations,
+  VECTOR_SEARCH_MIGRATION_VERSION,
+} from "../migrations";
 
 export function getTestExtensionPath(): string {
-  return (
+  const basePath =
     process.env.SQLITE_VEC_EXTENSION_PATH ||
-    join(__dirname, "..", "..", "..", "dist", "extensions", "vec0.so")
-  );
+    join(__dirname, "..", "..", "..", "dist", "extensions", "vec0");
+
+  // Try platform-specific suffixes
+  const suffixes = [".so", ".dylib", ".dll"];
+  for (const suffix of suffixes) {
+    const path = basePath + suffix;
+    if (existsSync(path)) {
+      return path;
+    }
+  }
+
+  // Fall back to .so as the most likely default
+  return basePath + ".so";
 }
 
 export function createTestDb(options?: {
@@ -34,20 +49,12 @@ export function createTestDb(options?: {
     );
   }
 
-  // If the vec0 extension is not loaded, mark the vector search migration
-  // as applied so runMigrations does not crash on the CREATE VIRTUAL TABLE.
-  if (!extensionLoaded) {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        version INTEGER PRIMARY KEY,
-        applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    db.prepare(
-      "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)"
-    ).run(3);
-  }
+  // If the vec0 extension is not loaded, skip the vector search migration
+  // so runMigrations does not crash on the CREATE VIRTUAL TABLE.
+  const skipVersions = !extensionLoaded
+    ? [VECTOR_SEARCH_MIGRATION_VERSION]
+    : undefined;
 
-  runMigrations(db);
+  runMigrations(db, { skipVersions });
   return db;
 }

@@ -4,6 +4,13 @@ set -e
 # Build sqlite-vec as a loadable SQLite extension
 # This script compiles sqlite-vec for the current platform
 
+# Check for required tools
+if ! command -v envsubst >/dev/null 2>&1; then
+    echo "Error: envsubst is required but not installed."
+    echo "Install it with your package manager (e.g., apt-get install gettext-base, brew install gettext)."
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -31,16 +38,20 @@ export VERSION DATE SOURCE
 envsubst < sqlite-vec.h.tmpl > sqlite-vec.h
 
 echo "Compiling sqlite-vec as loadable extension..."
-# Detect CPU architecture for SIMD flags
+# Detect CPU architecture and OS for SIMD flags
 ARCH=$(uname -m)
+OS=$(uname -s)
 CFLAGS="-O3 -Wall -Wextra"
 
 if [ "$ARCH" = "x86_64" ]; then
     echo "Enabling AVX for x86_64"
     CFLAGS="$CFLAGS -mavx -DSQLITE_VEC_ENABLE_AVX"
+elif [ "$ARCH" = "arm64" ] && [ "$OS" = "Darwin" ]; then
+    echo "Enabling NEON for Apple Silicon"
+    CFLAGS="$CFLAGS -mcpu=apple-m1 -DSQLITE_VEC_ENABLE_NEON"
 elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
     echo "Enabling NEON for ARM64"
-    CFLAGS="$CFLAGS -mcpu=apple-m1 -DSQLITE_VEC_ENABLE_NEON"
+    CFLAGS="$CFLAGS -DSQLITE_VEC_ENABLE_NEON"
 fi
 
 gcc -fPIC -shared \

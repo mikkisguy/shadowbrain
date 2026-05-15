@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const Database = require("better-sqlite3");
-const { readFileSync, readdirSync } = require("fs");
+const { readFileSync, readdirSync, existsSync } = require("fs");
 const { join, resolve } = require("path");
 
 // Get the project root directory (parent of scripts/)
 const PROJECT_ROOT = resolve(__dirname, "..");
 const NODE_ENV = process.env.NODE_ENV || "development";
+const VECTOR_SEARCH_MIGRATION_VERSION = 3;
 
 // Determine database filename based on environment
 const getDbFilename = (env) => {
@@ -24,7 +25,46 @@ const getDbFilename = (env) => {
 const DB_PATH = join(PROJECT_ROOT, getDbFilename(NODE_ENV));
 const MIGRATIONS_DIR = join(PROJECT_ROOT, "src", "db", "migrations");
 
-function runMigrations(db) {
+function getExtensionPath() {
+  const basePath = join(PROJECT_ROOT, "dist", "extensions", "vec0");
+  const suffixes = [".so", ".dylib", ".dll"];
+  for (const suffix of suffixes) {
+    const path = basePath + suffix;
+    if (existsSync(path)) {
+      return path;
+    }
+  }
+  return basePath + ".so";
+}
+
+function loadVecExtension(db) {
+  const extensionPath = getExtensionPath();
+  if (!existsSync(extensionPath)) {
+    console.warn(
+      `sqlite-vec extension not found at ${extensionPath}. Vector search will be unavailable.`
+    );
+    return;
+  }
+  try {
+    db.loadExtension(extensionPath);
+    console.log(`✓ Loaded sqlite-vec extension from: ${extensionPath}`);
+  } catch (err) {
+    console.warn(`Failed to load sqlite-vec from ${extensionPath}:`, err.message);
+  }
+}
+
+function isVecExtensionLoaded(db) {
+  try {
+    const result = db
+      .prepare("SELECT name FROM pragma_module_list WHERE name = 'vec0'")
+      .get();
+    return result?.name === "vec0";
+  } catch {
+    return false;
+  }
+}
+
+function runMigrations(db, skipVersions) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version INTEGER PRIMARY KEY,
@@ -36,6 +76,8 @@ function runMigrations(db) {
     .prepare("SELECT MAX(version) as v FROM schema_migrations")
     .get();
   const currentVersionNumber = currentVersion?.v ?? 0;
+
+  const skipSet = new Set(skipVersions ?? []);
 
   const files = readdirSync(MIGRATIONS_DIR)
     .filter((f) => f.endsWith(".sql"))
@@ -50,7 +92,7 @@ function runMigrations(db) {
         `Invalid migration filename: ${filename} (must start with a number)`
       );
     }
-    if (number > currentVersionNumber) {
+    if (number > currentVersionNumber && !skipSet.has(number)) {
       const sql = readFileSync(join(MIGRATIONS_DIR, filename), "utf-8");
       pendingMigrations.push({ filename, number, sql });
     }
@@ -92,7 +134,15 @@ function main() {
   console.log("✓ WAL mode enabled for concurrent access");
   console.log("✓ Foreign keys enabled");
 
-  runMigrations(db);
+  // Load sqlite-vec extension if available
+  loadVecExtension(db);
+
+  // Skip vector search migration if extension is not loaded
+  const skipVersions = !isVecExtensionLoaded(db)
+    ? [VECTOR_SEARCH_MIGRATION_VERSION]
+    : undefined;
+
+  runMigrations(db, skipVersions);
 
   try {
     const testResult = db.prepare("SELECT * FROM content_items").all();

@@ -1,7 +1,10 @@
 import Database from "better-sqlite3";
 import { join, isAbsolute } from "path";
 import { existsSync } from "fs";
-import { runMigrations } from "./migrations";
+import {
+  runMigrations,
+  VECTOR_SEARCH_MIGRATION_VERSION,
+} from "./migrations";
 
 export type NodeEnv = "development" | "production" | "test";
 
@@ -83,11 +86,16 @@ const instances = new Map<string, Database.Database>();
  * or from a bundled location in production builds.
  */
 function loadVecExtension(db: Database.Database): void {
-  const extensionPaths = [
-    join(__dirname, "..", "..", "dist", "extensions", "vec0.so"),
-    join(__dirname, "..", "..", "..", "dist", "extensions", "vec0.so"),
-    "/app/dist/extensions/vec0.so", // Docker production path
+  const basePaths = [
+    join(__dirname, "..", "..", "dist", "extensions", "vec0"),
+    join(__dirname, "..", "..", "..", "dist", "extensions", "vec0"),
+    "/app/dist/extensions/vec0", // Docker production path
   ];
+
+  const platformSuffixes = [".so", ".dylib", ".dll"];
+  const extensionPaths = basePaths.flatMap((base) =>
+    platformSuffixes.map((suffix) => base + suffix)
+  );
 
   let loaded = false;
   for (const path of extensionPaths) {
@@ -146,20 +154,12 @@ export function getDb(config: DbConfig = {}): Database.Database {
   loadVecExtension(db);
 
   if (migrate) {
-    // If the vec0 extension is not available, mark the vector search
-    // migration as applied so runMigrations does not crash on startup.
-    if (!isVecExtensionLoaded(db)) {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS schema_migrations (
-          version INTEGER PRIMARY KEY,
-          applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      db.prepare(
-        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)"
-      ).run(3);
-    }
-    runMigrations(db);
+    // If the vec0 extension is not available, skip the vector search
+    // migration so runMigrations does not crash on startup.
+    const skipVersions = !isVecExtensionLoaded(db)
+      ? [VECTOR_SEARCH_MIGRATION_VERSION]
+      : undefined;
+    runMigrations(db, { skipVersions });
   }
 
   instances.set(cacheKey, db);
@@ -639,7 +639,7 @@ export function getEmbedding(
 }
 
 /**
- * Perform vector similarity search using cosine distance.
+ * Perform vector similarity search using L2 (Euclidean) distance.
  * @param db - Database connection
  * @param queryEmbedding - Query embedding array
  * @param options - Search options
