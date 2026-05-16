@@ -26,11 +26,21 @@ describe("upsertEmbedding", () => {
   it("inserts a new embedding for a content item", () => {
     const db = createFreshTestDb();
     const contentId = crypto.randomUUID();
-    const embedding = Array(384).fill(0.1).map((_, i) => i * 0.001);
+    const embedding = Array(384)
+      .fill(0.1)
+      .map((_, i) => i * 0.001);
 
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(contentId, "note", "test note", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      contentId,
+      "note",
+      "test note",
+      "test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     upsertEmbedding(db, contentId, embedding);
 
@@ -52,7 +62,15 @@ describe("upsertEmbedding", () => {
 
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(contentId, "note", "test note", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      contentId,
+      "note",
+      "test note",
+      "test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     upsertEmbedding(db, contentId, embedding1);
     upsertEmbedding(db, contentId, embedding2);
@@ -96,7 +114,15 @@ describe("getEmbedding", () => {
 
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(contentId, "note", "test note", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      contentId,
+      "note",
+      "test note",
+      "test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     const embedding = getEmbedding(db, contentId);
     expect(embedding).toBeNull();
@@ -106,11 +132,21 @@ describe("getEmbedding", () => {
   it("returns the stored embedding", () => {
     const db = createFreshTestDb();
     const contentId = crypto.randomUUID();
-    const embedding = Array(384).fill(0.5).map((_, i) => i * 0.001);
+    const embedding = Array(384)
+      .fill(0.5)
+      .map((_, i) => i * 0.001);
 
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(contentId, "note", "test note", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      contentId,
+      "note",
+      "test note",
+      "test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     upsertEmbedding(db, contentId, embedding);
     const retrieved = getEmbedding(db, contentId);
@@ -133,7 +169,15 @@ describe("deleteEmbedding", () => {
 
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(contentId, "note", "test note", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      contentId,
+      "note",
+      "test note",
+      "test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     upsertEmbedding(db, contentId, embedding);
     expect(getEmbedding(db, contentId)).not.toBeNull();
@@ -168,7 +212,15 @@ describe("getVectorCount", () => {
       const embedding = Array(384).fill(i * 0.1);
       db.prepare(
         `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(contentId, "note", `note ${i}`, `content ${i}`, "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+      ).run(
+        contentId,
+        "note",
+        `note ${i}`,
+        `content ${i}`,
+        "manual",
+        "2024-01-01T00:00:00.000Z",
+        "2024-01-01T00:00:00.000Z"
+      );
       upsertEmbedding(db, contentId, embedding);
     }
 
@@ -200,7 +252,15 @@ describe("vectorSearch", () => {
     for (const { id, embedding } of embeddings) {
       db.prepare(
         `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(id, "note", `note ${id.substring(0, 4)}`, "content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+      ).run(
+        id,
+        "note",
+        `note ${id.substring(0, 4)}`,
+        "content",
+        "manual",
+        "2024-01-01T00:00:00.000Z",
+        "2024-01-01T00:00:00.000Z"
+      );
       upsertEmbedding(db, id, embedding);
     }
 
@@ -208,7 +268,9 @@ describe("vectorSearch", () => {
     const results = vectorSearch(db, queryEmbedding);
 
     expect(results.length).toBeGreaterThan(0);
-    expect(results[0].distance).toBeLessThanOrEqual(results[results.length - 1].distance);
+    expect(results[0].distance).toBeLessThanOrEqual(
+      results[results.length - 1].distance
+    );
     db.close();
   });
 
@@ -220,7 +282,15 @@ describe("vectorSearch", () => {
       const embedding = Array(384).fill(i * 0.1);
       db.prepare(
         `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(contentId, "note", `note ${i}`, "content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+      ).run(
+        contentId,
+        "note",
+        `note ${i}`,
+        "content",
+        "manual",
+        "2024-01-01T00:00:00.000Z",
+        "2024-01-01T00:00:00.000Z"
+      );
       upsertEmbedding(db, contentId, embedding);
     }
 
@@ -239,12 +309,28 @@ describe("vectorSearch", () => {
 
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(noteId, "note", "test note", "content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      noteId,
+      "note",
+      "test note",
+      "content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
     upsertEmbedding(db, noteId, Array(384).fill(0));
 
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(bookmarkId, "bookmark", "test bookmark", "content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      bookmarkId,
+      "bookmark",
+      "test bookmark",
+      "content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
     upsertEmbedding(db, bookmarkId, Array(384).fill(0.5));
 
     const queryEmbedding = Array(384).fill(0);

@@ -1,10 +1,9 @@
 import Database from "better-sqlite3";
 import { join, isAbsolute } from "path";
 import { existsSync } from "fs";
-import {
-  runMigrations,
-  VECTOR_SEARCH_MIGRATION_VERSION,
-} from "./migrations";
+import { runMigrations, VECTOR_SEARCH_MIGRATION_VERSION } from "./migrations";
+import { seedSettings } from "./seed-settings";
+import { getEnv } from "@/lib/env";
 
 export type NodeEnv = "development" | "production" | "test";
 
@@ -62,12 +61,11 @@ export function getDbPath(
   // Use absolute path to avoid process.cwd() issues when requiring better-sqlite3
   // Import.meta.url would be ideal but this is CommonJS, so we use __dirname
   const projectRoot = join(__dirname, "..", "..");
-  const dataDir = process.env.DATA_DIR
-    ? isAbsolute(process.env.DATA_DIR)
-      ? process.env.DATA_DIR
-      : join(projectRoot, process.env.DATA_DIR)
-    : projectRoot;
-  return join(dataDir, filename);
+  const dataDir = getEnv().DATA_DIR;
+  const resolvedDir = isAbsolute(dataDir)
+    ? dataDir
+    : join(projectRoot, dataDir);
+  return join(resolvedDir, filename);
 }
 
 export interface DbConfig {
@@ -160,6 +158,9 @@ export function getDb(config: DbConfig = {}): Database.Database {
       ? [VECTOR_SEARCH_MIGRATION_VERSION]
       : undefined;
     runMigrations(db, { skipVersions });
+
+    // Sync env vars into settings table (only on first connection)
+    seedSettings(db);
   }
 
   instances.set(cacheKey, db);
@@ -608,10 +609,9 @@ export function upsertEmbedding(
 
     // Insert new embedding with explicit rowid
     // For vec0, we can insert rowid as a parameter
-    db.prepare("INSERT INTO content_vectors(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)").run(
-      rowid,
-      embeddingJson
-    );
+    db.prepare(
+      "INSERT INTO content_vectors(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)"
+    ).run(rowid, embeddingJson);
   });
 
   transaction();

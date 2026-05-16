@@ -1,10 +1,7 @@
 import Database from "better-sqlite3";
 import { join } from "path";
 import { existsSync } from "fs";
-import {
-  runMigrations,
-  VECTOR_SEARCH_MIGRATION_VERSION,
-} from "../migrations";
+import { runMigrations, VECTOR_SEARCH_MIGRATION_VERSION } from "../migrations";
 
 export function getTestExtensionPath(): string {
   const basePath =

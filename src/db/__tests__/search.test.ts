@@ -61,10 +61,26 @@ describe("search.query", () => {
     const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "note", "test title", "test content here", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      "test title",
+      "test content here",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "note", "different", "test content here too", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      "different",
+      "test content here too",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     const results = search.query(db, "test");
     expect(results.length).toBeGreaterThan(0);
@@ -78,10 +94,26 @@ describe("search.query", () => {
     const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "note", "test title", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      "test title",
+      "test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "note", "another test", "more test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      "another test",
+      "more test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     const results = search.query(db, "test", { limit: 1 });
     expect(results.length).toBeLessThanOrEqual(1);
@@ -92,10 +124,26 @@ describe("search.query", () => {
     const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "note", "test title", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      "test title",
+      "test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "note", "another test", "more test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      "another test",
+      "more test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     const results1 = search.query(db, "test", { limit: 1, offset: 0 });
     const results2 = search.query(db, "test", { limit: 1, offset: 1 });
@@ -108,7 +156,15 @@ describe("search.query", () => {
     const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "note", null, "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      null,
+      "test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     const results = search.query(db, "test");
     expect(results.length).toBeGreaterThan(0);
@@ -122,10 +178,26 @@ describe("search.queryByType", () => {
     const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "note", "test note", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      "test note",
+      "test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "bookmark", "test bookmark", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "bookmark",
+      "test bookmark",
+      "test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     const noteResults = search.queryByType(db, "test", "note");
     const bookmarkResults = search.queryByType(db, "test", "bookmark");
@@ -141,7 +213,15 @@ describe("search.queryByType", () => {
     const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "note", "test note", "test content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      "test note",
+      "test content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     const results = search.queryByType(db, "test", "bookmark");
     expect(results).toEqual([]);
@@ -152,13 +232,37 @@ describe("search.queryByType", () => {
     const db = createTestDb();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "note", "test 1", "content 1", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      "test 1",
+      "content 1",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "note", "test 2", "content 2", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      "test 2",
+      "content 2",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(crypto.randomUUID(), "bookmark", "test 3", "content 3", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      crypto.randomUUID(),
+      "bookmark",
+      "test 3",
+      "content 3",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     const results = search.queryByType(db, "test", "note", { limit: 1 });
     expect(results.length).toBe(1);
@@ -173,7 +277,15 @@ describe("FTS5 triggers integration", () => {
     const id = crypto.randomUUID();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, "note", "unique title here", "unique content here", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      id,
+      "note",
+      "unique title here",
+      "unique content here",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     const results = search.query(db, "unique");
     expect(results.length).toBe(1);
@@ -186,16 +298,22 @@ describe("FTS5 triggers integration", () => {
     const id = crypto.randomUUID();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, "note", "original title", "original content", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      id,
+      "note",
+      "original title",
+      "original content",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     let results = search.query(db, "original");
     expect(results.length).toBe(1);
 
-    db.prepare(`UPDATE content_items SET content = ?, updated_at = ? WHERE id = ?`).run(
-      "updated content",
-      "2024-01-02T00:00:00.000Z",
-      id
-    );
+    db.prepare(
+      `UPDATE content_items SET content = ?, updated_at = ? WHERE id = ?`
+    ).run("updated content", "2024-01-02T00:00:00.000Z", id);
 
     results = search.query(db, "updated");
     expect(results.length).toBe(1);
@@ -208,7 +326,15 @@ describe("FTS5 triggers integration", () => {
     const id = crypto.randomUUID();
     db.prepare(
       `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, "note", "to delete", "content to delete", "manual", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z");
+    ).run(
+      id,
+      "note",
+      "to delete",
+      "content to delete",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
 
     let results = search.query(db, "delete");
     expect(results.length).toBe(1);

@@ -2,7 +2,10 @@ import Database from "better-sqlite3";
 import { unlinkSync, existsSync } from "fs";
 import { join } from "path";
 import { closeDb, getDbPath, isVecExtensionLoaded } from "./index";
-import { runMigrations, VECTOR_SEARCH_MIGRATION_VERSION } from "./migrations/migrate";
+import {
+  runMigrations,
+  VECTOR_SEARCH_MIGRATION_VERSION,
+} from "./migrations/migrate";
 
 const TEST_DB_PATH = getDbPath("test");
 
