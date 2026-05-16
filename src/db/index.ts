@@ -1,6 +1,10 @@
 import Database from "better-sqlite3";
 import { join, isAbsolute } from "path";
-import { runMigrations } from "./migrations";
+import { existsSync } from "fs";
+import {
+  runMigrations,
+  VECTOR_SEARCH_MIGRATION_VERSION,
+} from "./migrations";
 
 export type NodeEnv = "development" | "production" | "test";
 
@@ -77,6 +81,44 @@ export interface DbConfig {
 const instances = new Map<string, Database.Database>();
 
 /**
+ * Load the sqlite-vec extension for vector search functionality.
+ * The extension is loaded from dist/extensions/vec0.so in development/production,
+ * or from a bundled location in production builds.
+ */
+function loadVecExtension(db: Database.Database): void {
+  const basePaths = [
+    join(__dirname, "..", "..", "dist", "extensions", "vec0"),
+    join(__dirname, "..", "..", "..", "dist", "extensions", "vec0"),
+    "/app/dist/extensions/vec0", // Docker production path
+  ];
+
+  const platformSuffixes = [".so", ".dylib", ".dll"];
+  const extensionPaths = basePaths.flatMap((base) =>
+    platformSuffixes.map((suffix) => base + suffix)
+  );
+
+  let loaded = false;
+  for (const path of extensionPaths) {
+    if (existsSync(path)) {
+      try {
+        db.loadExtension(path);
+        console.log(`✓ Loaded sqlite-vec extension from: ${path}`);
+        loaded = true;
+        break;
+      } catch (err) {
+        console.warn(`Failed to load sqlite-vec from ${path}:`, err);
+      }
+    }
+  }
+
+  if (!loaded) {
+    console.warn(
+      "sqlite-vec extension not loaded. Vector search functionality will be unavailable."
+    );
+  }
+}
+
+/**
  * Get or create a database connection.
  * Config is only applied on initial creation; subsequent calls with
  * the same path and env return the cached instance unchanged.
@@ -108,8 +150,16 @@ export function getDb(config: DbConfig = {}): Database.Database {
     db.pragma("foreign_keys = ON");
   }
 
+  // Load sqlite-vec extension for vector search
+  loadVecExtension(db);
+
   if (migrate) {
-    runMigrations(db);
+    // If the vec0 extension is not available, skip the vector search
+    // migration so runMigrations does not crash on startup.
+    const skipVersions = !isVecExtensionLoaded(db)
+      ? [VECTOR_SEARCH_MIGRATION_VERSION]
+      : undefined;
+    runMigrations(db, { skipVersions });
   }
 
   instances.set(cacheKey, db);
@@ -512,3 +562,165 @@ export const search = {
     ) as SearchResult[];
   },
 };
+
+export interface VectorSearchResult {
+  id: string;
+  type: string;
+  title: string | null;
+  content: string;
+  image_path: string | null;
+  source: string;
+  source_url: string | null;
+  metadata: string | null;
+  is_private: number;
+  created_at: string;
+  updated_at: string;
+  distance: number;
+}
+
+/**
+ * Insert or update an embedding for a content item.
+ * @param db - Database connection
+ * @param contentId - Content item ID
+ * @param embedding - Array of float32 values (typically 384 dimensions)
+ */
+export function upsertEmbedding(
+  db: Database.Database,
+  contentId: string,
+  embedding: number[]
+): void {
+  // Use a transaction to delete existing then insert new
+  const embeddingJson = JSON.stringify(embedding);
+  const transaction = db.transaction(() => {
+    // First, check if the content item exists
+    const contentCheck = db
+      .prepare("SELECT rowid FROM content_items WHERE id = ?")
+      .get(contentId) as { rowid: number } | undefined;
+
+    if (!contentCheck) {
+      return; // Content item doesn't exist, do nothing
+    }
+
+    const rowid = contentCheck.rowid;
+
+    // Delete existing embedding if it exists
+    db.prepare("DELETE FROM content_vectors WHERE rowid = ?").run(rowid);
+
+    // Insert new embedding with explicit rowid
+    // For vec0, we can insert rowid as a parameter
+    db.prepare("INSERT INTO content_vectors(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)").run(
+      rowid,
+      embeddingJson
+    );
+  });
+
+  transaction();
+}
+
+/**
+ * Get the embedding for a content item.
+ * @param db - Database connection
+ * @param contentId - Content item ID
+ * @returns Array of float32 values or null if not found
+ */
+export function getEmbedding(
+  db: Database.Database,
+  contentId: string
+): number[] | null {
+  const stmt = db.prepare(`
+    SELECT vec_to_json(cv.embedding) as embedding_json
+    FROM content_vectors cv
+    JOIN content_items ci ON cv.rowid = ci.rowid
+    WHERE ci.id = ?
+  `);
+  const result = stmt.get(contentId) as { embedding_json: string } | undefined;
+  if (!result) return null;
+  return JSON.parse(result.embedding_json);
+}
+
+/**
+ * Perform vector similarity search using L2 (Euclidean) distance.
+ * @param db - Database connection
+ * @param queryEmbedding - Query embedding array
+ * @param options - Search options
+ * @returns Array of matching content items with distances
+ */
+export function vectorSearch(
+  db: Database.Database,
+  queryEmbedding: number[],
+  options?: {
+    limit?: number;
+    type?: string;
+  }
+): VectorSearchResult[] {
+  const k = options?.limit ?? 10;
+  const embeddingJson = JSON.stringify(queryEmbedding);
+
+  let sql = `
+    SELECT ci.*, v.distance
+    FROM content_items ci
+    JOIN content_vectors v ON ci.rowid = v.rowid
+    WHERE v.embedding MATCH ? AND k = ?
+    ORDER BY v.distance
+  `;
+
+  let params: (string | number)[] = [embeddingJson, k];
+
+  if (options?.type) {
+    sql = `
+      SELECT ci.*, v.distance
+      FROM content_items ci
+      JOIN content_vectors v ON ci.rowid = v.rowid
+      WHERE v.embedding MATCH ? AND k = ? AND ci.type = ?
+      ORDER BY v.distance
+    `;
+    params = [embeddingJson, k, options.type];
+  }
+
+  const stmt = db.prepare(sql);
+  return stmt.all(...params) as VectorSearchResult[];
+}
+
+/**
+ * Delete an embedding for a content item.
+ * @param db - Database connection
+ * @param contentId - Content item ID
+ */
+export function deleteEmbedding(
+  db: Database.Database,
+  contentId: string
+): void {
+  const stmt = db.prepare(`
+    DELETE FROM content_vectors
+    WHERE rowid = (SELECT rowid FROM content_items WHERE id = ?)
+  `);
+  stmt.run(contentId);
+}
+
+/**
+ * Check if the vec0 extension is loaded and available.
+ * @param db - Database connection
+ * @returns true if the extension is loaded
+ */
+export function isVecExtensionLoaded(db: Database.Database): boolean {
+  try {
+    const result = db
+      .prepare("SELECT name FROM pragma_module_list WHERE name = 'vec0'")
+      .get() as { name: string } | undefined;
+    return result?.name === "vec0";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get the number of vectors stored in the database.
+ * @param db - Database connection
+ * @returns Count of vectors
+ */
+export function getVectorCount(db: Database.Database): number {
+  const result = db
+    .prepare("SELECT COUNT(*) as count FROM content_vectors")
+    .get() as { count: number };
+  return result.count;
+}

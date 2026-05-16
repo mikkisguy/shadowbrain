@@ -7,6 +7,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || __dirname;
 
+export const VECTOR_SEARCH_MIGRATION_VERSION = 3;
+
 interface Migration {
   filename: string;
   number: number;
@@ -34,7 +36,10 @@ function getMigrations(): Migration[] {
   return migrations.sort((a, b) => a.number - b.number);
 }
 
-export function runMigrations(db: Database.Database): void {
+export function runMigrations(
+  db: Database.Database,
+  options?: { skipVersions?: number[] }
+): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version INTEGER PRIMARY KEY,
@@ -47,8 +52,10 @@ export function runMigrations(db: Database.Database): void {
     .get() as { v: number | null };
   const currentVersionNumber = currentVersion?.v ?? 0;
 
+  const skipSet = new Set(options?.skipVersions ?? []);
+
   const pendingMigrations = getMigrations().filter(
-    (m) => m.number > currentVersionNumber
+    (m) => m.number > currentVersionNumber && !skipSet.has(m.number)
   );
 
   if (pendingMigrations.length === 0) {
