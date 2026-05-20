@@ -82,7 +82,7 @@ describe("/api/items/[id]", () => {
     });
     const patchRes = await PATCH(patchReq, { params: { id: created.id } });
     const patched = await patchRes.json();
-    expect(patched.content).toBe("updated");
+    expect(patched.item.content).toBe("updated");
   });
 
   it("deletes an item", async () => {

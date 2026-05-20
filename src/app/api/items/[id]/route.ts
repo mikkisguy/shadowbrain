@@ -7,7 +7,6 @@ const patchSchema = z.object({
   title: z.string().optional(),
   content: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  is_private: z.number().optional(),
 });
 
 export async function GET(
@@ -67,7 +66,7 @@ export async function PATCH(
       created_at: updates.updated_at,
     });
 
-    const updated = contentItems.findById(db, params.id);
+    const updated = contentItems.findWithRelations(db, params.id);
     log("info", "content_item updated", {
       event: "content_item.update",
       id: params.id,
@@ -91,6 +90,7 @@ export async function DELETE(
     }
 
     const now = new Date().toISOString();
+    const auditLogId = crypto.randomUUID();
     const tx = db.transaction(() => {
       db.prepare(
         "DELETE FROM content_links WHERE source_id = ? OR target_id = ?"
@@ -102,19 +102,19 @@ export async function DELETE(
         "DELETE FROM content_vectors WHERE rowid = (SELECT rowid FROM content_items WHERE id = ?)"
       ).run(params.id);
       contentItems.delete(db, params.id);
+
+      auditLogs.create(db, {
+        id: auditLogId,
+        actor_type: "system",
+        action: "content_item.delete",
+        entity_type: "content_item",
+        entity_id: params.id,
+        success: 1,
+        metadata: null,
+        created_at: now,
+      });
     });
     tx();
-
-    auditLogs.create(db, {
-      id: crypto.randomUUID(),
-      actor_type: "system",
-      action: "content_item.delete",
-      entity_type: "content_item",
-      entity_id: params.id,
-      success: 1,
-      metadata: null,
-      created_at: now,
-    });
 
     log("info", "content_item deleted", {
       event: "content_item.delete",
