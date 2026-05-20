@@ -230,23 +230,14 @@ export interface AuditLog {
   created_at: string;
 }
 
+export type AuditLogCreateInput = Pick<
+  AuditLog,
+  "id" | "action" | "entity_type" | "created_at"
+> &
+  Partial<Omit<AuditLog, "id" | "action" | "entity_type" | "created_at">>;
+
 export const auditLogs = {
-  create: (
-    db: Database.Database,
-    log: {
-      id: string;
-      actor_id?: string | null;
-      actor_type?: string | null;
-      action: string;
-      entity_type: string;
-      entity_id?: string | null;
-      success?: number;
-      metadata?: string | null;
-      ip?: string | null;
-      user_agent?: string | null;
-      created_at: string;
-    }
-  ) => {
+  create: (db: Database.Database, log: AuditLogCreateInput) => {
     const stmt = db.prepare(`
       INSERT INTO audit_logs (
         id, actor_id, actor_type, action, entity_type, entity_id,

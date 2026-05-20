@@ -1,21 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestDb, cleanupTestDb } from "../test-utils";
+import { describe, it, expect } from "vitest";
 import { auditLogs } from "../index";
+import { createTestDb } from "./helpers";
+import type { AuditLogCreateInput } from "../index";
 
 describe("auditLogs.create", () => {
-  beforeEach(() => {
-    cleanupTestDb();
-  });
-
-  afterEach(() => {
-    cleanupTestDb();
-  });
-
   it("inserts a new audit log row", () => {
     const db = createTestDb();
     const now = "2024-01-01T00:00:00.000Z";
     const entityId = crypto.randomUUID();
-    const result = auditLogs.create(db, {
+    const input: AuditLogCreateInput = {
       id: crypto.randomUUID(),
       actor_id: null,
       actor_type: "system",
@@ -27,7 +20,8 @@ describe("auditLogs.create", () => {
       ip: "127.0.0.1",
       user_agent: "vitest",
       created_at: now,
-    });
+    };
+    const result = auditLogs.create(db, input);
 
     expect(result.changes).toBe(1);
 
