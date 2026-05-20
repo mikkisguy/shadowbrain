@@ -50,7 +50,7 @@ ShadowBrain includes Docker Compose configuration for production deployment with
 ### Prerequisites
 
 - Docker and Docker Compose installed
-- A `.env` file (copy from `.env.example` and fill in your values)
+- A `.env` file (copy from `.env.template` and fill in your values)
 
 ### Running with Docker
 

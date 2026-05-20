@@ -49,7 +49,10 @@ function loadVecExtension(db) {
     db.loadExtension(extensionPath);
     console.log(`✓ Loaded sqlite-vec extension from: ${extensionPath}`);
   } catch (err) {
-    console.warn(`Failed to load sqlite-vec from ${extensionPath}:`, err.message);
+    console.warn(
+      `Failed to load sqlite-vec from ${extensionPath}:`,
+      err.message
+    );
   }
 }
 
