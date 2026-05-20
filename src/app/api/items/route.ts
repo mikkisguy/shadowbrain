@@ -25,34 +25,38 @@ export async function POST(request: Request) {
 
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
+    const auditLogId = crypto.randomUUID();
     const db = getDb();
     const metadata = parsed.data.metadata
       ? JSON.stringify(parsed.data.metadata)
       : null;
 
-    contentItems.create(db, {
-      id,
-      type: parsed.data.type,
-      title: parsed.data.title ?? null,
-      content: parsed.data.content,
-      source: parsed.data.source ?? "manual",
-      source_url: parsed.data.source_url ?? null,
-      metadata,
-      is_private: parsed.data.is_private ?? 0,
-      created_at: now,
-      updated_at: now,
-    });
+    const tx = db.transaction(() => {
+      contentItems.create(db, {
+        id,
+        type: parsed.data.type,
+        title: parsed.data.title ?? null,
+        content: parsed.data.content,
+        source: parsed.data.source ?? "manual",
+        source_url: parsed.data.source_url ?? null,
+        metadata,
+        is_private: parsed.data.is_private ?? 0,
+        created_at: now,
+        updated_at: now,
+      });
 
-    auditLogs.create(db, {
-      id: crypto.randomUUID(),
-      actor_type: "system",
-      action: "content_item.create",
-      entity_type: "content_item",
-      entity_id: id,
-      success: 1,
-      metadata: null,
-      created_at: now,
+      auditLogs.create(db, {
+        id: auditLogId,
+        actor_type: "system",
+        action: "content_item.create",
+        entity_type: "content_item",
+        entity_id: id,
+        success: 1,
+        metadata: null,
+        created_at: now,
+      });
     });
+    tx();
 
     log("info", "content_item created", { event: "content_item.create", id });
     return Response.json(contentItems.findById(db, id), { status: 201 });

@@ -45,26 +45,32 @@ export async function PATCH(
       return errorResponse("NOT_FOUND", "Item not found", 404);
     }
 
+    const now = new Date().toISOString();
+    const auditLogId = crypto.randomUUID();
     const updates = {
       title: parsed.data.title ?? undefined,
       content: parsed.data.content ?? undefined,
       metadata: parsed.data.metadata
         ? JSON.stringify(parsed.data.metadata)
         : undefined,
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     };
-    contentItems.update(db, params.id, updates);
 
-    auditLogs.create(db, {
-      id: crypto.randomUUID(),
-      actor_type: "system",
-      action: "content_item.update",
-      entity_type: "content_item",
-      entity_id: params.id,
-      success: 1,
-      metadata: null,
-      created_at: updates.updated_at,
+    const tx = db.transaction(() => {
+      contentItems.update(db, params.id, updates);
+
+      auditLogs.create(db, {
+        id: auditLogId,
+        actor_type: "system",
+        action: "content_item.update",
+        entity_type: "content_item",
+        entity_id: params.id,
+        success: 1,
+        metadata: null,
+        created_at: now,
+      });
     });
+    tx();
 
     const updated = contentItems.findWithRelations(db, params.id);
     log("info", "content_item updated", {
