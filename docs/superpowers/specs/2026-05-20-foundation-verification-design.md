@@ -26,7 +26,7 @@ verification script, and docs alignment for docker exposure and Phase 1 TODOs.
 
 - Call `getEnv()` during app startup and terminate on validation failure.
 - Missing required vars produce a single-line error listing missing keys and
-  a reference to `.env.example`.
+  a reference to `.env.template`.
 - Default behavior: require `SESSION_SECRET` at startup.
 
 ### Feature-Gated Env Checks

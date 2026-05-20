@@ -1,18 +1,18 @@
 import type Database from "better-sqlite3";
-import { getEnv } from "@/lib/env";
+import { type Env, getEnv } from "@/lib/env";
 
 /**
  * Environment variables that map to settings keys.
  * When set, they override the database defaults from migration 0001.
  */
-const ENV_TO_SETTINGS: Record<string, string> = {
+const ENV_TO_SETTINGS = {
   OPENROUTER_API_KEY: "openrouter_api_key",
   AI_MODEL: "ai_model",
   EMBEDDING_MODEL: "embedding_model",
   DISCORD_BOT_TOKEN: "discord_bot_token",
   DISCORD_GUILD_ID: "discord_guild_id",
   DISCORD_JOURNAL_CHANNEL_ID: "discord_journal_channel_id",
-};
+} as const satisfies Partial<Record<keyof Env, string>>;
 
 const PLACEHOLDER_VALUES = new Set([
   "your-api-key",
@@ -39,7 +39,7 @@ export function seedSettings(db: Database.Database): void {
 
   const batch = db.transaction(() => {
     for (const [envKey, settingsKey] of Object.entries(ENV_TO_SETTINGS)) {
-      const value = env[envKey as keyof typeof env];
+      const value = env[envKey as keyof Env];
       if (
         value !== undefined &&
         value !== "" &&

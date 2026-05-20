@@ -48,7 +48,7 @@ export function getEnv(): Env {
     throw new Error(
       `Invalid environment variables: ${errors.join(
         "; "
-      )}. Check .env.example for required values.`
+      )}. Check .env.template for required values.`
     );
   }
 
@@ -65,7 +65,13 @@ export function requireEnvVars(
   feature: string
 ): string | null {
   const env = getEnv();
-  const missing = vars.filter((v) => !env[v]);
+  const missing = vars.filter((v) => isMissingEnvValue(env[v]));
   if (missing.length === 0) return null;
   return `Missing environment variable(s) for ${feature}: ${missing.join(", ")}. Add them to your .env file.`;
+}
+
+function isMissingEnvValue(value: Env[keyof Env]): boolean {
+  if (value === undefined) return true;
+  if (typeof value === "string") return value.trim() === "";
+  return false;
 }
