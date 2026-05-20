@@ -9,7 +9,7 @@ const createSchema = z.object({
   title: z.string().nullable().optional(),
   source: z.string().optional(),
   source_url: z.string().url().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   is_private: z.number().optional(),
 });
 
