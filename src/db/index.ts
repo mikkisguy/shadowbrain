@@ -367,6 +367,82 @@ export const contentItems = {
     return stmt.run(...params);
   },
 
+  listWithFilters: (
+    db: Database.Database,
+    options: {
+      type?: string;
+      tag?: string;
+      source?: string;
+      startDate?: string;
+      endDate?: string;
+      limit: number;
+      offset: number;
+    }
+  ) => {
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+
+    if (options.type) {
+      where.push("ci.type = ?");
+      params.push(options.type);
+    }
+    if (options.source) {
+      where.push("ci.source = ?");
+      params.push(options.source);
+    }
+    if (options.startDate) {
+      where.push("ci.created_at >= ?");
+      params.push(options.startDate);
+    }
+    if (options.endDate) {
+      where.push("ci.created_at <= ?");
+      params.push(options.endDate);
+    }
+
+    let join = "";
+    if (options.tag) {
+      join = `
+        JOIN content_tags ct ON ct.content_id = ci.id
+        JOIN tags t ON t.id = ct.tag_id
+      `;
+      where.push("t.name = ?");
+      params.push(options.tag);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    const countStmt = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM content_items ci
+      ${join}
+      ${whereSql}
+    `);
+    const total = (countStmt.get(...params) as { count: number }).count;
+
+    const itemsStmt = db.prepare(`
+      SELECT ci.*
+      FROM content_items ci
+      ${join}
+      ${whereSql}
+      ORDER BY ci.created_at DESC
+      LIMIT ? OFFSET ?
+    `);
+
+    const items = itemsStmt.all(...params, options.limit, options.offset) as ContentItem[];
+    return { items, total };
+  },
+
+  findWithRelations: (db: Database.Database, id: string) => {
+    const item = contentItems.findById(db, id);
+    if (!item) return null;
+
+    const tags = contentTags.findByContent(db, id);
+    const outbound = contentLinks.findBySource(db, id);
+    const inbound = contentLinks.findByTarget(db, id);
+
+    return { item, tags, links: { outbound, inbound } };
+  },
+
   delete: (db: Database.Database, id: string) => {
     const stmt = db.prepare("DELETE FROM content_items WHERE id = ?");
     return stmt.run(id);
