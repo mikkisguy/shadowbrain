@@ -18,7 +18,7 @@ export function log(level: LogLevel, msg: string, meta?: Record<string, unknown>
   const payload = {
     level,
     msg,
-    ...redactObject(meta ?? {}),
+    ...(redactObject(meta ?? {}) as Record<string, unknown>),
     timestamp: new Date().toISOString(),
   };
   const line = JSON.stringify(payload);
