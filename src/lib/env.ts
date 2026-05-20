@@ -24,7 +24,7 @@ const envSchema = z.object({
   EMBEDDING_MODEL: z.string().default("all-MiniLM-L6-v2"),
 
   // Auth
-  SESSION_SECRET: z.string().optional(),
+  SESSION_SECRET: z.string().min(1, "Required"),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -43,10 +43,12 @@ export function getEnv(): Env {
 
   if (!result.success) {
     const errors = result.error.issues.map(
-      (i) => `  ${i.path.join(".")}: ${i.message}`
+      (i) => `${i.path.join(".")}: ${i.message}`
     );
     throw new Error(
-      `Invalid environment variables:\n${errors.join("\n")}\n\nCheck .env.template for required values.`
+      `Invalid environment variables: ${errors.join(
+        "; "
+      )}. Check .env.example for required values.`
     );
   }
 

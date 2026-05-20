@@ -6,9 +6,24 @@ import { getEnv } from "@/lib/env";
  * When set, they override the database defaults from migration 0001.
  */
 const ENV_TO_SETTINGS: Record<string, string> = {
+  OPENROUTER_API_KEY: "openrouter_api_key",
   AI_MODEL: "ai_model",
   EMBEDDING_MODEL: "embedding_model",
+  DISCORD_BOT_TOKEN: "discord_bot_token",
+  DISCORD_GUILD_ID: "discord_guild_id",
+  DISCORD_JOURNAL_CHANNEL_ID: "discord_journal_channel_id",
 };
+
+const PLACEHOLDER_VALUES = new Set([
+  "your-api-key",
+  "your-bot-token",
+  "your-channel-id",
+  "your-guild-id",
+]);
+
+function isPlaceholderValue(value: string): boolean {
+  return PLACEHOLDER_VALUES.has(value.trim());
+}
 
 /**
  * Seed the settings table from environment variables (first-boot only).
@@ -25,7 +40,11 @@ export function seedSettings(db: Database.Database): void {
   const batch = db.transaction(() => {
     for (const [envKey, settingsKey] of Object.entries(ENV_TO_SETTINGS)) {
       const value = env[envKey as keyof typeof env];
-      if (value !== undefined && value !== "") {
+      if (
+        value !== undefined &&
+        value !== "" &&
+        (typeof value !== "string" || !isPlaceholderValue(value))
+      ) {
         insert.run(settingsKey, value);
       }
     }

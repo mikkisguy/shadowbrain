@@ -17,7 +17,7 @@ Building ShadowBrain from scratch, in testable chunks.
 | 0.3 | Create all tables: `content_items`, `content_links`, `tags`, `content_tags`, `journal_periods`, `settings` | Working DB with `pnpm run setup`                 |
 | 0.4 | Set up FTS5 virtual table + triggers                                                                       | Full-text search working                         |
 | 0.5 | Add `sqlite-vec` extension (compile for Docker)                                                            | Extension loaded, `content_vectors` table exists |
-| 0.6 | Docker Compose setup (app + cron containers)                                                               | `docker compose up` runs the app                 |
+| 0.6 | Docker Compose setup (app + cron containers)                                                               | `docker compose up` serves nginx on localhost:80 |
 | 0.7 | nginx reverse proxy configuration                                                                          | `$DOMAIN` → app (or new subdomain)               |
 | 0.8 | Environment config (.env) + settings table defaults                                                        | API keys, tokens, model config                   |
 
@@ -47,6 +47,12 @@ Building ShadowBrain from scratch, in testable chunks.
 | 1.12 | Image API route: `/api/images/[...path]` (from journal-shadows)                           | Existing images still load                   |
 
 **Testable:** Full CRUD via curl. Old data accessible through new API. FTS search returns results.
+
+### TODOs (Phase 1)
+
+- Define API error format and base error responses.
+- Decide pagination defaults and maximum limits.
+- Confirm auth requirements for CRUD routes.
 
 ---
 
