@@ -24,7 +24,10 @@ const envSchema = z.object({
   EMBEDDING_MODEL: z.string().default("all-MiniLM-L6-v2"),
 
   // Auth
-  SESSION_SECRET: z.string().min(1, "Required"),
+  SESSION_SECRET: z
+    .string()
+    .min(1, "Required")
+    .min(32, "SESSION_SECRET must be at least 32 characters long"),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -40,12 +40,17 @@ export function seedSettings(db: Database.Database): void {
   const batch = db.transaction(() => {
     for (const [envKey, settingsKey] of Object.entries(ENV_TO_SETTINGS)) {
       const value = env[envKey as keyof Env];
+      if (typeof value !== "string") {
+        continue;
+      }
+
+      const normalizedValue = value.trim();
+
       if (
-        value !== undefined &&
-        value !== "" &&
-        (typeof value !== "string" || !isPlaceholderValue(value))
+        normalizedValue !== "" &&
+        !isPlaceholderValue(normalizedValue)
       ) {
-        insert.run(settingsKey, value);
+        insert.run(settingsKey, normalizedValue);
       }
     }
   });
