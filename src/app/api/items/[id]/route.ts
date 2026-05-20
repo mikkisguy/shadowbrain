@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { getDb, contentItems, auditLogs } from "@/db/index";
+import { getDb, contentItems, auditLogs, deleteEmbedding } from "@/db/index";
 import { errorResponse, parseJson, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
 
 const patchSchema = z.object({
   title: z.string().optional(),
-  content: z.string().optional(),
+  content: z.string().min(1).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -98,15 +98,10 @@ export async function DELETE(
     const now = new Date().toISOString();
     const auditLogId = crypto.randomUUID();
     const tx = db.transaction(() => {
-      db.prepare(
-        "DELETE FROM content_links WHERE source_id = ? OR target_id = ?"
-      ).run(params.id, params.id);
-      db.prepare("DELETE FROM content_tags WHERE content_id = ?").run(
-        params.id
-      );
-      db.prepare(
-        "DELETE FROM content_vectors WHERE rowid = (SELECT rowid FROM content_items WHERE id = ?)"
-      ).run(params.id);
+      // content_links and content_tags cascade via ON DELETE FK.
+      // content_vectors is a virtual table without FK support — must
+      // be cleaned up manually before deleting the parent row.
+      deleteEmbedding(db, params.id);
       contentItems.delete(db, params.id);
 
       auditLogs.create(db, {
