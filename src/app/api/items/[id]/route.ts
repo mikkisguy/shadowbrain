@@ -4,18 +4,19 @@ import { errorResponse, parseJson, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
 
 const patchSchema = z.object({
-  title: z.string().optional(),
+  title: z.string().nullable().optional(),
   content: z.string().min(1).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const db = getDb();
-    const result = contentItems.findWithRelations(db, params.id);
+    const result = contentItems.findWithRelations(db, id);
     if (!result) {
       return errorResponse("NOT_FOUND", "Item not found", 404);
     }
@@ -28,10 +29,16 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
-    const body = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse("VALIDATION_ERROR", "Invalid JSON", 400);
+    }
     const parsed = parseJson(patchSchema, body);
     if (!parsed.success) {
       return errorResponse("VALIDATION_ERROR", "Invalid input", 400, {
@@ -40,7 +47,7 @@ export async function PATCH(
     }
 
     const db = getDb();
-    const existing = contentItems.findById(db, params.id);
+    const existing = contentItems.findById(db, id);
     if (!existing) {
       return errorResponse("NOT_FOUND", "Item not found", 404);
     }
@@ -48,7 +55,8 @@ export async function PATCH(
     const now = new Date().toISOString();
     const auditLogId = crypto.randomUUID();
     const updates = {
-      title: parsed.data.title ?? undefined,
+      title:
+        parsed.data.title === null ? null : (parsed.data.title ?? undefined),
       content: parsed.data.content ?? undefined,
       metadata: parsed.data.metadata
         ? JSON.stringify(parsed.data.metadata)
@@ -57,14 +65,14 @@ export async function PATCH(
     };
 
     const tx = db.transaction(() => {
-      contentItems.update(db, params.id, updates);
+      contentItems.update(db, id, updates);
 
       auditLogs.create(db, {
         id: auditLogId,
         actor_type: "system",
         action: "content_item.update",
         entity_type: "content_item",
-        entity_id: params.id,
+        entity_id: id,
         success: 1,
         metadata: null,
         created_at: now,
@@ -72,10 +80,10 @@ export async function PATCH(
     });
     tx();
 
-    const updated = contentItems.findWithRelations(db, params.id);
+    const updated = contentItems.findWithRelations(db, id);
     log("info", "content_item updated", {
       event: "content_item.update",
-      id: params.id,
+      id,
     });
     return Response.json(updated);
   } catch (error) {
@@ -86,11 +94,12 @@ export async function PATCH(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const db = getDb();
-    const existing = contentItems.findById(db, params.id);
+    const existing = contentItems.findById(db, id);
     if (!existing) {
       return errorResponse("NOT_FOUND", "Item not found", 404);
     }
@@ -101,15 +110,15 @@ export async function DELETE(
       // content_links and content_tags cascade via ON DELETE FK.
       // content_vectors is a virtual table without FK support — must
       // be cleaned up manually before deleting the parent row.
-      deleteEmbedding(db, params.id);
-      contentItems.delete(db, params.id);
+      deleteEmbedding(db, id);
+      contentItems.delete(db, id);
 
       auditLogs.create(db, {
         id: auditLogId,
         actor_type: "system",
         action: "content_item.delete",
         entity_type: "content_item",
-        entity_id: params.id,
+        entity_id: id,
         success: 1,
         metadata: null,
         created_at: now,
@@ -119,9 +128,9 @@ export async function DELETE(
 
     log("info", "content_item deleted", {
       event: "content_item.delete",
-      id: params.id,
+      id,
     });
-    return Response.json({ id: params.id });
+    return Response.json({ id });
   } catch (error) {
     logServerError(error, { route: "/api/items/[id]", method: "DELETE" });
     return errorResponse("INTERNAL_ERROR", "Something went wrong", 500);

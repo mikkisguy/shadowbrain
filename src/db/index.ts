@@ -308,7 +308,7 @@ export const contentItems = {
     options?: { type?: string; limit?: number; offset?: number }
   ) => {
     let sql = "SELECT * FROM content_items";
-    const params: (string | number)[] = [];
+    const params: (string | number | null)[] = [];
 
     if (options?.type) {
       sql += " WHERE type = ?";
@@ -335,18 +335,18 @@ export const contentItems = {
     db: Database.Database,
     id: string,
     updates: {
-      title?: string;
+      title?: string | null;
       content?: string;
       metadata?: string;
       updated_at: string;
     }
   ) => {
     const fields: string[] = [];
-    const params: (string | number)[] = [];
+    const params: (string | number | null)[] = [];
 
     if (updates.title !== undefined) {
       fields.push("title = ?");
-      params.push(updates.title);
+      params.push(updates.title ?? null);
     }
     if (updates.content !== undefined) {
       fields.push("content = ?");

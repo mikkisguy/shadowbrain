@@ -42,6 +42,19 @@ describe("/api/items", () => {
     expect(json.page).toBe(1);
     expect(json.limit).toBe(20);
   });
+
+  it("returns 400 for invalid JSON body", async () => {
+    const req = new Request("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{invalid-json",
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe("VALIDATION_ERROR");
+  });
 });
 
 describe("/api/items/[id]", () => {
@@ -79,6 +92,50 @@ describe("/api/items/[id]", () => {
     const patchRes = await PATCH(patchReq, { params: { id: created.id } });
     const patched = await patchRes.json();
     expect(patched.item.content).toBe("updated");
+  });
+
+  it("clears title when set to null", async () => {
+    const createReq = new Request("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "note",
+        content: "hello",
+        source: "web",
+        title: "to-clear",
+      }),
+    });
+    const createRes = await POST(createReq);
+    const created = await createRes.json();
+
+    const patchReq = new Request(`http://localhost/api/items/${created.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: null }),
+    });
+    const patchRes = await PATCH(patchReq, { params: { id: created.id } });
+    const patched = await patchRes.json();
+    expect(patched.item.title).toBeNull();
+  });
+
+  it("returns 400 for invalid JSON body", async () => {
+    const createReq = new Request("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "note", content: "hello", source: "web" }),
+    });
+    const createRes = await POST(createReq);
+    const created = await createRes.json();
+
+    const patchReq = new Request(`http://localhost/api/items/${created.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: "{invalid-json",
+    });
+    const patchRes = await PATCH(patchReq, { params: { id: created.id } });
+    expect(patchRes.status).toBe(400);
+    const json = await patchRes.json();
+    expect(json.error.code).toBe("VALIDATION_ERROR");
   });
 
   it("deletes an item", async () => {
