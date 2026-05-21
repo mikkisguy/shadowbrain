@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getDb, contentItems, auditLogs, deleteEmbedding } from "@/db/index";
+import { getDb, contentItems, auditLogs, deleteEmbedding, isVecExtensionLoaded } from "@/db/index";
 import { errorResponse, parseJson, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
 
@@ -7,6 +7,7 @@ const patchSchema = z.object({
   title: z.string().nullable().optional(),
   content: z.string().min(1).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  is_private: z.number().int().min(0).max(1).optional(),
 });
 
 export async function GET(
@@ -61,6 +62,10 @@ export async function PATCH(
       metadata: parsed.data.metadata
         ? JSON.stringify(parsed.data.metadata)
         : undefined,
+      is_private:
+        parsed.data.is_private !== undefined
+          ? parsed.data.is_private
+          : undefined,
       updated_at: now,
     };
 
@@ -110,7 +115,11 @@ export async function DELETE(
       // content_links and content_tags cascade via ON DELETE FK.
       // content_vectors is a virtual table without FK support — must
       // be cleaned up manually before deleting the parent row.
-      deleteEmbedding(db, id);
+      // Only attempt if vec0 extension is loaded, otherwise the virtual
+      // table won't exist and deleteEmbedding() would throw.
+      if (isVecExtensionLoaded(db)) {
+        deleteEmbedding(db, id);
+      }
       contentItems.delete(db, id);
 
       auditLogs.create(db, {

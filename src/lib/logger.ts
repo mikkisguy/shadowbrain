@@ -27,10 +27,11 @@ export function log(
   msg: string,
   meta?: Record<string, unknown>
 ) {
+  // Spread meta first so callers cannot override core fields (level, msg, timestamp).
   const payload = {
+    ...(redactObject(meta ?? {}) as Record<string, unknown>),
     level,
     msg,
-    ...(redactObject(meta ?? {}) as Record<string, unknown>),
     timestamp: new Date().toISOString(),
   };
   const line = JSON.stringify(payload);

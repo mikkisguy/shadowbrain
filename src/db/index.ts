@@ -338,6 +338,7 @@ export const contentItems = {
       title?: string | null;
       content?: string;
       metadata?: string;
+      is_private?: number;
       updated_at: string;
     }
   ) => {
@@ -355,6 +356,10 @@ export const contentItems = {
     if (updates.metadata !== undefined) {
       fields.push("metadata = ?");
       params.push(updates.metadata);
+    }
+    if (updates.is_private !== undefined) {
+      fields.push("is_private = ?");
+      params.push(updates.is_private);
     }
 
     fields.push("updated_at = ?");

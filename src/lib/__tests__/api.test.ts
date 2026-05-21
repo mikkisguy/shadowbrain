@@ -14,7 +14,7 @@ describe("parsePagination", () => {
 });
 
 describe("errorResponse", () => {
-  it("formats error response without leaking details", async () => {
+  it("returns a uniform error shape with code, message, and details", async () => {
     const response = errorResponse("VALIDATION_ERROR", "Invalid input", 400, {
       field: "type",
     });
