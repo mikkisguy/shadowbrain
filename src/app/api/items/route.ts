@@ -15,10 +15,11 @@ const createSchema = z.object({
   source: z.string().optional(),
   source_url: z.string().url().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  is_private: z.number().optional(),
+  is_private: z.coerce.number().int().min(0).max(1).optional(),
 });
 
 export async function POST(request: Request) {
+  // TODO: add auth check for item creation.
   try {
     let body: unknown;
     try {
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  // TODO: add auth check for item listing.
   try {
     const { searchParams } = new URL(request.url);
     const { page, limit, offset } = parsePagination({
