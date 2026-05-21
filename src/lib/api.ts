@@ -33,7 +33,13 @@ export function parseJson<T>(schema: z.ZodSchema<T>, body: unknown) {
   return { success: true as const, data: parsed.data };
 }
 
-export function logServerError(error: unknown, context: Record<string, unknown>) {
-  const err = error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) };
+export function logServerError(
+  error: unknown,
+  context: Record<string, unknown>
+) {
+  const err =
+    error instanceof Error
+      ? { message: error.message, stack: error.stack }
+      : { message: String(error) };
   log("error", "Unhandled server error", { ...context, error: err });
 }

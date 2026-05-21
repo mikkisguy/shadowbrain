@@ -13,7 +13,8 @@ export default defineConfig({
     environment: "node",
     env: {
       NODE_ENV: "test",
-      SESSION_SECRET: "test-secret-that-is-at-least-32-characters-long-for-vitest",
+      SESSION_SECRET:
+        "test-secret-that-is-at-least-32-characters-long-for-vitest",
     },
     setupFiles: [],
     include: ["src/**/*.test.ts"],

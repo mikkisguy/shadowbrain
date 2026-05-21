@@ -428,7 +428,11 @@ export const contentItems = {
       LIMIT ? OFFSET ?
     `);
 
-    const items = itemsStmt.all(...params, options.limit, options.offset) as ContentItem[];
+    const items = itemsStmt.all(
+      ...params,
+      options.limit,
+      options.offset
+    ) as ContentItem[];
     return { items, total };
   },
 

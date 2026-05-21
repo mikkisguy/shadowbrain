@@ -1,20 +1,32 @@
 type LogLevel = "debug" | "info" | "warn" | "error";
 
-const REDACT_KEYS = ["authorization", "cookie", "set-cookie", "api-key", "apikey"];
+const REDACT_KEYS = [
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "api-key",
+  "apikey",
+];
 
 function redactObject(value: unknown): unknown {
   if (!value || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(redactObject);
-  const entries = Object.entries(value as Record<string, unknown>).map(([k, v]) => {
-    if (REDACT_KEYS.includes(k.toLowerCase())) {
-      return [k, "[REDACTED]"] as const;
+  const entries = Object.entries(value as Record<string, unknown>).map(
+    ([k, v]) => {
+      if (REDACT_KEYS.includes(k.toLowerCase())) {
+        return [k, "[REDACTED]"] as const;
+      }
+      return [k, redactObject(v)] as const;
     }
-    return [k, redactObject(v)] as const;
-  });
+  );
   return Object.fromEntries(entries);
 }
 
-export function log(level: LogLevel, msg: string, meta?: Record<string, unknown>) {
+export function log(
+  level: LogLevel,
+  msg: string,
+  meta?: Record<string, unknown>
+) {
   const payload = {
     level,
     msg,

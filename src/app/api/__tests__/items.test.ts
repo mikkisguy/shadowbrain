@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { cleanupTestDb, createTestDb } from "@/db/test-utils";
 import { GET, POST } from "@/app/api/items/route";
-import {
-  GET as GET_BY_ID,
-  PATCH,
-  DELETE,
-} from "@/app/api/items/[id]/route";
+import { GET as GET_BY_ID, PATCH, DELETE } from "@/app/api/items/[id]/route";
 
 describe("/api/items", () => {
   beforeEach(() => {
@@ -94,10 +90,9 @@ describe("/api/items/[id]", () => {
     const createRes = await POST(createReq);
     const created = await createRes.json();
 
-    const deleteReq = new Request(
-      `http://localhost/api/items/${created.id}`,
-      { method: "DELETE" }
-    );
+    const deleteReq = new Request(`http://localhost/api/items/${created.id}`, {
+      method: "DELETE",
+    });
     const deleteRes = await DELETE(deleteReq, {
       params: { id: created.id },
     });

@@ -46,10 +46,7 @@ export function seedSettings(db: Database.Database): void {
 
       const normalizedValue = value.trim();
 
-      if (
-        normalizedValue !== "" &&
-        !isPlaceholderValue(normalizedValue)
-      ) {
+      if (normalizedValue !== "" && !isPlaceholderValue(normalizedValue)) {
         insert.run(settingsKey, normalizedValue);
       }
     }

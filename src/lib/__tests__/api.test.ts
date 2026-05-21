@@ -3,7 +3,10 @@ import { parsePagination, errorResponse } from "../api";
 
 describe("parsePagination", () => {
   it("applies defaults and caps max limit", () => {
-    const { page, limit, offset } = parsePagination({ page: "1", limit: "500" });
+    const { page, limit, offset } = parsePagination({
+      page: "1",
+      limit: "500",
+    });
     expect(page).toBe(1);
     expect(limit).toBe(100);
     expect(offset).toBe(0);
@@ -18,7 +21,11 @@ describe("errorResponse", () => {
     expect(response.status).toBe(400);
     const json = await response.json();
     expect(json).toEqual({
-      error: { code: "VALIDATION_ERROR", message: "Invalid input", details: { field: "type" } },
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid input",
+        details: { field: "type" },
+      },
     });
   });
 });
