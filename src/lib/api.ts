@@ -5,8 +5,13 @@ const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
 
 export function parsePagination(params: { page?: string; limit?: string }) {
-  const page = Math.max(1, Number(params.page ?? 1) || 1);
-  const rawLimit = Number(params.limit ?? DEFAULT_LIMIT) || DEFAULT_LIMIT;
+  const parsedPage = Number.parseInt(params.page ?? "1", 10);
+  const parsedLimit = Number.parseInt(
+    params.limit ?? DEFAULT_LIMIT.toString(),
+    10
+  );
+  const page = Math.max(1, Number.isNaN(parsedPage) ? 1 : parsedPage);
+  const rawLimit = Number.isNaN(parsedLimit) ? DEFAULT_LIMIT : parsedLimit;
   const limit = Math.min(MAX_LIMIT, Math.max(1, rawLimit));
   const offset = (page - 1) * limit;
   return { page, limit, offset };

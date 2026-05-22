@@ -11,6 +11,16 @@ describe("parsePagination", () => {
     expect(limit).toBe(100);
     expect(offset).toBe(0);
   });
+
+  it("coerces fractional values to integers", () => {
+    const { page, limit, offset } = parsePagination({
+      page: "1.5",
+      limit: "10.2",
+    });
+    expect(page).toBe(1);
+    expect(limit).toBe(10);
+    expect(offset).toBe(0);
+  });
 });
 
 describe("errorResponse", () => {

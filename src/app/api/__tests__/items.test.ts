@@ -70,7 +70,7 @@ describe("/api/items/[id]", () => {
   it("returns 404 for missing item", async () => {
     const req = new Request("http://localhost/api/items/does-not-exist");
     const res = await GET_BY_ID(req, {
-      params: Promise.resolve({ id: "does-not-exist" }),
+      params: { id: "does-not-exist" },
     });
     expect(res.status).toBe(404);
   });
@@ -90,7 +90,7 @@ describe("/api/items/[id]", () => {
       body: JSON.stringify({ content: "updated" }),
     });
     const patchRes = await PATCH(patchReq, {
-      params: Promise.resolve({ id: created.id }),
+      params: { id: created.id },
     });
     const patched = await patchRes.json();
     expect(patched.item.content).toBe("updated");
@@ -116,7 +116,7 @@ describe("/api/items/[id]", () => {
       body: JSON.stringify({ title: null }),
     });
     const patchRes = await PATCH(patchReq, {
-      params: Promise.resolve({ id: created.id }),
+      params: { id: created.id },
     });
     const patched = await patchRes.json();
     expect(patched.item.title).toBeNull();
@@ -137,7 +137,7 @@ describe("/api/items/[id]", () => {
       body: "{invalid-json",
     });
     const patchRes = await PATCH(patchReq, {
-      params: Promise.resolve({ id: created.id }),
+      params: { id: created.id },
     });
     expect(patchRes.status).toBe(400);
     const json = await patchRes.json();
@@ -157,7 +157,7 @@ describe("/api/items/[id]", () => {
       method: "DELETE",
     });
     const deleteRes = await DELETE(deleteReq, {
-      params: Promise.resolve({ id: created.id }),
+      params: { id: created.id },
     });
     expect(deleteRes.status).toBe(200);
   });
