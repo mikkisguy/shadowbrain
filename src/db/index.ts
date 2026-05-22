@@ -216,6 +216,50 @@ export function getProductionDb(): Database.Database {
   return getDb({ env: "production" });
 }
 
+export interface AuditLog {
+  id: string;
+  actor_id: string | null;
+  actor_type: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  success: number;
+  metadata: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+export type AuditLogCreateInput = Pick<
+  AuditLog,
+  "id" | "action" | "entity_type" | "created_at"
+> &
+  Partial<Omit<AuditLog, "id" | "action" | "entity_type" | "created_at">>;
+
+export const auditLogs = {
+  create: (db: Database.Database, log: AuditLogCreateInput) => {
+    const stmt = db.prepare(`
+      INSERT INTO audit_logs (
+        id, actor_id, actor_type, action, entity_type, entity_id,
+        success, metadata, ip, user_agent, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      log.id,
+      log.actor_id ?? null,
+      log.actor_type ?? null,
+      log.action,
+      log.entity_type,
+      log.entity_id ?? null,
+      log.success ?? 1,
+      log.metadata ?? null,
+      log.ip ?? null,
+      log.user_agent ?? null,
+      log.created_at
+    );
+  },
+};
+
 export const contentItems = {
   create: (
     db: Database.Database,
@@ -264,7 +308,7 @@ export const contentItems = {
     options?: { type?: string; limit?: number; offset?: number }
   ) => {
     let sql = "SELECT * FROM content_items";
-    const params: (string | number)[] = [];
+    const params: (string | number | null)[] = [];
 
     if (options?.type) {
       sql += " WHERE type = ?";
@@ -291,18 +335,19 @@ export const contentItems = {
     db: Database.Database,
     id: string,
     updates: {
-      title?: string;
+      title?: string | null;
       content?: string;
       metadata?: string;
+      is_private?: number;
       updated_at: string;
     }
   ) => {
     const fields: string[] = [];
-    const params: (string | number)[] = [];
+    const params: (string | number | null)[] = [];
 
     if (updates.title !== undefined) {
       fields.push("title = ?");
-      params.push(updates.title);
+      params.push(updates.title ?? null);
     }
     if (updates.content !== undefined) {
       fields.push("content = ?");
@@ -311,6 +356,10 @@ export const contentItems = {
     if (updates.metadata !== undefined) {
       fields.push("metadata = ?");
       params.push(updates.metadata);
+    }
+    if (updates.is_private !== undefined) {
+      fields.push("is_private = ?");
+      params.push(updates.is_private);
     }
 
     fields.push("updated_at = ?");
@@ -321,6 +370,86 @@ export const contentItems = {
       `UPDATE content_items SET ${fields.join(", ")} WHERE id = ?`
     );
     return stmt.run(...params);
+  },
+
+  listWithFilters: (
+    db: Database.Database,
+    options: {
+      type?: string;
+      tag?: string;
+      source?: string;
+      startDate?: string;
+      endDate?: string;
+      limit: number;
+      offset: number;
+    }
+  ) => {
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+
+    if (options.type) {
+      where.push("ci.type = ?");
+      params.push(options.type);
+    }
+    if (options.source) {
+      where.push("ci.source = ?");
+      params.push(options.source);
+    }
+    if (options.startDate) {
+      where.push("ci.created_at >= ?");
+      params.push(options.startDate);
+    }
+    if (options.endDate) {
+      where.push("ci.created_at <= ?");
+      params.push(options.endDate);
+    }
+
+    let join = "";
+    if (options.tag) {
+      join = `
+        JOIN content_tags ct ON ct.content_id = ci.id
+        JOIN tags t ON t.id = ct.tag_id
+      `;
+      where.push("t.name = ?");
+      params.push(options.tag);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    const countStmt = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM content_items ci
+      ${join}
+      ${whereSql}
+    `);
+    const total = (countStmt.get(...params) as { count: number }).count;
+
+    const itemsStmt = db.prepare(`
+      SELECT ci.*
+      FROM content_items ci
+      ${join}
+      ${whereSql}
+      ORDER BY ci.created_at DESC
+      LIMIT ? OFFSET ?
+    `);
+
+    const items = itemsStmt.all(
+      ...params,
+      options.limit,
+      options.offset
+    ) as ContentItem[];
+    return { items, total };
+  },
+
+  findWithRelations: (db: Database.Database, id: string) => {
+    const item = contentItems.findById(db, id);
+    if (!item) return null;
+
+    const tags = contentTags.findByContent(db, id);
+    const outbound = contentLinks.findBySource(db, id);
+    const inbound = contentLinks.findByTarget(db, id);
+
+    return { item, tags, links: { outbound, inbound } };
   },
 
   delete: (db: Database.Database, id: string) => {
