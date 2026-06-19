@@ -1,0 +1,9 @@
+# pnpm 11+ requires build-script approval. These packages need to run
+# install scripts (native compilation or platform binary download).
+# See https://pnpm.io/settings#allowbuilds
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  msw: true
+  sharp: true
+  unrs-resolver: true

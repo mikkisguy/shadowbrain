@@ -1,0 +1,113 @@
+name: Lint, Typecheck, Build & Test
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Lint, Typecheck, Build & Test
+    runs-on: ubuntu-latest
+    container: node:24-alpine
+    # SESSION_SECRET is required at build time because src/app/layout.tsx
+    # calls getEnv() during Next.js static-page generation, and tests call
+    # getEnv() transitively via the DB helpers. The value is a fixed
+    # placeholder — it is never used to sign real sessions in CI.
+    env:
+      SESSION_SECRET: ci-only-dummy-session-secret-32-chars-min-xxxxxxxxxxxx
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Enable pnpm via corepack
+        run: |
+          corepack enable pnpm
+          corepack prepare pnpm@11 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build sqlite-vec extension
+        # The test suite loads the vec0 loadable extension from
+        # dist/extensions/vec0, which is not pre-built on node:24-alpine.
+        # We build it from source (sqlite-vec v0.1.1) instead of relying on
+        # scripts/build-sqlite-vec.sh being present on the runner — the
+        # archive-mode checkout can drop the script under some configs.
+        env:
+          SQLITE_VEC_VERSION: v0.1.1
+        run: |
+          apk add --no-cache gcc musl-dev curl gettext make sqlite-dev file
+          BUILD_DIR="$(mktemp -d)"
+          OUT_DIR="$GITHUB_WORKSPACE/dist/extensions"
+          mkdir -p "$OUT_DIR"
+
+          echo "Downloading sqlite-vec $SQLITE_VEC_VERSION..."
+          curl -sL "https://github.com/asg017/sqlite-vec/archive/refs/tags/${SQLITE_VEC_VERSION}.tar.gz" \
+            | tar xz -C "$BUILD_DIR" --strip-components=1
+
+          echo "Generating sqlite-vec.h from template..."
+          cd "$BUILD_DIR"
+          VERSION=$(cat VERSION)
+          DATE=$(date -r VERSION +'%FT%TZ%z' 2>/dev/null || date +'%FT%TZ%z')
+          SOURCE="ci-build"
+          export VERSION DATE SOURCE
+          envsubst < sqlite-vec.h.tmpl > sqlite-vec.h
+
+          echo "Compiling sqlite-vec as loadable extension..."
+          # Provide BSD-style u_int8_t / u_int16_t / u_int32_t / u_int64_t
+          # typedefs on musl/Alpine. glibc provides them via <sys/types.h>;
+          # musl does not. sqlite-vec.c does \`typedef u_int8_t uint8_t;\`
+          # which fails without the shim on Alpine.
+          cat > musl-shim.h <<'EOF'
+          #ifndef _MUSL_UINT_SHIM_H
+          #define _MUSL_UINT_SHIM_H
+          #include <stdint.h>
+          #ifndef u_int8_t
+          typedef uint8_t u_int8_t;
+          #endif
+          #ifndef u_int16_t
+          typedef uint16_t u_int16_t;
+          #endif
+          #ifndef u_int32_t
+          typedef uint32_t u_int32_t;
+          #endif
+          #ifndef u_int64_t
+          typedef uint64_t u_int64_t;
+          #endif
+          #endif
+          EOF
+          CFLAGS="-O3 -Wall -Wextra -include musl-shim.h"
+          ARCH=$(uname -m)
+          OS=$(uname -s)
+          if [ "$ARCH" = "x86_64" ]; then
+            CFLAGS="$CFLAGS -mavx -DSQLITE_VEC_ENABLE_AVX"
+          elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+            CFLAGS="$CFLAGS -DSQLITE_VEC_ENABLE_NEON"
+          fi
+          gcc -fPIC -shared \
+            -I. \
+            -DSQLITE_THREADSAFE=1 \
+            $CFLAGS \
+            -o "$OUT_DIR/vec0.so" \
+            sqlite-vec.c \
+            -lm
+
+          echo "✓ Built $OUT_DIR/vec0.so"
+          file "$OUT_DIR/vec0.so"
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        # Catches Next.js / production issues that lint + typecheck + test
+        # miss: route-handler type validation, server/client boundary
+        # errors, RSC generation, static-page collection, etc.
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test --run
