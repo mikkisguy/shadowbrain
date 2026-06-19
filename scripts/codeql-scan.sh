@@ -82,9 +82,11 @@ OUT="$(mktemp -d)/results.csv"
 
 if [[ -s "$OUT" ]]; then
   count=$(wc -l < "$OUT")
-  echo ">> ALERTS ($count):"
-  cat "$OUT"
-  exit 2
-else
-  echo ">> No alerts. Clean."
+  count=$((count - 1))  # exclude CSV header row
+  if [[ $count -gt 0 ]]; then
+    echo ">> ALERTS ($count):"
+    cat "$OUT"
+    exit 2
+  fi
 fi
+echo ">> No alerts. Clean."
