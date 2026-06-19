@@ -111,3 +111,9 @@ jobs:
 
       - name: Test
         run: pnpm test --run
+
+      - name: Knip
+        # Catches dead code, unused exports, and unused dependencies that
+        # lint + typecheck + test do not surface. The local `pnpm verify`
+        # script runs the same chain.
+        run: pnpm exec knip

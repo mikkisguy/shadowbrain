@@ -58,23 +58,3 @@ export function getEnv(): Env {
   _env = result.data;
   return _env;
 }
-
-/**
- * Validate that specific env vars required for a feature are present.
- * Returns an error message if any are missing, or null if all are present.
- */
-export function requireEnvVars(
-  vars: (keyof Env)[],
-  feature: string
-): string | null {
-  const env = getEnv();
-  const missing = vars.filter((v) => isMissingEnvValue(env[v]));
-  if (missing.length === 0) return null;
-  return `Missing environment variable(s) for ${feature}: ${missing.join(", ")}. Add them to your .env file.`;
-}
-
-function isMissingEnvValue(value: Env[keyof Env]): boolean {
-  if (value === undefined) return true;
-  if (typeof value === "string") return value.trim() === "";
-  return false;
-}
