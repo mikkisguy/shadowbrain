@@ -1,12 +1,14 @@
-# ShadowBrain
+<div align="center">
+<img width="150" height="148" alt="image" src="https://raw.githubusercontent.com/mikkisguy/shadowbrain/refs/heads/main/public/logo_small.png" />
 
-**Your second brain. Frictionless. Connected. Yours forever.**
+---
+  
+# ShadowBrain
+</div>
 
 ShadowBrain is a personal knowledge management system that treats every thought — raw captures, journal entries, knowledge notes, bookmarks, people, projects, questions, and events — as nodes in a rich, typed graph. Everything connects. Nothing gets lost.
 
 ---
-
-## What Makes It Different
 
 - **Everything in one database** — no split between "journal here" and "notes there." One query across your entire brain.
 - **Semantic search** — find thoughts by _meaning_, not just keywords.
