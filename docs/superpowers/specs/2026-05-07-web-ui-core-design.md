@@ -13,9 +13,10 @@ Phase 3 delivers the core web UI for ShadowBrain — a dark-mode, responsive int
 
 ## Navigation Structure
 
-**Top navigation bar** with 5 sections:
+**Top navigation bar** with 6 sections:
 
 - **Browse** (`/`) — Main feed with infinite scroll, search, and filters
+- **Chat** (`/chat`) — Chat interface (grounded + general chat; see the Chat Interface spec)
 - **Search** (`/search`) — Dedicated search page (can merge with Browse later)
 - **Graph** (`/graph`) — Visual knowledge graph (placeholder for Phase 5)
 - **Tags** (`/tags`) — Tag management
@@ -31,7 +32,7 @@ Each section is its own page with clear URL structure. Full content width availa
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ ShadowBrain    Browse    Search    Graph    Tags    Settings │
+│ ShadowBrain    Browse    Chat    Search    Graph    Tags    Settings │
 ├─────────────────────────────────────────────────────┤
 │  Search input: "Search by keyword..."              │
 │  Type: [All] [Notes] [Journal] [Bookmarks] [+ Advanced ▼]  │
@@ -94,7 +95,7 @@ Each section is its own page with clear URL structure. Full content width availa
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ ShadowBrain    Browse    Search    Graph    Tags    Settings │
+│ ShadowBrain    Browse    Chat    Search    Graph    Tags    Settings │
 │ ← Back                                                │
 ├──────────────────────┬──────────────────────────────┤
 │ [Main Content 70%]   │ [Sidebar 30%]                │
@@ -141,7 +142,7 @@ Each section is its own page with clear URL structure. Full content width availa
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ ShadowBrain    Browse    Search    Graph    Tags    Settings │
+│ ShadowBrain    Browse    Chat    Search    Graph    Tags    Settings │
 ├─────────────────────────────────────────────────────┤
 │  Tags Management                                      │
 │  [+ New Tag]                                         │
@@ -166,17 +167,40 @@ Each section is its own page with clear URL structure. Full content width availa
 
 ## Settings Page (`/settings`)
 
+The settings page configures **two separate AI consumers** in ShadowBrain. They
+intentionally use different providers because they serve different features:
+
+- **AI Processor** (non-interactive background jobs: nightly journal
+  compilation, auto-tagging on intake, auto-title generation, auto-link
+  suggestions, embeddings) — uses **OpenRouter**.
+- **Chat interface** (interactive user surface; see the Chat Interface spec) —
+  uses **Hermes** and **OpenCode Go**.
+
 ### Layout
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ ShadowBrain    Browse    Search    Graph    Tags    Settings │
+│ ShadowBrain    Browse    Chat    Search    Graph    Tags    Settings │
 ├─────────────────────────────────────────────────────┤
 │  Settings                                              │
 │                                                       │
 │  AI Features                                          │
+│  Powers the AI Processor (nightly + on-demand LLM).  │
 │  OpenRouter API Key    [sk-or-****]              [Save] │
 │  Default Model        [mistral-7b... ▼]           [Save] │
+│                                                       │
+│  Chat providers                                       │
+│  Powers the chat interface (see Chat Interface spec). │
+│                                                       │
+│  Hermes                                               │
+│    Base URL       [http://localhost:8642/v1]         │
+│    API Key        [****]                             │
+│    Default Model  [hermes-agent ▼]      [Test]  [Save]│
+│                                                       │
+│  OpenCode Go                                          │
+│    Base URL       [https://opencode.ai/zen/go/v1]    │
+│    API Key        [****]                             │
+│    Default Model  [glm-5.2 ▼]            [Test]  [Save]│
 │                                                       │
 │  Export & Backup                                     │
 │  [Export all as Markdown]  [Export as JSON]          │
@@ -190,16 +214,33 @@ Each section is its own page with clear URL structure. Full content width availa
 
 ### Sections
 
-1. **AI Features**
+1. **AI Features** — powers the AI Processor (nightly compilation, auto-tagging
+   on intake, auto-titling, auto-link suggestions, embeddings).
    - OpenRouter API Key (masked, save to `settings` table)
-   - Default Model dropdown (available models from OpenRouter)
+   - Default Model dropdown (sourced from OpenRouter)
 
-2. **Export & Backup**
+2. **Chat providers** — powers the chat interface (see the Chat Interface spec).
+   - **Hermes** subsection:
+     - Base URL input (default `http://localhost:8642/v1`)
+     - API Key input (masked; = Hermes `API_SERVER_KEY`)
+     - Default Model dropdown (sourced from `GET /v1/models`)
+     - "Test connection" button — hits `GET /v1/models` and reports success / failure
+   - **OpenCode Go** subsection:
+     - Base URL input (default `https://opencode.ai/zen/go/v1`)
+     - API Key input (masked; OpenCode Go subscription key)
+     - Default Model dropdown (sourced from `GET /v1/models`)
+     - "Test connection" button
+   - Model dropdowns for both providers are populated from each provider's
+     `GET /v1/models`.
+   - Keys are never sent to the client after save; the server is the only
+     consumer (the chat hub reads them, keys stay in the `settings` table / env).
+
+3. **Export & Backup**
    - Export all as Markdown
    - Export as JSON
    - (Future: backup reminders, backup schedule)
 
-3. **System Info**
+4. **System Info**
    - Total items count
    - Database size
    - Last backup timestamp
@@ -224,7 +265,7 @@ Each section is its own page with clear URL structure. Full content width availa
 └─────────────────────┘
 ```
 
-Hamburger menu opens: Browse, Search, Tags, Settings.
+Hamburger menu opens: Browse, Chat, Search, Tags, Settings.
 
 ### Mobile Cards
 
