@@ -12,10 +12,10 @@ const patchSchema = z.object({
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   // TODO: add auth check for item read.
-  const { id } = params;
+  const { id } = await params;
   try {
     const db = getDb();
     const result = contentItems.findWithRelations(db, id);
@@ -31,10 +31,10 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   // TODO: add auth check for item update.
-  const { id } = params;
+  const { id } = await params;
   try {
     let body: unknown;
     try {
@@ -101,10 +101,10 @@ export async function PATCH(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   // TODO: add auth check for item delete.
-  const { id } = params;
+  const { id } = await params;
   try {
     const db = getDb();
     const existing = contentItems.findById(db, id);

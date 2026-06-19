@@ -46,3 +46,5 @@ logs/
 
 # Session/brainstorm data
 .superpowers/
+
+.codeql/
