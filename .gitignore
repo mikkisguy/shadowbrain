@@ -49,3 +49,6 @@ logs/
 .superpowers/
 
 .codeql/
+
+# Husky internal state
+.husky/_
