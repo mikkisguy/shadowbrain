@@ -14,6 +14,12 @@
       "matchDepTypes": ["devDependencies"],
       "matchUpdateTypes": ["patch"],
       "automerge": true
+    },
+    {
+      "description": "Defer eslint v10 major until eslint-plugin-react (transitive via eslint-config-next) ships ESLint 10 support. Tracking: jsx-eslint/eslint-plugin-react#3977.",
+      "matchPackageNames": ["eslint", "eslint-config-next"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
     }
   ]
 }
