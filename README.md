@@ -7,7 +7,7 @@
 
 </div>
 
-ShadowBrain is a personal knowledge management system that treats every thought — raw captures, journal entries, knowledge notes, bookmarks, people, projects, questions, and events — as nodes in a rich, typed graph. Everything connects. Nothing gets lost.
+ShadowBrain is a personal knowledge management system that treats every thought - raw captures, journal entries, knowledge notes, bookmarks, people, projects, questions, and events - as nodes in a rich, typed graph.
 
 ---
 
