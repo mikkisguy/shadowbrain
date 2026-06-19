@@ -50,7 +50,29 @@ jobs:
           envsubst < sqlite-vec.h.tmpl > sqlite-vec.h
 
           echo "Compiling sqlite-vec as loadable extension..."
-          CFLAGS="-O3 -Wall -Wextra"
+          # Provide BSD-style u_int8_t / u_int16_t / u_int32_t / u_int64_t
+          # typedefs on musl/Alpine. glibc provides them via <sys/types.h>;
+          # musl does not. sqlite-vec.c does \`typedef u_int8_t uint8_t;\`
+          # which fails without the shim on Alpine.
+          cat > musl-shim.h <<'EOF'
+          #ifndef _MUSL_UINT_SHIM_H
+          #define _MUSL_UINT_SHIM_H
+          #include <stdint.h>
+          #ifndef u_int8_t
+          typedef uint8_t u_int8_t;
+          #endif
+          #ifndef u_int16_t
+          typedef uint16_t u_int16_t;
+          #endif
+          #ifndef u_int32_t
+          typedef uint32_t u_int32_t;
+          #endif
+          #ifndef u_int64_t
+          typedef uint64_t u_int64_t;
+          #endif
+          #endif
+          EOF
+          CFLAGS="-O3 -Wall -Wextra -include musl-shim.h"
           ARCH=$(uname -m)
           OS=$(uname -s)
           if [ "$ARCH" = "x86_64" ]; then
