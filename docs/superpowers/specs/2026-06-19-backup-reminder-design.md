@@ -41,11 +41,13 @@ set -euo pipefail
 proton-drive auth login
 
 # === 2. Snapshot the data volume (DB + future images) ===
-SNAPSHOT="/tmp/shadowbrain-backup-$(date +%F).tar.gz"
+DATE="$(date +%F)"
+SNAPSHOT_NAME="shadowbrain-backup-$DATE.tar.gz"
+SNAPSHOT="/tmp/$SNAPSHOT_NAME"
 docker run --rm \
   -v shadowbrain_data:/data:ro \
   -v /tmp:/backup \
-  alpine tar czf "/backup/shadowbrain-backup-$(date +%F).tar.gz" -C /data .
+  alpine tar czf "/backup/$SNAPSHOT_NAME" -C /data .
 
 # === 3. Upload to Proton Drive ===
 # First-time only: create the folder "/ShadowBrain Backups" in the

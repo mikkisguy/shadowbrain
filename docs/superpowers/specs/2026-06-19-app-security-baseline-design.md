@@ -20,8 +20,7 @@ expose data.
 
 The database is protected at rest by host access controls and by regular
 backups to Proton Drive (see the
-[backup reminder spec](../blob/main/docs/superpowers/specs/2026-06-19-backup-reminder-design.md));
-no application-layer encryption is applied, since such layers collapse to
+[backup reminder spec](./2026-06-19-backup-reminder-design.md));
 zero protection when the encryption key is co-located with the data on
 the same host.
 
@@ -161,7 +160,7 @@ In-memory token bucket per IP, sufficient for a single VPS. Module:
 - If a future feature needs CORS (e.g. a separate mobile client), add an explicit tight allowlist. Out of scope for v1.
 
 
-## 8. SSRF protection for URL-fetch endpoints
+## 7. SSRF protection for URL-fetch endpoints
 
 URL-fetch endpoints — **#17 (bookmark auto-fetch metadata)** and **#44 (image capture: download + WebP conversion)** — accept URLs from user input or external sources (Discord) and fetch arbitrary remote resources. Without explicit protection, an attacker can trick the server into fetching internal resources: `http://127.0.0.1:8642/v1` (the Hermes API!), cloud metadata endpoints (`169.254.169.254`), or other internal network addresses — a classic SSRF.
 
@@ -173,7 +172,7 @@ URL-fetch endpoints — **#17 (bookmark auto-fetch metadata)** and **#44 (image 
 
 This is a real gap the rest of the spec does not cover. Implemented as **issue G**.
 
-## 9. CI security
+## 8. CI security
 
 Operational security — keeps vulnerabilities visible and dependencies fresh. Implemented as **issue H**.
 
