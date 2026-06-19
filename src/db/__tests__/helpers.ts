@@ -3,7 +3,7 @@ import { join } from "path";
 import { existsSync } from "fs";
 import { runMigrations, VECTOR_SEARCH_MIGRATION_VERSION } from "../migrations";
 
-export function getTestExtensionPath(): string {
+function getTestExtensionPath(): string {
   const basePath =
     process.env.SQLITE_VEC_EXTENSION_PATH ||
     join(__dirname, "..", "..", "..", "dist", "extensions", "vec0");
