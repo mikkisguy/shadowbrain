@@ -37,5 +37,11 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Build
+        # Catches Next.js / production issues that lint + typecheck + test
+        # miss: route handler type validation, server/client boundary
+        # errors, RSC generation, static-page collection, etc.
+        run: pnpm build
+
       - name: Test
         run: pnpm test --run
