@@ -8,9 +8,9 @@
 
 The ShadowBrain SQLite database is the single source of truth for user content. It must be backed up regularly to a secure destination. The backup destination is **Proton Drive** (end-to-end encrypted by design; the operator already has an account).
 
-The database is *not* encrypted at rest by the application — there is no SQLCipher and no application-layer envelope. Such layers collapse to zero protection when the encryption key is co-located with the database on the same host (a realistic assumption for a personal VPS), and they add operational risk (forget the key = lose the DB). The defense is instead: **(1) regular backups to Proton Drive** (this spec), and **(2) a reminder system that escalates over time** to ensure backups actually happen.
+The database is _not_ encrypted at rest by the application — there is no SQLCipher and no application-layer envelope. Such layers collapse to zero protection when the encryption key is co-located with the database on the same host (a realistic assumption for a personal VPS), and they add operational risk (forget the key = lose the DB). The defense is instead: **(1) regular backups to Proton Drive** (this spec), and **(2) a reminder system that escalates over time** to ensure backups actually happen.
 
-This spec covers both the backup *mechanism* (the shell script the operator runs on the VPS) and the in-app *reminder* (the banner, the escalation curve, the "Mark as backed up" button, the `/backup` guide page).
+This spec covers both the backup _mechanism_ (the shell script the operator runs on the VPS) and the in-app _reminder_ (the banner, the escalation curve, the "Mark as backed up" button, the `/backup` guide page).
 
 ## 1. What gets backed up
 
@@ -82,11 +82,11 @@ Written by the "Mark as backed up" button (see §5). The `last_backup_at` is rea
 
 On every authenticated page load, a banner in the root layout computes `daysSince = now - last_backup_at` (treating missing/empty as "never" → 14+) and renders one of three severities:
 
-| Days since last backup | Severity | UI |
-|---|---|---|
-| 0–6 | Gentle | Dismissible for 1 day. Muted color. |
-| 7–13 | Prominent | Non-dismissible. Only "Mark as backed up" or "Snooze 1 day". Warning color. |
-| 14+ | Enforce | Full-screen interstitial blocking the app. "Mark as backed up" or "Snooze 1 day". After 3 consecutive snoozes at this level (tracked via `backup_snooze_count`), the snooze button disappears — "Mark as backed up" is the only escape. Error color. |
+| Days since last backup | Severity  | UI                                                                                                                                                                                                                                                   |
+| ---------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0–6                    | Gentle    | Dismissible for 1 day. Muted color.                                                                                                                                                                                                                  |
+| 7–13                   | Prominent | Non-dismissible. Only "Mark as backed up" or "Snooze 1 day". Warning color.                                                                                                                                                                          |
+| 14+                    | Enforce   | Full-screen interstitial blocking the app. "Mark as backed up" or "Snooze 1 day". After 3 consecutive snoozes at this level (tracked via `backup_snooze_count`), the snooze button disappears — "Mark as backed up" is the only escape. Error color. |
 
 The "Snooze 1 day" action does **not** update `last_backup_at`; it increments `backup_snooze_count` (at the 14+ level) and visually pushes the perceived timestamp back by 1 day. A successful "Mark as backed up" resets the count to 0.
 
@@ -134,8 +134,8 @@ A new authenticated page at `/backup` (App Router) containing:
 
 One issue:
 
-| Issue | Title | Scope |
-|---|---|---|
+| Issue | Title                                                              | Scope                                                                                                                                                                                                                                                                                           |
+| ----- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | (new) | Security/ops: periodic backup reminder with Proton Drive CLI guide | The full feature: `last_backup_at` + `backup_snooze_count` tracking, the reminder banner with the three-level escalation curve, the `/backup` guide page, the "Mark as backed up" button + audit event, the snooze tracking, the keyboard/screen-reader accessibility for all three severities. |
 
 ## 10. Out of scope
