@@ -82,9 +82,15 @@ lists the model catalog.
 
 ### `lib/chat/retrieval.ts` (RAG)
 Given the latest user message, runs FTS retrieval (reusing the Phase 1 search
-helper / `sanitizeFts5Query`) with tag/type filters, excludes `is_private = 1`
-by default, returns top-K items. Renders a `## Retrieved context` block for
-injection. Returns empty → hub proceeds without context (no hard failure).
+helper / `sanitizeFts5Query`) with tag/type filters, and respects the
+**two-level visibility** model (per the App Security Baseline spec §2):
+**`is_hidden = 1` items are included in RAG by default** (they are AI-OK);
+**`is_private = 1` items are excluded by default** and are only included when
+the current thread has opted in via the per-thread **"Include private in AI"**
+control (`chat_threads.include_private_in_ai = 1`, overridable per send).
+Returns top-K items (`CHAT_RAG_TOP_K`, default 8). Renders a `## Retrieved
+context` block for injection. Returns empty → hub proceeds without context
+(no hard failure).
 
 ### `lib/chat/hermes-runs.ts`
 Thin client for the Hermes Runs API: `createRun`, `streamEvents(runId)` (async
@@ -122,7 +128,10 @@ Builds on the Phase 3 design system (#20) and markdown rendering (#25).
 - **Left rail:** new chat + recent threads.
 - **Center:** streaming message list (markdown), input box, send.
 - **Per-thread controls:** Target selector (Hermes / Go model), Grounding
-  toggle, Allow-model-to-save toggle.
+  toggle, Allow-model-to-save toggle, **Include-private-in-AI toggle** (off
+  by default; gates whether `is_private` items are included in the RAG
+  context for this thread / message, per the App Security Baseline two-level
+  visibility model).
 - **Per-message:** "Save to ShadowBrain" action (type picker → `POST /api/items`).
 - **Hermes activity:** collapsible tool-progress blocks; when target = Hermes,
   show an **"Admin mode (Hermes)"** indicator. Approval requests render inline
@@ -162,6 +171,7 @@ CREATE TABLE chat_threads (
   target_model     TEXT NOT NULL,
   grounded         INTEGER NOT NULL DEFAULT 1,  -- RAG on/off
   allow_model_save INTEGER NOT NULL DEFAULT 0,
+  include_private_in_ai INTEGER NOT NULL DEFAULT 0,  -- per-thread "Include private in AI" opt-in (gates is_private in RAG)
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );

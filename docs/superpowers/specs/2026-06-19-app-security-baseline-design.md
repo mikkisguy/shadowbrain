@@ -18,6 +18,13 @@ attacker can reach the server's port and attempt to read or modify
 content. The defense is layered so that a bug in any one layer does not
 expose data.
 
+The database is protected at rest by host access controls and by regular
+backups to Proton Drive (see the
+[backup reminder spec](../blob/main/docs/superpowers/specs/2026-06-19-backup-reminder-design.md));
+no application-layer encryption is applied, since such layers collapse to
+zero protection when the encryption key is co-located with the data on
+the same host.
+
 ## Goals
 
 - Authentication and session management (delegated to #53; this spec depends on it).
@@ -26,7 +33,7 @@ expose data.
 - Standard security response headers (CSP, HSTS, X-Frame-Options, etc.).
 - Global rate limiting (per IP) on all routes, in addition to the strict login rate limit.
 - CORS hardening: same-origin only, explicit deny of cross-origin.
-- Encryption at rest via SQLCipher so a DB file leak is not a data leak.
+- Regular backups of the database to Proton Drive (E2E encrypted by the destination), with an in-app reminder to ensure they happen — see the backup reminder spec.
 - Centralized security configuration in `src/lib/security.config.ts`.
 - A test suite covering the baseline controls and updating existing tests to authenticate.
 
@@ -38,7 +45,7 @@ expose data.
 - Secrets rotation.
 - Multi-user / roles (ShadowBrain is single-user per `docs/vision.md`).
 - Proton Pass / `pass-cli` integration (deferred; see Future Work).
-- SQLCipher key rotation (deferred; manual `PRAGMA rekey` documented in issue F for v1).
+
 
 ## Architecture
 
@@ -50,7 +57,7 @@ Browser
   → Next.js middleware  (auth + headers + CSRF + rate limit)
   → Route handler       (Zod validation, auth-gated visibility flags)
   → src/db/index.ts     (read helpers: includeHidden / includePrivate)
-  → SQLCipher-encrypted SQLite file  (encryption at rest)
+  → SQLite file (plaintext at rest; protected by host access controls + regular backups to Proton Drive — see backup reminder spec)
 ```
 
 Auth (login, session cookies, password hashing, login rate limit) is
@@ -153,18 +160,6 @@ In-memory token bucket per IP, sufficient for a single VPS. Module:
 - The CSRF origin check (§3) already rejects cross-origin requests.
 - If a future feature needs CORS (e.g. a separate mobile client), add an explicit tight allowlist. Out of scope for v1.
 
-### 7. Encryption at rest — SQLCipher
-
-The whole SQLite file is encrypted with SQLCipher. One key, transparent
-to the query layer. Composes with the visibility flags: those decide
-*what* the app shows; SQLCipher protects *all of it* at rest.
-
-- **Key**: `DB_ENCRYPTION_KEY` (required env var). Generate with `openssl rand -hex 32`. **Store the key somewhere safe separate from the DB** (password manager, sealed envelope, etc.). Losing the key = losing the database.
-- **Build**: switch `better-sqlite3` to a SQLCipher build. The exact package (e.g. `@journeyapps/sqlcipher`, `better-sqlite3-sqlcipher`) is to be confirmed during implementation (see Open Questions).
-- **Connection**: `src/db/index.ts` issues `PRAGMA key = …` before any other pragma at `getDb()` time. The key is read from env, never logged, never sent to the client.
-- **One-time migration of the existing unencrypted DB**: `ATTACH DATABASE '…' AS encrypted KEY '…'` → `INSERT INTO encrypted.* SELECT FROM main.*` → swap. The first-run path detects an unencrypted DB and runs the migration; subsequent runs open the encrypted file with the key.
-- **Compatibility**: FTS5 and `sqlite-vec` keep working. SQLCipher is a drop-in encryption layer. No code changes in the query helpers beyond the `PRAGMA key`.
-- **Key rotation**: out of scope for v1. The manual `PRAGMA rekey = '…'` procedure is documented in issue F for a future pass.
 
 ## 8. SSRF protection for URL-fetch endpoints
 
@@ -193,7 +188,7 @@ Operational security — keeps vulnerabilities visible and dependencies fresh. I
 
 New / updated env vars (validated by `src/lib/env.ts`):
 
-- `DB_ENCRYPTION_KEY` — required. The SQLCipher key.
+
 - `ADMIN_USERNAME` — required. The admin's username. (Added by #53.)
 - `ADMIN_PASSWORD_HASH` — required. Bcrypt hash of the admin's password. (Added by #53.)
 - `SESSION_SECRET` — already required (min 32 chars). Used by #53.
@@ -229,8 +224,7 @@ server-side logs). The spec adds:
   `audit_logs`.
 - Rate-limit responses: `429` + `Retry-After`; no internal details.
 - Never echo DB errors, stack traces, or internal paths to the client.
-- Encryption errors (wrong key, corrupt DB) surface as a generic 500 to
-  the client; the specific error is logged server-side.
+
 
 ## Testing
 
@@ -246,12 +240,12 @@ server-side logs). The spec adds:
 - **Security headers**: response header assertions.
 - **CSRF**: cross-origin POST → `403`; same-origin allowed.
 - **Rate limit**: burst then `429`.
-- **SQLCipher**: opening with the correct key succeeds; opening with the wrong key fails; the migration of an unencrypted DB produces an encrypted DB readable with the key.
+
 - **No regression**: update existing `/api/items` tests to authenticate (session cookie) since #53 will require it. Add a test helper for authenticated requests (e.g. `createAuthedRequest`).
 
 ## Decomposition into Issues
 
-**#53 (in flight)** stays as the foundation. This spec spawns **6 new
+**#53 (in flight)** stays as the foundation. This spec spawns **5 new
 issues** plus a small chat-spec amendment:
 
 | Issue | Scope |
@@ -261,8 +255,8 @@ issues** plus a small chat-spec amendment:
 | **B** | Security headers — middleware response headers via `security.config.ts` |
 | **C** | Global rate limiting — `src/lib/rate-limit.ts` token bucket + middleware application |
 | **D** | CORS hardening + security config — same-origin only, explicit deny, centralized `security.config.ts` |
-| **E** | Security test suite — middleware + visibility + headers + CSRF + rate-limit + SQLCipher tests; update existing tests to authenticate |
-| **F** | **SQLCipher (encryption at rest)** — `DB_ENCRYPTION_KEY` env, SQLCipher build of `better-sqlite3`, `PRAGMA key` in connection, one-time DB migration, tests |
+| **E** | Security test suite — middleware + visibility + headers + CSRF + rate-limit tests; update existing tests to authenticate |
+
 | **G** | **SSRF protection for URL-fetch endpoints** — shared `validateFetchUrl(url)` helper used by #17 and #44: block private/loopback/link-local; DNS resolve + IP check; block redirects to private; timeout + size limits; tests |
 | **H** | **CI security** — CodeQL workflow, lint/typecheck/test workflow, Renovate config (with `minimumReleaseAge`), `SECURITY.md` |
 | **—** | **Chat-spec amendment** — RAG includes `is_hidden` by default; includes `is_private` only on per-thread opt-in (new `chat_threads` column + per-send override); amend `docs/superpowers/specs/2026-06-19-chat-interface-design.md` and issue #49 |
@@ -283,9 +277,9 @@ A **one-line refinement to #53**: specify that CSRF uses **origin check**
 - **#53** lands alongside or just after H (creates the middleware
   skeleton, the `isAuthenticated` helper, session handling). Once
   #53 is in, H's CI workflow is already scanning it.
-- **A, B, C, D, F, G** are independent of each other and can ship in
-  parallel after #53. (F touches the connection; G is used by #17 and
-  #44 so it should land before them; otherwise A–G are orthogonal.)
+- **A, B, C, D, G** are independent of each other and can ship in
+  parallel after #53. (G is used by #17 and #44 so it should land before
+  them; otherwise A–G are orthogonal.)
 - **E** (tests) last; integrates everything.
 - **Chat-spec amendment + `chat_threads` column** can ship alongside the
   Chat track issues (#48 / #49), independent of A–G.
@@ -294,11 +288,11 @@ A **one-line refinement to #53**: specify that CSRF uses **origin check**
 
 - **HTTPS / TLS at nginx** — separate deployment-security spec. The HSTS header is set in this spec but is only meaningful when the app is served over HTTPS.
 - **Full-disk encryption** — declined for v1.
-- **Backup encryption** — separate. Backups of the encrypted DB inherit SQLCipher's encryption as long as the key is not included in the backup; documenting the backup procedure (key separate from DB) is a deployment note.
+- **Backup encryption** — handled separately. The database is backed up regularly to Proton Drive (end-to-end encrypted by Proton Drive itself); the backup procedure is documented in the backup reminder spec and the in-app `/backup` guide.
 - **Secrets rotation** — env-level rotation, not in scope.
 - **Multi-user / roles** — single-user per `docs/vision.md`.
 - **Proton Pass / `pass-cli` integration** — future. A `pass-cli` bridge tool would let the chat AI fetch credentials / secrets from Proton Pass on demand (via a model tool call) so secrets never need to live in the ShadowBrain DB. Tracked as future work; no v1 issue.
-- **SQLCipher key rotation** — manual `PRAGMA rekey = '…'` procedure documented in issue F; an automated rotation flow is a future enhancement.
+- **Backup reminder / database rotation** — the periodic backup reminder (spec + in-app guide) replaces the at-rest encryption concern; an automated backup-rotation flow is a future enhancement.
 
 ## Cross-Spec Impact
 
@@ -310,6 +304,6 @@ A **one-line refinement to #53**: specify that CSRF uses **origin check**
 
 ## Open Questions
 
-- **SQLCipher package choice**: `@journeyapps/sqlcipher` vs `better-sqlite3-sqlcipher` (or building `better-sqlite3` with SQLCipher). To be confirmed during implementation based on the current state of the `better-sqlite3` ecosystem and the project's Node version. The spec is agnostic.
+
 - **Trusted-proxy / `X-Forwarded-For`**: the rate-limit module reads the real IP from a configured header. The production nginx config must set the header and the app must trust it. The exact nginx hardening is a deployment-security follow-up.
-- **Existing unencrypted DB migration**: the first-run path needs to detect an unencrypted DB and run the `ATTACH … AS encrypted` + `INSERT … SELECT` migration. The exact behavior on partially-migrated or already-encrypted DBs is to be verified during implementation.
+
