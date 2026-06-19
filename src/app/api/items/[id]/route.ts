@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { getDb, contentItems, auditLogs, deleteEmbedding, isVecExtensionLoaded } from "@/db/index";
+import {
+  getDb,
+  contentItems,
+  auditLogs,
+  deleteEmbedding,
+  isVecExtensionLoaded,
+} from "@/db/index";
 import { errorResponse, parseJson, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
 

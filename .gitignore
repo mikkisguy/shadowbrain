@@ -23,6 +23,10 @@ out/
 dist/
 build/
 
+# Next.js auto-generated types (regenerated on every `next build` / `next dev`)
+# https://nextjs.org/docs/app/api-reference/config/typescript
+next-env.d.ts
+
 # IDE
 .vscode/
 .idea/

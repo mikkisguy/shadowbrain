@@ -2,8 +2,9 @@
 <img width="150" height="148" alt="image" src="https://raw.githubusercontent.com/mikkisguy/shadowbrain/refs/heads/main/public/logo_small.png" />
 
 ---
-  
+
 # ShadowBrain
+
 </div>
 
 ShadowBrain is a personal knowledge management system that treats every thought — raw captures, journal entries, knowledge notes, bookmarks, people, projects, questions, and events — as nodes in a rich, typed graph. Everything connects. Nothing gets lost.
@@ -22,15 +23,15 @@ ShadowBrain is a personal knowledge management system that treats every thought 
 
 ## Tech Stack
 
-| Layer             | Technology                                                 |
-| ----------------- | ---------------------------------------------------------- |
-| **Database**      | SQLite + `sqlite-vec` (semantic search) + FTS5 (full-text) |
-| **Backend**       | Next.js (App Router, TypeScript)                           |
-| **Frontend**      | React 19 + Tailwind CSS + shadcn/ui                        |
-| **AI Interface**  | Hermes Agent + OpenCode Go models (web chat at `/chat`)     |
-| **Capture**       | Discord WebSocket listener, Web UI, API                    |
+| Layer             | Technology                                                              |
+| ----------------- | ----------------------------------------------------------------------- |
+| **Database**      | SQLite + `sqlite-vec` (semantic search) + FTS5 (full-text)              |
+| **Backend**       | Next.js (App Router, TypeScript)                                        |
+| **Frontend**      | React 19 + Tailwind CSS + shadcn/ui                                     |
+| **AI Interface**  | Hermes Agent + OpenCode Go models (web chat at `/chat`)                 |
+| **Capture**       | Discord WebSocket listener, Web UI, API                                 |
 | **AI Processing** | OpenRouter (background jobs: nightly compilation, auto-tag, auto-title) |
-| **Deployment**    | Docker Compose + nginx reverse proxy                       |
+| **Deployment**    | Docker Compose + nginx reverse proxy                                    |
 
 ---
 

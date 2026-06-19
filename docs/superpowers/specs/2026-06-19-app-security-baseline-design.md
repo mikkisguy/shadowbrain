@@ -45,7 +45,6 @@ the same host.
 - Multi-user / roles (ShadowBrain is single-user per `docs/vision.md`).
 - Proton Pass / `pass-cli` integration (deferred; see Future Work).
 
-
 ## Architecture
 
 The baseline is implemented across the following layers, each independent
@@ -103,7 +102,7 @@ about (`is_hidden` or neither), and items in ShadowBrain that are not
     - `is_hidden = 1`, `is_private = 0` → returned only if `includeHidden = true`.
     - `is_hidden = 0`, `is_private = 1` → returned only if `includePrivate = true`.
     - `is_hidden = 1`, `is_private = 1` → returned only if **both** `includeHidden = true` **and** `includePrivate = true`.
-    Otherwise (any set visibility flag without its corresponding opt-in), the function returns `null` — treated as not found by the route, which returns `404`. This is the strictest interpretation and matches the defense-in-depth principle: an item with both flags set requires both opt-ins.
+      Otherwise (any set visibility flag without its corresponding opt-in), the function returns `null` — treated as not found by the route, which returns `404`. This is the strictest interpretation and matches the defense-in-depth principle: an item with both flags set requires both opt-ins.
   - `search.query` / `search.queryByType` — when false / false, exclude items with `is_hidden = 1 OR is_private = 1`.
 - Zod schemas: `POST /api/items` and `PATCH /api/items/[id]` accept optional `is_hidden` and `is_private`.
 
@@ -159,7 +158,6 @@ In-memory token bucket per IP, sufficient for a single VPS. Module:
 - The CSRF origin check (§3) already rejects cross-origin requests.
 - If a future feature needs CORS (e.g. a separate mobile client), add an explicit tight allowlist. Out of scope for v1.
 
-
 ## 7. SSRF protection for URL-fetch endpoints
 
 URL-fetch endpoints — **#17 (bookmark auto-fetch metadata)** and **#44 (image capture: download + WebP conversion)** — accept URLs from user input or external sources (Discord) and fetch arbitrary remote resources. Without explicit protection, an attacker can trick the server into fetching internal resources: `http://127.0.0.1:8642/v1` (the Hermes API!), cloud metadata endpoints (`169.254.169.254`), or other internal network addresses — a classic SSRF.
@@ -186,7 +184,6 @@ Operational security — keeps vulnerabilities visible and dependencies fresh. I
 ## Configuration
 
 New / updated env vars (validated by `src/lib/env.ts`):
-
 
 - `ADMIN_USERNAME` — required. The admin's username. (Added by #53.)
 - `ADMIN_PASSWORD_HASH` — required. Bcrypt hash of the admin's password. (Added by #53.)
@@ -224,7 +221,6 @@ server-side logs). The spec adds:
 - Rate-limit responses: `429` + `Retry-After`; no internal details.
 - Never echo DB errors, stack traces, or internal paths to the client.
 
-
 ## Testing
 
 - **Middleware**:
@@ -247,14 +243,14 @@ server-side logs). The spec adds:
 **#53 (in flight)** stays as the foundation. This spec spawns **5 new
 issues** plus a small chat-spec amendment:
 
-| Issue | Scope |
-|---|---|
+| Issue               | Scope                                                                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **#53** (in flight) | Session auth (login, session, middleware skeleton, password hashing, **constant-time login**, CSRF origin check, login rate limit, logout, audit) |
-| **A** | Two-level visibility — migration adding `is_hidden`; `includeHidden` / `includePrivate` on read helpers; route plumbing; Zod schemas; tests |
-| **B** | Security headers — middleware response headers via `security.config.ts` |
-| **C** | Global rate limiting — `src/lib/rate-limit.ts` token bucket + middleware application |
-| **D** | CORS hardening + security config — same-origin only, explicit deny, centralized `security.config.ts` |
-| **E** | Security test suite — middleware + visibility + headers + CSRF + rate-limit tests; update existing tests to authenticate |
+| **A**               | Two-level visibility — migration adding `is_hidden`; `includeHidden` / `includePrivate` on read helpers; route plumbing; Zod schemas; tests       |
+| **B**               | Security headers — middleware response headers via `security.config.ts`                                                                           |
+| **C**               | Global rate limiting — `src/lib/rate-limit.ts` token bucket + middleware application                                                              |
+| **D**               | CORS hardening + security config — same-origin only, explicit deny, centralized `security.config.ts`                                              |
+| **E**               | Security test suite — middleware + visibility + headers + CSRF + rate-limit tests; update existing tests to authenticate                          |
 
 | **G** | **SSRF protection for URL-fetch endpoints** — shared `validateFetchUrl(url)` helper used by #17 and #44: block private/loopback/link-local; DNS resolve + IP check; block redirects to private; timeout + size limits; tests |
 | **H** | **CI security** — CodeQL workflow, lint/typecheck/test workflow, Renovate config (with `minimumReleaseAge`), `SECURITY.md` |
@@ -268,7 +264,7 @@ A **one-line refinement to #53**: specify that CSRF uses **origin check**
 - **H (CI security) should land as one of the first things** — it
   depends on nothing in the app beyond the existing `pnpm` scripts.
   Putting CodeQL, the lint/typecheck/test workflow, and Renovate in
-  place *before* the rest of the security baseline (and the chat and
+  place _before_ the rest of the security baseline (and the chat and
   Phase 1–3 work) means every subsequent PR is automatically scanned,
   linted, typechecked, and tested — a shift-left guardrail that
   hardens everything that follows. For a personal project this is
@@ -295,7 +291,7 @@ A **one-line refinement to #53**: specify that CSRF uses **origin check**
 
 ## Cross-Spec Impact
 
-- **`docs/superpowers/specs/2026-06-19-chat-interface-design.md`** §Components `retrieval.ts` currently says *"RAG excludes `is_private` by default."* That is updated to:
+- **`docs/superpowers/specs/2026-06-19-chat-interface-design.md`** §Components `retrieval.ts` currently says _"RAG excludes `is_private` by default."_ That is updated to:
   - Include `is_hidden` items in the RAG context by default (they are AI-OK).
   - Exclude `is_private` items unless the current thread / message has opted in via a new per-thread / per-send **"Include private in AI"** control.
   - The control is a new column on `chat_threads` (default `0` / off) plus a per-send override in the chat UI.
@@ -303,6 +299,4 @@ A **one-line refinement to #53**: specify that CSRF uses **origin check**
 
 ## Open Questions
 
-
 - **Trusted-proxy / `X-Forwarded-For`**: the rate-limit module reads the real IP from a configured header. The production nginx config must set the header and the app must trust it. The exact nginx hardening is a deployment-security follow-up.
-

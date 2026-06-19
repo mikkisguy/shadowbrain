@@ -40,7 +40,8 @@ fix with the local CodeQL analyzer** before claiming success. Do not reason
 about what the analyzer models as a sanitizer/sink — run the query and get
 ground truth. For ordinary bugs, lint, typecheck, or feature work, use
 `pnpm test` / `typecheck` / `lint` instead — CodeQL is heavy (~30 s DB build
-+ query eval) and wasteful for non-CodeQL problems.
+
+- query eval) and wasteful for non-CodeQL problems.
 
 **Usage:**
 
@@ -216,6 +217,15 @@ Request Workflow below).
 
 ## Pull Request Workflow
 
+**Default behavior: in-place fixes.** When the developer asks for a
+fix without explicitly requesting a new branch and PR, do the fix in
+place on the current branch. If a PR is already open, push to the same
+PR. "Scope discipline" means "do not mix unrelated changes into a PR"
+— it does not mean "always split ad-hoc fixes into a new branch and
+PR." Only create a new branch and PR when the developer explicitly
+says so, or when the work is for a separate, distinct issue that has
+been triaged in the issue tracker.
+
 When the issue assigned to you is implemented and locally verified
 (`pnpm verify` is green), take the work through to a PR that is green
 and ready for human review. Use the `gh` CLI for all GitHub
@@ -248,6 +258,7 @@ decision.**
    files touched, and a one-line description of intent. Address all
    `must-fix` findings before opening the PR; `should-fix` items are
    at your discretion but should be acknowledged in the PR body.
+
 3. **Stage and commit** only the intended files. Inspect `git status`
    and `git diff` first; never commit secrets. Write a concise commit
    message that matches the repo style (look at recent

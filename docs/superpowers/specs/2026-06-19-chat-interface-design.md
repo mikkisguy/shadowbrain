@@ -75,12 +75,14 @@ different backend transports into one SSE protocol toward the browser (see
 ## Components
 
 ### `lib/chat/providers.ts`
+
 Registers OpenAI-compatible providers and exposes a typed **target** model:
 `{ provider: 'hermes' | 'opencode-go', model: string }`. Helper to list models
 per provider (cached `GET /v1/models`). Hermes lists `hermes-agent`; OpenCode Go
 lists the model catalog.
 
 ### `lib/chat/retrieval.ts` (RAG)
+
 Given the latest user message, runs FTS retrieval (reusing the Phase 1 search
 helper / `sanitizeFts5Query`) with tag/type filters, and respects the
 **two-level visibility** model (per the App Security Baseline spec §2):
@@ -93,6 +95,7 @@ context` block for injection. Returns empty → hub proceeds without context
 (no hard failure).
 
 ### `lib/chat/hermes-runs.ts`
+
 Thin client for the Hermes Runs API: `createRun`, `streamEvents(runId)` (async
 iterator yielding normalized events), `resolveApproval(runId, decision, ...)`.
 Maps Hermes event types onto the hub's SSE protocol. The exact Runs request body
@@ -101,9 +104,11 @@ instance during implementation — the docs describe the lifecycle but not the
 complete request schema.
 
 ### `app/api/chat/route.ts` (the hub)
+
 Request: `{ threadId, target, grounded: boolean, allowModelSave: boolean, message }`.
 
 Flow:
+
 1. Persist the user message to `chat_messages`.
 2. Load thread history from `chat_messages`.
 3. If `grounded`: build context via `retrieval.ts`; prepend as a system block.
@@ -119,10 +124,12 @@ Flow:
    records) to `chat_messages`.
 
 ### `app/api/chat/threads/route.ts` (+ `[id]`)
+
 CRUD for threads (list, create, rename, delete). Messages are read/written
 through the hub and a `GET /api/chat/threads/[id]/messages` endpoint.
 
 ### `app/chat/page.tsx` (UI)
+
 Builds on the Phase 3 design system (#20) and markdown rendering (#25).
 
 - **Left rail:** new chat + recent threads.
@@ -138,6 +145,7 @@ Builds on the Phase 3 design system (#20) and markdown rendering (#25).
   with Approve / Deny buttons.
 
 ### Insert: `save_to_shadowbrain`
+
 - **Explicit button:** client calls `POST /api/items` with chosen type. Works
   for **both** targets.
 - **Model-driven tool:** `save_to_shadowbrain({ type, content, title?, tags? })`,
