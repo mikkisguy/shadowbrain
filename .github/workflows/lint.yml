@@ -1,12 +1,12 @@
-name: Lint, Typecheck & Test
+name: Lint, Typecheck, Build & Test
 
 on:
   pull_request:
     branches: [main]
 
 jobs:
-  lint-and-typecheck:
-    name: Lint, Typecheck & Test
+  verify:
+    name: Lint, Typecheck, Build & Test
     runs-on: ubuntu-latest
     container: node:24-alpine
     steps:
@@ -24,12 +24,50 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build sqlite-vec extension
-        # Required by tests that exercise vector search (the vec0 loadable
-        # extension is not pre-built on node:24-alpine). Builds from source
-        # via scripts/build-sqlite-vec.sh.
+        # The test suite loads the vec0 loadable extension from
+        # dist/extensions/vec0, which is not pre-built on node:24-alpine.
+        # We build it from source (sqlite-vec v0.1.1) instead of relying on
+        # scripts/build-sqlite-vec.sh being present on the runner — the
+        # archive-mode checkout can drop the script under some configs.
+        env:
+          SQLITE_VEC_VERSION: v0.1.1
         run: |
           apk add --no-cache gcc musl-dev curl gettext make
-          ./scripts/build-sqlite-vec.sh
+          BUILD_DIR="$(mktemp -d)"
+          OUT_DIR="$GITHUB_WORKSPACE/dist/extensions"
+          mkdir -p "$OUT_DIR"
+
+          echo "Downloading sqlite-vec $SQLITE_VEC_VERSION..."
+          curl -sL "https://github.com/asg017/sqlite-vec/archive/refs/tags/${SQLITE_VEC_VERSION}.tar.gz" \
+            | tar xz -C "$BUILD_DIR" --strip-components=1
+
+          echo "Generating sqlite-vec.h from template..."
+          cd "$BUILD_DIR"
+          VERSION=$(cat VERSION)
+          DATE=$(date -r VERSION +'%FT%TZ%z' 2>/dev/null || date +'%FT%TZ%z')
+          SOURCE="ci-build"
+          export VERSION DATE SOURCE
+          envsubst < sqlite-vec.h.tmpl > sqlite-vec.h
+
+          echo "Compiling sqlite-vec as loadable extension..."
+          CFLAGS="-O3 -Wall -Wextra"
+          ARCH=$(uname -m)
+          OS=$(uname -s)
+          if [ "$ARCH" = "x86_64" ]; then
+            CFLAGS="$CFLAGS -mavx -DSQLITE_VEC_ENABLE_AVX"
+          elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+            CFLAGS="$CFLAGS -DSQLITE_VEC_ENABLE_NEON"
+          fi
+          gcc -fPIC -shared \
+            -I. \
+            -DSQLITE_THREADSAFE=1 \
+            $CFLAGS \
+            -o "$OUT_DIR/vec0.so" \
+            sqlite-vec.c \
+            -lm
+
+          echo "✓ Built $OUT_DIR/vec0.so"
+          file "$OUT_DIR/vec0.so"
 
       - name: Lint
         run: pnpm lint
@@ -39,7 +77,7 @@ jobs:
 
       - name: Build
         # Catches Next.js / production issues that lint + typecheck + test
-        # miss: route handler type validation, server/client boundary
+        # miss: route-handler type validation, server/client boundary
         # errors, RSC generation, static-page collection, etc.
         run: pnpm build
 
