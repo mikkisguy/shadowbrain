@@ -128,6 +128,26 @@ src/
 - Arrow parens: always
 - End of line: lf
 
+## Versioning
+
+`package.json` carries the app's `major.minor.patch` version. The project is
+pre-1.0 (`0.x.y`) — **major is not yet**, so API stability is not promised.
+
+Bump the version in `package.json` on the same branch as the change when it is
+relevant:
+
+- **patch** (`0.2.x → 0.2.y`) — bug fixes, internal refactors, dependency
+  bumps, and other changes with no user-visible behavior change.
+- **minor** (`0.x.0`) — any new user-facing feature, new API endpoint, new UI
+  surface, or other meaningful capability that adds something a user can see
+  or call.
+- **major** (`x.0.0`) — reserved for the first stable release. Do not bump
+  major until the API surface and data model are considered stable.
+
+When in doubt, bump minor — under `0.x` it is cheap to add more, and the
+version is meant to be a rough signal of how much capability has landed, not
+a contract.
+
 ## Backend Guidelines
 
 ### Database
@@ -227,6 +247,9 @@ Request Workflow below).
   changed.
 - `docs/superpowers/specs/*.md` updated if a security,
   architectural, or removal-of-documented-API decision shifted.
+- `package.json` `version` bumped per the [Versioning](#versioning)
+  rules when the change adds, removes, or alters user-facing
+  behavior.
 
 ## Pull Request Workflow
 

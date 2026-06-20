@@ -60,10 +60,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <img
             src="/logo.png"
             alt=""
-            width={48}
-            height={48}
+            width={168}
+            height={168}
             decoding="async"
-            className="block size-12"
+            className="block size-22"
           />
           <div className="flex flex-col gap-1">
             <h1 className="text-foreground font-serif text-2xl font-semibold">
@@ -76,6 +76,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </header>
 
         <LoginForm from={safeFrom} />
+
+        <footer className="text-muted-foreground/60 border-border flex flex-col gap-1 border-t pt-4 text-center font-serif text-xs">
+          <p>ShadowBrain v{process.env.npm_package_version}</p>
+        </footer>
       </div>
     </main>
   );

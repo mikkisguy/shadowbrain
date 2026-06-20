@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 
 import { SkipToContent } from "@/components/layout/skip-to-content";
 import { TopNav } from "@/components/layout/top-nav";
+import { Footer } from "@/components/layout/footer";
 import { getEnv } from "@/lib/env";
 import { readSessionFromRequest } from "@/lib/auth/session";
 
@@ -93,6 +94,7 @@ export default async function RootLayout({
         */}
         {isAuthenticated ? <TopNav /> : null}
         <div className="flex flex-1 flex-col">{children}</div>
+        <Footer />
       </body>
     </html>
   );
