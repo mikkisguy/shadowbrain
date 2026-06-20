@@ -107,8 +107,8 @@ export default function Home() {
             build · {new Date().toISOString().slice(0, 10)} · 0a0b14
           </p>
           <p className="text-muted-foreground font-sans text-xs">
-            Coming soon — global command palette (⌘K), browse, chat, graph,
-            tags, settings.
+            Coming soon — global command palette (<kbd>Ctrl K</kbd>), browse,
+            chat, graph, tags, settings.
           </p>
         </footer>
       </section>
