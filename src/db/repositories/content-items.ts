@@ -93,7 +93,7 @@ export const contentItems = {
     updates: {
       title?: string | null;
       content?: string;
-      metadata?: string;
+      metadata?: string | null;
       is_private?: number;
       updated_at: string;
     }

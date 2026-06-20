@@ -13,6 +13,7 @@
     "verify:foundation": "node scripts/verify-foundation.js",
     "test:db:reset": "node scripts/test-db-reset.js",
     "test:db:cleanup": "node scripts/test-db-cleanup.js",
+    "import:markdown": "node --env-file=.env --import tsx scripts/import-markdown.ts",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "lint": "eslint .",
@@ -36,11 +37,11 @@
       "src/app/**/*.{ts,tsx,css}",
       "src/**/__tests__/**/*.{ts,tsx}",
       "src/**/*.test.{ts,tsx}",
-      "scripts/**/*.js"
+      "scripts/**/*.{js,ts}"
     ],
     "project": [
       "src/**/*.{ts,tsx,css}",
-      "scripts/**/*.js"
+      "scripts/**/*.{js,ts}"
     ],
     "ignore": [
       "src/db/index.ts",
@@ -51,6 +52,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
+    "gray-matter": "^4.0.3",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -73,6 +75,7 @@
     "prettier": "^3.8.4",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4.3.1",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.0",
     "vitest": "^4.1.9"
   }
