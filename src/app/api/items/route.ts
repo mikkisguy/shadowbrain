@@ -7,6 +7,7 @@ import {
   logServerError,
 } from "@/lib/api";
 import { log } from "@/lib/logger";
+import { fetchBookmarkMetadata } from "@/lib/metadata-fetcher";
 
 const createSchema = z.object({
   type: z.string(),
@@ -34,13 +35,51 @@ export async function POST(request: Request) {
       });
     }
 
+    // For bookmarks, auto-fetch og:title / description / favicon from
+    // the URL detected in `content`. Failure is graceful: the bookmark
+    // is still saved with whatever metadata the caller provided. The
+    // SSRF guard inside `fetchBookmarkMetadata` prevents the fetcher
+    // from reaching private / loopback / link-local addresses — the
+    // user cannot use this endpoint to probe internal services.
+    const isBookmark = parsed.data.type === "bookmark";
+    const fetchOutcome = isBookmark
+      ? await fetchBookmarkMetadata(parsed.data.content)
+      : null;
+
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
     const auditLogId = crypto.randomUUID();
     const db = getDb();
-    const metadata = parsed.data.metadata
-      ? JSON.stringify(parsed.data.metadata)
-      : null;
+
+    // Merge auto-fetched bookmark metadata with any user-supplied
+    // metadata. User-supplied keys win on conflict — a caller passing
+    // `{ title: "My Note" }` is treated as an explicit override.
+    const mergedMetadata: Record<string, unknown> = {};
+    if (fetchOutcome?.ok) {
+      Object.assign(mergedMetadata, fetchOutcome.metadata);
+    } else if (fetchOutcome && !fetchOutcome.ok && fetchOutcome.metadata.url) {
+      // Fetch failed but a URL was found — record the attempt so the
+      // user can tell "we never looked" from "we looked and got nothing".
+      mergedMetadata.auto_fetch = {
+        status: "error",
+        reason: fetchOutcome.reason,
+        url: fetchOutcome.metadata.url,
+        fetched_at: fetchOutcome.metadata.fetched_at,
+      };
+    }
+    if (parsed.data.metadata) {
+      Object.assign(mergedMetadata, parsed.data.metadata);
+    }
+    const metadata =
+      Object.keys(mergedMetadata).length > 0
+        ? JSON.stringify(mergedMetadata)
+        : null;
+
+    // If the caller didn't pass a `source_url` explicitly, use the URL
+    // we found in content (even when the fetch failed — it still tells
+    // us what the user meant to link).
+    const sourceUrl =
+      parsed.data.source_url ?? (fetchOutcome?.metadata.url || null) ?? null;
 
     const tx = db.transaction(() => {
       contentItems.create(db, {
@@ -49,7 +88,7 @@ export async function POST(request: Request) {
         title: parsed.data.title ?? null,
         content: parsed.data.content,
         source: parsed.data.source ?? "manual",
-        source_url: parsed.data.source_url ?? null,
+        source_url: sourceUrl,
         metadata,
         is_private: parsed.data.is_private ?? 0,
         created_at: now,
@@ -69,7 +108,12 @@ export async function POST(request: Request) {
     });
     tx();
 
-    log("info", "content_item created", { event: "content_item.create", id });
+    log("info", "content_item created", {
+      event: "content_item.create",
+      id,
+      type: parsed.data.type,
+      bookmarkFetchOk: fetchOutcome?.ok ?? null,
+    });
     return Response.json(contentItems.findById(db, id), { status: 201 });
   } catch (error) {
     logServerError(error, { route: "/api/items", method: "POST" });
