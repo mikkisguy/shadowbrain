@@ -14,10 +14,13 @@ const FILES: Record<string, string> = {
   "beta.png": "PNG-BYTES",
   "gamma.jpg": "JPEG-BYTES",
   "zeta.jpeg": "JPEG-BYTES",
-  "delta.gif": "GIF-BYTES",
-  "epsilon.svg": "<svg></svg>",
   "unknown.bin": "BINARY",
   "ALPHA2.WEBP": "RIFF-WEBP-UPPERCASE",
+  // Formats explicitly NOT served by the route. They are written
+  // to disk by the test so we can assert the read-side rejects
+  // them (i.e. serves them as application/octet-stream).
+  "rejected.gif": "GIF-BYTES",
+  "rejected.svg": "<svg></svg>",
 };
 
 async function callGet(segments: string[]) {
@@ -57,8 +60,10 @@ describe("GET /api/images/[...path]", () => {
 
   it("serves a JPEG file (both .jpg and .jpeg)", async () => {
     const jpg = await callGet([FIXTURE_DIR, "gamma.jpg"]);
+    expect(jpg.status).toBe(200);
     expect(jpg.headers.get("Content-Type")).toBe("image/jpeg");
     const jpeg = await callGet([FIXTURE_DIR, "zeta.jpeg"]);
+    expect(jpeg.status).toBe(200);
     expect(jpeg.headers.get("Content-Type")).toBe("image/jpeg");
   });
 
@@ -68,23 +73,29 @@ describe("GET /api/images/[...path]", () => {
     expect(res.headers.get("Content-Type")).toBe("image/webp");
   });
 
-  it("serves a GIF file with the correct content-type", async () => {
-    const res = await callGet([FIXTURE_DIR, "delta.gif"]);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("Content-Type")).toBe("image/gif");
-  });
-
-  it("serves an SVG file with the correct content-type", async () => {
-    const res = await callGet([FIXTURE_DIR, "epsilon.svg"]);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("Content-Type")).toBe("image/svg+xml");
-  });
-
   it("falls back to application/octet-stream for unknown extensions", async () => {
     const res = await callGet([FIXTURE_DIR, "unknown.bin"]);
     expect(res.status).toBe(200);
     // Deliberate fallback to avoid MIME-type confusion attacks
     // (e.g. an arbitrary binary being interpreted as HTML).
+    expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
+  });
+
+  it("does not advertise image/gif (animated WebP is the path for motion)", async () => {
+    // The capture pipeline (#2.6) is expected to convert GIFs to
+    // animated WebP. If a `.gif` ever lands in the images dir
+    // (e.g. via a manual copy), the route serves it as a generic
+    // binary rather than letting the browser animate it.
+    const res = await callGet([FIXTURE_DIR, "rejected.gif"]);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
+  });
+
+  it("does not advertise image/svg+xml (inline-script XSS surface)", async () => {
+    // SVGs can carry executable <script> blocks. We refuse to
+    // label them as SVG so the browser cannot render them inline.
+    const res = await callGet([FIXTURE_DIR, "rejected.svg"]);
+    expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
   });
 

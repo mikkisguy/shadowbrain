@@ -14,19 +14,23 @@ const MAX_PATH_LENGTH = 200;
 // served as `application/octet-stream` so unknown extensions cannot
 // trigger MIME sniffing in the browser.
 //
-// Note: SVGs are intentionally mapped to `image/svg+xml`, which means
-// the browser may render them inline and execute any embedded
-// `<script>` blocks. This is an accepted risk for the v1 read-only
-// route: the only writers are the capture pipeline, which controls
-// the source URLs. The App Security Baseline (CSP headers) will
-// mitigate this at a higher layer.
+// Format policy:
+//   - webp:   the canonical capture format (static + animated).
+//   - jpg / jpeg / png: kept for backward compatibility with any
+//     pre-WebP data imported via the journal-shadows migration (#19).
+//
+// Explicitly *not* served:
+//   - svg: dropped to avoid the inline-script XSS surface that
+//     `image/svg+xml` opens in the browser.
+//   - gif: superseded by animated WebP. The capture pipeline (#2.6)
+//     is expected to use `sharp(input, { animated: true })
+//     .webp({ animated: true })` for any source with motion; serving
+//     a static `.gif` here would just be a dead path.
 const CONTENT_TYPES: Record<string, string> = {
   ".webp": "image/webp",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".png": "image/png",
-  ".gif": "image/gif",
-  ".svg": "image/svg+xml",
 };
 
 export async function GET(
