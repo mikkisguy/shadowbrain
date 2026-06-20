@@ -2,7 +2,6 @@
 # install scripts (native compilation or platform binary download).
 # See https://pnpm.io/settings#allowbuilds
 allowBuilds:
-  bcrypt: true
   better-sqlite3: true
   esbuild: true
   msw: true

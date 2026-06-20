@@ -13,7 +13,12 @@
  * future typo cannot accidentally widen the CSRF exemption.
  */
 
-import { EXEMPT_FROM_AUTH, LOGIN_PATH, STATIC_PREFIXES } from "./constants";
+import {
+  EXEMPT_FROM_AUTH,
+  LOGIN_PATH,
+  STATIC_FILE_PATTERN,
+  STATIC_PREFIXES,
+} from "./constants";
 
 /** Strip query string and trailing slashes; return the resulting
  *  pathname. */
@@ -44,13 +49,17 @@ export function isLoginPath(pathname: string): boolean {
 }
 
 /** Return `true` if the pathname is a static asset that the
- *  proxy should pass through. */
+ *  proxy should pass through. Matches both framework-managed
+ *  assets (`/_next/...`) and files served from `public/` at the
+ *  root (e.g. `/logo.png`, `/favicon.ico`). The public-folder
+ *  files are matched by extension since the path prefix
+ *  (`/public/`) does not appear in the URL. */
 export function isStaticAsset(pathname: string): boolean {
   const normalized = normalizePathname(pathname);
   for (const prefix of STATIC_PREFIXES) {
     if (normalized.startsWith(prefix)) return true;
   }
-  return false;
+  return STATIC_FILE_PATTERN.test(normalized);
 }
 
 /** Does the request want HTML (browser navigation)? Used to decide

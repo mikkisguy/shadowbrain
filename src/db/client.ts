@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { join, isAbsolute } from "path";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
 import { runMigrations, VECTOR_SEARCH_MIGRATION_VERSION } from "./migrations";
 import { seedSettings } from "./seed-settings";
 import { getEnv } from "@/lib/env";
@@ -32,13 +32,41 @@ export function getDbPath(
   }
   const filename = `${projectName}${suffix}.db`;
 
-  // Use absolute path to avoid process.cwd() issues when requiring better-sqlite3
-  // Import.meta.url would be ideal but this is CommonJS, so we use __dirname
-  const projectRoot = join(__dirname, "..", "..");
+  // Resolve the project root robustly across runtimes. The bundled
+  // server (Next.js dev / production builds) may have a different
+  // `__dirname` than the source tree, so we prefer `process.cwd()` —
+  // the directory where `node` was invoked, which is the project
+  // root in dev, in production, and in tests. The previous version
+  // of this function used `join(__dirname, "..", "..")`, which
+  // resolved to `.next/...` in the bundled dev server and broke
+  // DATA_DIR resolution at request time (audit log writes failed
+  // with "directory does not exist" because the relative path was
+  // not relative to the project root).
+  const projectRoot = process.cwd();
   const dataDir = getEnv().DATA_DIR;
   const resolvedDir = isAbsolute(dataDir)
     ? dataDir
     : join(projectRoot, dataDir);
+
+  // Make sure the parent directory exists before returning the
+  // path. better-sqlite3 will create the file itself, but it does
+  // NOT create missing parent directories — a fresh deploy with an
+  // empty `data/` would throw on the first `audit_logs` write.
+  // `mkdirSync(..., { recursive: true })` is a no-op when the
+  // directory already exists.
+  try {
+    mkdirSync(resolvedDir, { recursive: true });
+  } catch (err) {
+    // Re-throw with a clearer message — better-sqlite3's own error
+    // is "Cannot open database because the directory does not
+    // exist" which points at the file, not the directory.
+    throw new Error(
+      `Failed to ensure data directory exists at ${resolvedDir}: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
+
   return join(resolvedDir, filename);
 }
 

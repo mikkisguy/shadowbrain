@@ -1,24 +1,31 @@
 /**
  * Password hashing & verification.
  *
- * Uses bcrypt at cost 10. The constant-time login flow (OWASP ASVS
- * V3.2.2) is implemented in `verifyPasswordConstantTime` — on a
- * "user not found" miss the flow still runs `bcrypt.compare`
- * against a precomputed dummy hash so the wall-clock cost of a
- * "missing user" response is indistinguishable from a "wrong
- * password" response. Both paths return the generic
- * `"Invalid credentials"` error to the client.
+ * Uses `bcryptjs` (pure-JS bcrypt re-implementation) at cost 10.
+ * The native `bcrypt` package works fine on Linux but pulls in
+ * `node-pre-gyp`, which calls `url.parse()` at module load and
+ * triggers a `DEP0169` deprecation warning on Node 24+. The
+ * pure-JS `bcryptjs` avoids the warning and the native build
+ * step; the trade-off is roughly 3× slower per hash, which is
+ * negligible for a single-user login that runs once per session.
  *
- * The precomputed dummy hash is generated at module load time using
- * the same cost the user hash would use (10). Generating it lazily
- * avoids paying the bcrypt cost on first import in hot paths.
+ * The constant-time login flow (OWASP ASVS V3.2.2) is implemented
+ * in `verifyPasswordConstantTime` — on a "user not found" miss
+ * the flow still runs `bcrypt.compare` against a precomputed
+ * dummy hash so the wall-clock cost of a "missing user" response
+ * is indistinguishable from a "wrong password" response. Both
+ * paths return the generic `"Invalid credentials"` error to the
+ * client.
+ *
+ * The precomputed dummy hash is generated lazily on first use
+ * (at the same cost) so the import cost is minimal.
  */
 
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 
 /** Bcrypt cost factor. The spec mandates cost >= 10; 10 keeps login
- *  latency around 60ms on commodity hardware while making brute
- *  force impractical. */
+ *  latency around 200ms with bcryptjs (well under the 5s
+ *  rate-limit window) while making brute force impractical. */
 export const BCRYPT_COST = 10;
 
 /** A random plaintext the dummy hash was computed from. Not a
@@ -27,7 +34,7 @@ export const BCRYPT_COST = 10;
 const DUMMY_PLAINTEXT = "shadowbrain-dummy-password-do-not-use";
 
 /** A precomputed bcrypt hash for the dummy plaintext. Generated
- *  lazily on first import so the import cost is minimal. */
+ *  lazily on first use so the import cost is minimal. */
 let _dummyHash: string | null = null;
 
 function getDummyHash(): string {

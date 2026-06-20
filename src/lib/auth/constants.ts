@@ -34,15 +34,54 @@ const PUBLIC_AUTH_PATHS: ReadonlySet<string> = new Set([
   "/api/auth/logout",
 ]);
 
-/** Path prefixes served by Next.js' static pipeline. We match the
- *  pathname's first segment against this set; anything starting with
- *  `/_next/`, `/favicon.ico`, etc. is not our concern. Exported
- *  so the exempt-path helper can use it. */
-export const STATIC_PREFIXES: readonly string[] = [
-  "/_next/",
-  "/favicon.ico",
-  "/public/",
+/** Common static-file extensions. Anything ending in one of
+ *  these is treated as a static asset and bypasses auth. Files in
+ *  `public/` are served at the root, so a path-prefix match (e.g.
+ *  `/public/`) does not work — we have to match by extension. The
+ *  list covers the asset types actually used by the app (logos,
+ *  favicons, fonts, JS, CSS, source maps) and the common web
+ *  formats that might be added later. */
+const STATIC_FILE_EXTENSIONS: readonly string[] = [
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "avif",
+  "svg",
+  "ico",
+  "webm",
+  "mp4",
+  "mp3",
+  "ogg",
+  "wav",
+  "woff",
+  "woff2",
+  "ttf",
+  "otf",
+  "css",
+  "js",
+  "mjs",
+  "map",
+  "txt",
+  "xml",
+  "json",
+  "pdf",
 ];
+
+/** Regex that matches a path ending in one of `STATIC_FILE_EXTENSIONS`,
+ *  case-insensitive. The leading `\.` is mandatory so route segments
+ *  like `/api/items.json` are matched as static but `/items-json` is
+ *  not. The regex is built once at module load for performance. */
+export const STATIC_FILE_PATTERN: RegExp = new RegExp(
+  `\\.(${STATIC_FILE_EXTENSIONS.join("|")})$`,
+  "i"
+);
+
+/** Path prefixes served by Next.js' static pipeline. Anything
+ *  starting with `/_next/` is owned by the framework. Exported so
+ *  the exempt-path helper can use it. */
+export const STATIC_PREFIXES: readonly string[] = ["/_next/"];
 
 /** The login route is exempt from auth + CSRF. Static assets are
  *  exempt from auth but **not** from CSRF (they're not state-changing

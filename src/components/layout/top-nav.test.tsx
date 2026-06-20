@@ -13,8 +13,10 @@ import { TopNav } from "@/components/layout/top-nav";
  * attach to), and the user menu placeholder. The theme toggle is
  * out of scope for v1 (ShadowBrain is dark-only).
  *
- * The nav has very little logic; the value of this test is in
- * catching structural regressions if the layout is refactored.
+ * The component itself does not gate on auth — that decision
+ * lives in `src/app/layout.tsx`. So this test only covers the
+ * "rendered" shape; a layout-level test would assert that
+ * `<TopNav />` is not emitted on unauthenticated pages.
  */
 describe("TopNav", () => {
   const html = renderToStaticMarkup(<TopNav />);

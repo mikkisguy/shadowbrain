@@ -17,8 +17,6 @@
 
 import { LoginForm } from "./login-form";
 import { getEnv } from "@/lib/env";
-import { getSessionMaxAge } from "@/lib/auth/session";
-import { LOGIN_PATH } from "@/lib/auth/constants";
 
 export const metadata = {
   title: "Sign in — ShadowBrain",
@@ -35,11 +33,11 @@ interface LoginPageProps {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const { from } = await searchParams;
-  const env = getEnv();
-  // Surface the configured session lifetime as a human-readable
-  // hint. Helps the operator spot a typo in SESSION_MAX_AGE.
-  const maxAgeMs = getSessionMaxAge(env.SESSION_MAX_AGE);
-  const maxAgeHours = Math.round(maxAgeMs / (60 * 60 * 1000));
+  // `getEnv()` is invoked for the side effect of validating the
+  // environment on first render — the session module reads
+  // `SESSION_SECRET` from it via the API route. The returned
+  // env object is not used by this page.
+  void getEnv();
 
   // Validate the `from` parameter to avoid open-redirect via the
   // login bounce-back. Only same-origin paths are accepted.
@@ -51,31 +49,33 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       className="flex flex-1 items-center justify-center px-4 py-16 sm:py-24"
     >
       <div className="border-border bg-surface-elevated flex w-full max-w-sm flex-col gap-8 border p-8">
-        <header className="flex flex-col gap-2">
-          <p className="text-muted-foreground font-sans text-xs font-medium tracking-[0.12em] uppercase">
-            ShadowBrain
-          </p>
-          <h1 className="text-foreground font-serif text-2xl font-semibold">
-            Sign in
-          </h1>
-          <p className="text-muted-foreground font-sans text-sm">
-            Use your admin credentials to continue.
-          </p>
+        <header className="flex flex-col items-center gap-4 text-center">
+          {/* Brand mark. The logo is 1.5× the size used in the
+              top nav so the user lands on a page that visibly
+              identifies the product before they enter
+              credentials. */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- the
+              /public asset is intentionally served as-is for now; if
+              we need a smaller variant, we can switch to next/image. */}
+          <img
+            src="/logo.png"
+            alt=""
+            width={48}
+            height={48}
+            decoding="async"
+            className="block size-12"
+          />
+          <div className="flex flex-col gap-1">
+            <h1 className="text-foreground font-serif text-2xl font-semibold">
+              Sign in
+            </h1>
+            <p className="text-muted-foreground font-sans text-sm">
+              Use your admin credentials to continue.
+            </p>
+          </div>
         </header>
 
         <LoginForm from={safeFrom} />
-
-        <footer className="text-muted-foreground border-border flex flex-col gap-1 border-t pt-4 font-sans text-xs">
-          <p>
-            Session:{" "}
-            <span className="text-foreground font-mono">{maxAgeHours}h</span>{" "}
-            sliding window
-          </p>
-          <p>
-            Endpoint:{" "}
-            <span className="text-foreground font-mono">{LOGIN_PATH}</span>
-          </p>
-        </footer>
       </div>
     </main>
   );

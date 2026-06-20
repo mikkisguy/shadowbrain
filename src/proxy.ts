@@ -48,10 +48,21 @@ import {
 
 export const config = {
   matcher: [
-    // Match everything except static asset routes & the favicon.
-    // We re-check `isStaticAsset` below so a typo here does not
-    // widen auth.
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    // Match every request that is NOT:
+    //   - a framework-managed static asset (`/_next/...`)
+    //   - an exact path like `/favicon.ico` (served from `public/`)
+    //   - any file with a static-file extension
+    //     (matched by the same `STATIC_FILE_PATTERN` used by
+    //     `isStaticAsset` so a typo here cannot widen auth).
+    //
+    // The regex below excludes:
+    //   1. Anything under `/_next/`
+    //   2. The literal `favicon.ico`
+    //   3. Any path ending in a known static extension
+    //
+    // We re-check `isStaticAsset` inside the function as a
+    // second-layer guard.
+    "/((?!_next/|favicon\\.ico|.*\\.(?:png|jpg|jpeg|gif|webp|avif|svg|ico|webm|mp4|mp3|ogg|wav|woff2?|ttf|otf|css|js|mjs|map|txt|xml|json|pdf)$).*)",
   ],
 };
 
