@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { cleanupTestDb, createTestDb } from "@/db/test-utils";
+import {
+  authedGet,
+  authedRequest,
+  cleanupTestDb,
+  createTestDb,
+} from "@/db/test-utils";
 import { getDb, contentItems, contentTags, tags } from "@/db/index";
 import { GET, POST } from "@/app/api/tags/route";
 import { PATCH, DELETE } from "@/app/api/tags/[id]/route";
@@ -33,7 +38,7 @@ async function createTag(name: string): Promise<{
   created_at: string;
 }> {
   const res = await POST(
-    new Request("http://localhost/api/tags", {
+    await authedRequest("http://localhost/api/tags", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -54,7 +59,7 @@ describe("/api/tags", () => {
   });
 
   it("returns an empty list when no tags exist", async () => {
-    const res = await GET();
+    const res = await GET(await authedGet("http://localhost/api/tags"));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.tags).toEqual([]);
@@ -63,7 +68,7 @@ describe("/api/tags", () => {
 
   it("creates a tag and returns it with 201", async () => {
     const res = await POST(
-      new Request("http://localhost/api/tags", {
+      await authedRequest("http://localhost/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "alpha" }),
@@ -93,7 +98,7 @@ describe("/api/tags", () => {
     // included in the listing.
     await createTag("unused");
 
-    const res = await GET();
+    const res = await GET(await authedGet("http://localhost/api/tags"));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.total).toBe(3);
@@ -113,7 +118,7 @@ describe("/api/tags", () => {
     await createTag("alpha");
 
     const dup = await POST(
-      new Request("http://localhost/api/tags", {
+      await authedRequest("http://localhost/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "alpha" }),
@@ -128,7 +133,7 @@ describe("/api/tags", () => {
     await createTag("alpha");
 
     const dup = await POST(
-      new Request("http://localhost/api/tags", {
+      await authedRequest("http://localhost/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "ALPHA" }),
@@ -139,7 +144,7 @@ describe("/api/tags", () => {
 
   it("rejects tag names with special characters", async () => {
     const res = await POST(
-      new Request("http://localhost/api/tags", {
+      await authedRequest("http://localhost/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "bad/name!" }),
@@ -152,7 +157,7 @@ describe("/api/tags", () => {
 
   it("rejects tag names longer than 64 characters", async () => {
     const res = await POST(
-      new Request("http://localhost/api/tags", {
+      await authedRequest("http://localhost/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "a".repeat(65) }),
@@ -165,7 +170,7 @@ describe("/api/tags", () => {
 
   it("rejects empty tag names", async () => {
     const res = await POST(
-      new Request("http://localhost/api/tags", {
+      await authedRequest("http://localhost/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "   " }),
@@ -176,7 +181,7 @@ describe("/api/tags", () => {
 
   it("trims surrounding whitespace from tag names", async () => {
     const res = await POST(
-      new Request("http://localhost/api/tags", {
+      await authedRequest("http://localhost/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "  alpha  " }),
@@ -189,7 +194,7 @@ describe("/api/tags", () => {
 
   it("returns 400 for invalid JSON body", async () => {
     const res = await POST(
-      new Request("http://localhost/api/tags", {
+      await authedRequest("http://localhost/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{invalid-json",
@@ -215,7 +220,7 @@ describe("/api/tags/[id]", () => {
     const created = await createTag("alpha");
 
     const res = await PATCH(
-      new Request(`http://localhost/api/tags/${created.id}`, {
+      await authedRequest(`http://localhost/api/tags/${created.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "alphabet" }),
@@ -232,7 +237,7 @@ describe("/api/tags/[id]", () => {
     const created = await createTag("alpha");
 
     const res = await PATCH(
-      new Request(`http://localhost/api/tags/${created.id}`, {
+      await authedRequest(`http://localhost/api/tags/${created.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "ALPHA" }),
@@ -254,7 +259,7 @@ describe("/api/tags/[id]", () => {
     ).c;
 
     const res = await PATCH(
-      new Request(`http://localhost/api/tags/${created.id}`, {
+      await authedRequest(`http://localhost/api/tags/${created.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "alpha" }),
@@ -274,7 +279,7 @@ describe("/api/tags/[id]", () => {
   it("returns 404 when renaming a non-existent tag", async () => {
     const id = makeId();
     const res = await PATCH(
-      new Request(`http://localhost/api/tags/${id}`, {
+      await authedRequest(`http://localhost/api/tags/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "beta" }),
@@ -291,7 +296,7 @@ describe("/api/tags/[id]", () => {
     await createTag("beta");
 
     const res = await PATCH(
-      new Request(`http://localhost/api/tags/${alpha.id}`, {
+      await authedRequest(`http://localhost/api/tags/${alpha.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "beta" }),
@@ -306,7 +311,7 @@ describe("/api/tags/[id]", () => {
   it("returns 400 for invalid name on rename", async () => {
     const created = await createTag("alpha");
     const res = await PATCH(
-      new Request(`http://localhost/api/tags/${created.id}`, {
+      await authedRequest(`http://localhost/api/tags/${created.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "bad/name" }),
@@ -331,7 +336,7 @@ describe("/api/tags/[id]", () => {
     ).toBe(true);
 
     const res = await DELETE(
-      new Request(`http://localhost/api/tags/${created.id}`),
+      await authedRequest(`http://localhost/api/tags/${created.id}`),
       {
         params: Promise.resolve({ id: created.id }),
       }
@@ -348,9 +353,12 @@ describe("/api/tags/[id]", () => {
 
   it("returns 404 when deleting a non-existent tag", async () => {
     const id = makeId();
-    const res = await DELETE(new Request(`http://localhost/api/tags/${id}`), {
-      params: Promise.resolve({ id }),
-    });
+    const res = await DELETE(
+      await authedRequest(`http://localhost/api/tags/${id}`),
+      {
+        params: Promise.resolve({ id }),
+      }
+    );
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json.error.code).toBe("NOT_FOUND");
@@ -359,7 +367,7 @@ describe("/api/tags/[id]", () => {
   it("returns 400 for invalid JSON on PATCH", async () => {
     const created = await createTag("alpha");
     const res = await PATCH(
-      new Request(`http://localhost/api/tags/${created.id}`, {
+      await authedRequest(`http://localhost/api/tags/${created.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: "{invalid-json",

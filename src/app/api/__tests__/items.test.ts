@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { cleanupTestDb, createTestDb } from "@/db/test-utils";
+import { authedRequest, cleanupTestDb, createTestDb } from "@/db/test-utils";
 import { GET, POST } from "@/app/api/items/route";
 import { GET as GET_BY_ID, PATCH, DELETE } from "@/app/api/items/[id]/route";
 
@@ -34,7 +34,7 @@ describe("/api/items", () => {
   });
 
   it("creates a content item", async () => {
-    const req = new Request("http://localhost/api/items", {
+    const req = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "note", content: "hello", source: "web" }),
@@ -48,14 +48,16 @@ describe("/api/items", () => {
   });
 
   it("returns paginated list", async () => {
-    const createReq = new Request("http://localhost/api/items", {
+    const createReq = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "note", content: "hello", source: "web" }),
     });
     await POST(createReq);
 
-    const req = new Request("http://localhost/api/items?page=1&limit=20");
+    const req = await authedRequest(
+      "http://localhost/api/items?page=1&limit=20"
+    );
     const res = await GET(req);
     const json = await res.json();
     expect(json.items.length).toBeGreaterThan(0);
@@ -64,7 +66,7 @@ describe("/api/items", () => {
   });
 
   it("returns 400 for invalid JSON body", async () => {
-    const req = new Request("http://localhost/api/items", {
+    const req = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{invalid-json",
@@ -88,7 +90,9 @@ describe("/api/items/[id]", () => {
   });
 
   it("returns 404 for missing item", async () => {
-    const req = new Request("http://localhost/api/items/does-not-exist");
+    const req = await authedRequest(
+      "http://localhost/api/items/does-not-exist"
+    );
     const res = await GET_BY_ID(req, {
       params: Promise.resolve({ id: "does-not-exist" }),
     });
@@ -96,7 +100,7 @@ describe("/api/items/[id]", () => {
   });
 
   it("updates an item", async () => {
-    const createReq = new Request("http://localhost/api/items", {
+    const createReq = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "note", content: "hello", source: "web" }),
@@ -104,11 +108,14 @@ describe("/api/items/[id]", () => {
     const createRes = await POST(createReq);
     const created = await createRes.json();
 
-    const patchReq = new Request(`http://localhost/api/items/${created.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: "updated" }),
-    });
+    const patchReq = await authedRequest(
+      `http://localhost/api/items/${created.id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "updated" }),
+      }
+    );
     const patchRes = await PATCH(patchReq, {
       params: Promise.resolve({ id: created.id }),
     });
@@ -117,7 +124,7 @@ describe("/api/items/[id]", () => {
   });
 
   it("clears title when set to null", async () => {
-    const createReq = new Request("http://localhost/api/items", {
+    const createReq = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -130,11 +137,14 @@ describe("/api/items/[id]", () => {
     const createRes = await POST(createReq);
     const created = await createRes.json();
 
-    const patchReq = new Request(`http://localhost/api/items/${created.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: null }),
-    });
+    const patchReq = await authedRequest(
+      `http://localhost/api/items/${created.id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: null }),
+      }
+    );
     const patchRes = await PATCH(patchReq, {
       params: Promise.resolve({ id: created.id }),
     });
@@ -143,7 +153,7 @@ describe("/api/items/[id]", () => {
   });
 
   it("returns 400 for invalid JSON body", async () => {
-    const createReq = new Request("http://localhost/api/items", {
+    const createReq = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "note", content: "hello", source: "web" }),
@@ -151,11 +161,14 @@ describe("/api/items/[id]", () => {
     const createRes = await POST(createReq);
     const created = await createRes.json();
 
-    const patchReq = new Request(`http://localhost/api/items/${created.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: "{invalid-json",
-    });
+    const patchReq = await authedRequest(
+      `http://localhost/api/items/${created.id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: "{invalid-json",
+      }
+    );
     const patchRes = await PATCH(patchReq, {
       params: Promise.resolve({ id: created.id }),
     });
@@ -165,7 +178,7 @@ describe("/api/items/[id]", () => {
   });
 
   it("deletes an item", async () => {
-    const createReq = new Request("http://localhost/api/items", {
+    const createReq = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "note", content: "bye", source: "web" }),
@@ -173,9 +186,10 @@ describe("/api/items/[id]", () => {
     const createRes = await POST(createReq);
     const created = await createRes.json();
 
-    const deleteReq = new Request(`http://localhost/api/items/${created.id}`, {
-      method: "DELETE",
-    });
+    const deleteReq = await authedRequest(
+      `http://localhost/api/items/${created.id}`,
+      { method: "DELETE" }
+    );
     const deleteRes = await DELETE(deleteReq, {
       params: Promise.resolve({ id: created.id }),
     });
@@ -208,7 +222,7 @@ describe("/api/items bookmark auto-fetch", () => {
       },
     });
 
-    const req = new Request("http://localhost/api/items", {
+    const req = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -240,7 +254,7 @@ describe("/api/items bookmark auto-fetch", () => {
       },
     });
 
-    const req = new Request("http://localhost/api/items", {
+    const req = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -277,7 +291,7 @@ describe("/api/items bookmark auto-fetch", () => {
         fetched_at: "2026-06-20T00:00:00.000Z",
       },
     });
-    const req = new Request("http://localhost/api/items", {
+    const req = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -306,7 +320,7 @@ describe("/api/items bookmark auto-fetch", () => {
       },
     });
 
-    const req = new Request("http://localhost/api/items", {
+    const req = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -337,7 +351,7 @@ describe("/api/items bookmark auto-fetch", () => {
       },
     });
 
-    const req = new Request("http://localhost/api/items", {
+    const req = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -352,7 +366,7 @@ describe("/api/items bookmark auto-fetch", () => {
   });
 
   it("does not invoke the fetcher for non-bookmark types", async () => {
-    const req = new Request("http://localhost/api/items", {
+    const req = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -368,9 +382,9 @@ describe("/api/items bookmark auto-fetch", () => {
     mockFetcher.mockResolvedValue({
       ok: false,
       reason: "no url in content",
-      metadata: { url: "", fetched_at: "2026-06-20T00:00:00.000Z" },
+      metadata: { url: "", fetched_at: new Date().toISOString() },
     });
-    const req = new Request("http://localhost/api/items", {
+    const req = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "bookmark", content: "no link here" }),

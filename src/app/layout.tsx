@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Newsreader } from "next/font/google";
+import { cookies } from "next/headers";
 
 import { SkipToContent } from "@/components/layout/skip-to-content";
 import { TopNav } from "@/components/layout/top-nav";
+import { Footer } from "@/components/layout/footer";
 import { getEnv } from "@/lib/env";
+import { isSessionCookieValid } from "@/lib/auth/session";
 
 import "./globals.css";
 
@@ -45,11 +48,27 @@ export const metadata: Metadata = {
 
 getEnv();
 
-export default function RootLayout({
+/** Read the session cookie from the Next.js request store and
+ *  decide whether the current visitor is authenticated.
+ *
+ *  The proxy is the source of truth for gating — this
+ *  server-component check is just a hint to render auth-aware
+ *  chrome (top nav, footer, user menu). The proxy still
+ *  enforces the real boundary on every request. */
+async function isRequestAuthenticated(): Promise<boolean> {
+  const store = await cookies();
+  const cookie = store.get("sb_session");
+  if (!cookie) return false;
+  const env = getEnv();
+  return isSessionCookieValid(cookie.value, env.SESSION_SECRET);
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const isAuthenticated = await isRequestAuthenticated();
   return (
     <html
       lang="en"
@@ -57,8 +76,22 @@ export default function RootLayout({
     >
       <body className="bg-background text-foreground flex min-h-full flex-col">
         <SkipToContent />
-        <TopNav />
+        {/*
+          Hide the top nav AND the footer on unauthenticated pages
+          (currently just /login). An unauthenticated visitor does
+          not need the navigation chrome — the login page is a
+          focused authentication surface, and the brand mark +
+          form inside the page is enough to communicate "you are
+          in the right place". Showing the nav would also advertise
+          authenticated-only actions (the command palette) to an
+          unauthenticated visitor. The footer is hidden for the
+          same reason: the mono-font build marker is internal
+          chrome, and a sign-in screen should not carry internal
+          product framing.
+        */}
+        {isAuthenticated ? <TopNav /> : null}
         <div className="flex flex-1 flex-col">{children}</div>
+        {isAuthenticated ? <Footer /> : null}
       </body>
     </html>
   );

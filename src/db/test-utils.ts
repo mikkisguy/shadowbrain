@@ -6,6 +6,63 @@ import {
   runMigrations,
   VECTOR_SEARCH_MIGRATION_VERSION,
 } from "./migrations/migrate";
+import { createAuthedRequest } from "@/lib/auth/test-helpers";
+import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
+
+/**
+ * Test helper — wrap a `Request` in a signed session cookie.
+ *
+ * Auth-required API routes (every route outside `/api/auth/*` and
+ * `/login`) check the session in their handler as defense in
+ * depth. Tests that call the route function directly (bypassing
+ * the proxy) need to add the cookie themselves. This helper
+ * signs a cookie using the same SESSION_SECRET the app uses at
+ * runtime, so `requireAuthenticated` passes.
+ *
+ * Usage:
+ *
+ *     const req = await authedRequest("http://localhost/api/items", {
+ *       method: "POST",
+ *       headers: { "Content-Type": "application/json" },
+ *       body: JSON.stringify({ ... }),
+ *     });
+ */
+export async function authedRequest(
+  url: string,
+  init: RequestInit = {}
+): Promise<Request> {
+  return createAuthedRequest({ url, init });
+}
+
+/** Shorthand for the most common case: an authed GET with no body. */
+export async function authedGet(url: string): Promise<Request> {
+  return createAuthedRequest({ url });
+}
+
+/** Extract the session cookie value from a Response's `Set-Cookie`
+ *  header, when present. Used by tests that need to follow a login
+ *  response (e.g. to then call a protected route with the issued
+ *  cookie). */
+export function extractSessionCookie(res: Response): string | null {
+  const setCookie = res.headers.get("set-cookie");
+  if (!setCookie) return null;
+  // The session cookie is the only one we set on /api/auth/login;
+  // match by name to be robust against future Set-Cookie additions.
+  for (const part of setCookie.split(/,(?=[^ ])/)) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    const name = part.slice(0, eq).trim();
+    if (name === SESSION_COOKIE_NAME) {
+      const value =
+        part
+          .slice(eq + 1)
+          .split(";")[0]
+          ?.trim() ?? "";
+      return value || null;
+    }
+  }
+  return null;
+}
 
 const TEST_DB_PATH = getDbPath("test");
 

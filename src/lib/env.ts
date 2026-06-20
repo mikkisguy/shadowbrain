@@ -26,8 +26,18 @@ const envSchema = z.object({
   // Auth
   SESSION_SECRET: z
     .string()
-    .min(1, "Required")
     .min(32, "SESSION_SECRET must be at least 32 characters long"),
+  // Single-user admin. Username is required. The password is *not* the
+  // plaintext — it is a bcrypt hash (cost >= 10). The app compares the
+  // user's submitted password against this hash at login time.
+  ADMIN_USERNAME: z.string().min(1, "ADMIN_USERNAME is required"),
+  ADMIN_PASSWORD_HASH: z
+    .string()
+    .min(1, "ADMIN_PASSWORD_HASH is required (bcrypt hash, cost >= 10)"),
+  // Optional. Session lifetime in milliseconds. Clamped to [1h, 30d]
+  // at runtime by getSessionMaxAge(); invalid or out-of-range values
+  // fall back to 24h. See src/lib/auth/session.ts.
+  SESSION_MAX_AGE: z.coerce.number().int().positive().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

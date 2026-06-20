@@ -13,8 +13,10 @@ import { TopNav } from "@/components/layout/top-nav";
  * attach to), and the user menu placeholder. The theme toggle is
  * out of scope for v1 (ShadowBrain is dark-only).
  *
- * The nav has very little logic; the value of this test is in
- * catching structural regressions if the layout is refactored.
+ * The component itself does not gate on auth — that decision
+ * lives in `src/app/layout.tsx`. So this test only covers the
+ * "rendered" shape; a layout-level test would assert that
+ * `<TopNav />` is not emitted on unauthenticated pages.
  */
 describe("TopNav", () => {
   const html = renderToStaticMarkup(<TopNav />);
@@ -77,8 +79,17 @@ describe("TopNav", () => {
     expect(desktopTrigger![0]).toMatch(/aria-label="[^"]*Ctrl K/);
   });
 
-  it("renders the user menu placeholder (no theme toggle in v1)", () => {
+  it("renders the user menu as a sign-out form (no theme toggle in v1)", () => {
     expect(html).toMatch(/data-testid="user-menu"/);
+    // The user menu is a form posting to /api/auth/logout. The
+    // server clears the cookie and 303-redirects to /login — no
+    // JavaScript required, no client component, no broken
+    // behaviour when the user has JS disabled.
+    expect(html).toMatch(
+      /<form[^>]*action="\/api\/auth\/logout"[^>]*method="post"/
+    );
+    // The signed-in user has no need of a "Sign in" link here.
+    expect(html).not.toMatch(/href="\/login"/);
     // v1 is dark-only — no theme toggle is shipped.
     expect(html).not.toMatch(/data-testid="theme-toggle"/);
   });

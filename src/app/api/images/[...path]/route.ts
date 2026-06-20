@@ -3,6 +3,7 @@ import { promises as fs } from "fs";
 import { getImageFullPath, PathTraversalError } from "@/lib/storage";
 import { errorResponse, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
+import { requireAuthenticated } from "@/lib/auth/guard";
 
 // Maximum length of the joined relative path we will accept. A
 // legitimate monthly directory + UUID + extension fits well under
@@ -34,10 +35,11 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
-  // TODO: add auth check once session-based auth lands (#53).
+  const auth = await requireAuthenticated(request);
+  if (!auth.ok) return auth.response;
   // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   try {
     const { path: segments } = await params;

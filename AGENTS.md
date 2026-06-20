@@ -128,6 +128,26 @@ src/
 - Arrow parens: always
 - End of line: lf
 
+## Versioning
+
+`package.json` carries the app's `major.minor.patch` version. The project is
+pre-1.0 (`0.x.y`) — **major is not yet**, so API stability is not promised.
+
+Bump the version in `package.json` on the same branch as the change when it is
+relevant:
+
+- **patch** (`0.2.x → 0.2.y`) — bug fixes, internal refactors, dependency
+  bumps, and other changes with no user-visible behavior change.
+- **minor** (`0.x.0`) — any new user-facing feature, new API endpoint, new UI
+  surface, or other meaningful capability that adds something a user can see
+  or call.
+- **major** (`x.0.0`) — reserved for the first stable release. Do not bump
+  major until the API surface and data model are considered stable.
+
+When in doubt, bump minor — under `0.x` it is cheap to add more, and the
+version is meant to be a rough signal of how much capability has landed, not
+a contract.
+
 ## Backend Guidelines
 
 ### Database
@@ -152,11 +172,24 @@ src/
 
 ### Rate Limiting
 
-- **Required** for auth endpoints (`/api/auth/login`) — ≈5 attempts / 15 min / IP, enforced by the session module from #53.
+- **Required** for auth endpoints (`/api/auth/login`) — ≈5 attempts / 15 min / IP, enforced by the session module from #53 (`src/lib/auth/login-rate-limit.ts`).
 - **Required** for all other API routes — ≈120 req / min / IP.
 - **Required** for non-API routes — ≈600 req / min / IP.
 - Implemented in `src/lib/rate-limit.ts` (in-memory token bucket per IP) by **#56 — Security: global rate limiting**. Reads the real client IP from the configured trusted proxy header (`X-Forwarded-For` / `X-Real-IP`).
 - Returns `429` with `Retry-After` on exceed.
+
+### Auth (session-based, single-user)
+
+The session-auth foundation lives in `src/lib/auth/` and is enforced at two layers:
+
+- **Proxy (`src/proxy.ts`)** — Next.js's renamed `middleware` (Next 16+). Protects every route except `/login` and `/api/auth/*`; checks the CSRF origin on state-changing methods; redirects unauthenticated browser navigations to `/login?from=…` and returns 401 for unauthenticated API calls. Sliding renewal re-signs the cookie on activity so `SESSION_MAX_AGE` also acts as an inactivity timeout.
+- **Route guard (`src/lib/auth/guard.ts`)** — `requireAuthenticated(request)` is called at the top of every protected route handler as a defense-in-depth check; a unit test that invokes the handler without going through the proxy still fails closed.
+
+Auth library modules: `session.ts` (HMAC-signed cookies, clamping, sliding renewal), `password.ts` (bcrypt + OWASP ASVS V3.2.2 constant-time login via a precomputed dummy hash), `csrf.ts` (origin/referer check, constant-time compare), `exempt-paths.ts` (exact-pathname matching — no suffix/prefix), `audit.ts` (auth event log to `audit_logs`), `client-ip.ts`, `constants.ts`.
+
+Required env vars: `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH` (bcrypt hash, cost ≥ 10), `SESSION_SECRET` (min 32 chars, used to sign cookies). `SESSION_MAX_AGE` is optional (ms; clamped to [1h, 30d]; default 24h). Generate the password hash with `pnpm hash:password` — a hidden-prompt script in `scripts/hash-password.ts` that reuses the app's `bcryptjs` and `BCRYPT_COST` so the hash is guaranteed to verify against the login route.
+
+Test helper: `authedRequest(url, init)` in `src/db/test-utils.ts` signs a session cookie using the test `SESSION_SECRET`, so existing route tests can call the protected handlers directly.
 
 ### Performance
 
@@ -214,6 +247,9 @@ Request Workflow below).
   changed.
 - `docs/superpowers/specs/*.md` updated if a security,
   architectural, or removal-of-documented-API decision shifted.
+- `package.json` `version` bumped per the [Versioning](#versioning)
+  rules when the change adds, removes, or alters user-facing
+  behavior.
 
 ## Pull Request Workflow
 
@@ -256,7 +292,7 @@ decision.**
    - The diff touches the database layer (schema, migrations,
      query helpers, audit log).
    - The diff adds or changes an API route, route handler, or
-     middleware.
+     proxy.
    - The diff is large (rule of thumb: > 200 changed lines, or any
      single file > 100 changed lines).
    - You are uncertain about an architectural choice.

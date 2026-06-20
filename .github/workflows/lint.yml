@@ -9,12 +9,17 @@ jobs:
     name: Lint, Typecheck, Build & Test
     runs-on: ubuntu-latest
     container: node:24-alpine
-    # SESSION_SECRET is required at build time because src/app/layout.tsx
-    # calls getEnv() during Next.js static-page generation, and tests call
-    # getEnv() transitively via the DB helpers. The value is a fixed
-    # placeholder — it is never used to sign real sessions in CI.
+    # SESSION_SECRET, ADMIN_USERNAME, and ADMIN_PASSWORD_HASH are
+    # required at build time because src/app/layout.tsx calls
+    # getEnv() during Next.js static-page generation, and tests
+    # call getEnv() transitively via the DB helpers. The values
+    # are fixed placeholders — they are never used to sign real
+    # sessions in CI. The bcrypt hash is a precomputed dummy at
+    # cost 10 for the literal password "ci-dummy".
     env:
       SESSION_SECRET: ci-only-dummy-session-secret-32-chars-min-xxxxxxxxxxxx
+      ADMIN_USERNAME: ci-admin
+      ADMIN_PASSWORD_HASH: $2b$10$2QZ0vS7O9p9Y3b5hX7r5x.J0a3Kqf3J4G9y0aB1c2d3e4f5g6h7i8j
     steps:
       - name: Checkout code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6

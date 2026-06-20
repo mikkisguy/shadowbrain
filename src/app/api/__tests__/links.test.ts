@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { cleanupTestDb, createTestDb } from "@/db/test-utils";
+import { authedRequest, cleanupTestDb, createTestDb } from "@/db/test-utils";
 import { getDb, contentItems, contentLinks } from "@/db/index";
 import { POST } from "@/app/api/links/route";
 
@@ -27,9 +27,9 @@ function makeContentItem(
   return id;
 }
 
-function postLink(body: Record<string, unknown>) {
+async function postLink(body: Record<string, unknown>) {
   return POST(
-    new Request("http://localhost/api/links", {
+    await authedRequest("http://localhost/api/links", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -251,7 +251,7 @@ describe("/api/links", () => {
 
   it("returns 400 for invalid JSON body", async () => {
     const res = await POST(
-      new Request("http://localhost/api/links", {
+      await authedRequest("http://localhost/api/links", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{invalid-json",

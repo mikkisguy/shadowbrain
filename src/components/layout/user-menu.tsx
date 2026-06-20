@@ -1,30 +1,34 @@
 import { CircleUser } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-
 /**
- * User menu placeholder.
+ * User menu — sign out.
  *
- * Authentication is not yet wired up (Phase 1 — Core Data Layer has
- * the API surface, but no session is required to view the home
- * page). This button is a non-interactive placeholder so the nav has
- * the right silhouette until the auth flow lands.
+ * The top nav is only rendered when the visitor is authenticated
+ * (see `src/app/layout.tsx`), so this component is only ever seen
+ * in that state. A plain HTML form posts to `/api/auth/logout`,
+ * which clears the session cookie and 303-redirects back to
+ * `/login` — no JavaScript required, no client component, the
+ * server is the only source of truth for the auth boundary.
  *
- * Rendered as a server component: there is no interactivity to
- * hydrate, and the surrounding Button component is the only client
- * island (it ships its own minimal runtime).
+ * A future "Phase 3" admin shell will likely replace this with a
+ * dropdown that shows the username and a labelled sign-out action;
+ * for now the icon-only affordance matches the v1 chrome.
  */
 export function UserMenu() {
   return (
-    <Button
-      variant="outline"
-      size="icon"
+    <form
+      action="/api/auth/logout"
+      method="post"
       data-testid="user-menu"
-      disabled
-      aria-label="Sign in (coming soon)"
-      className="border-border bg-surface-elevated text-muted-foreground hover:border-border-strong hover:bg-surface-muted hover:text-foreground"
+      aria-label="Sign out"
     >
-      <CircleUser aria-hidden="true" className="size-4" strokeWidth={1.5} />
-    </Button>
+      <button
+        type="submit"
+        aria-label="Sign out"
+        className="border-border bg-surface-elevated text-muted-foreground hover:border-border-strong hover:bg-surface-muted hover:text-foreground inline-flex size-8 cursor-pointer items-center justify-center rounded-sm border transition-colors"
+      >
+        <CircleUser aria-hidden="true" className="size-4" strokeWidth={1.5} />
+      </button>
+    </form>
   );
 }

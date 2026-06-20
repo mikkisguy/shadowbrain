@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getDb, tags, auditLogs } from "@/db/index";
 import { errorResponse, parseJson, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
+import { requireAuthenticated } from "@/lib/auth/guard";
 
 // Tag names allow ASCII letters, digits, spaces, hyphens, and underscores.
 // We deliberately reject punctuation so tags stay safe to embed in URLs
@@ -18,8 +19,9 @@ const createSchema = z.object({
     .regex(TAG_NAME_REGEX, "Name contains invalid characters"),
 });
 
-export async function GET() {
-  // TODO: add auth check for tag listing.
+export async function GET(request: Request) {
+  const auth = await requireAuthenticated(request);
+  if (!auth.ok) return auth.response;
   // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   try {
     const db = getDb();
@@ -37,7 +39,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  // TODO: add auth check for tag creation.
+  const auth = await requireAuthenticated(request);
+  if (!auth.ok) return auth.response;
   // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   try {
     let body: unknown;

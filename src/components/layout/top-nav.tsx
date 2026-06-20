@@ -9,8 +9,14 @@ import { UserMenu } from "@/components/layout/user-menu";
  *   1. Logo + brand (left)
  *   2. Centered palette trigger (the global command palette lives in
  *      #88; the trigger itself is a stub here)
- *   3. User menu placeholder (right; the theme toggle is out of
- *      scope for v1 — ShadowBrain is dark-only)
+ *   3. User menu (right; the theme toggle is out of scope for v1 —
+ *      ShadowBrain is dark-only)
+ *
+ * The component itself does not gate on auth. The layout in
+ * `src/app/layout.tsx` decides whether to render `<TopNav />` at
+ * all — on unauthenticated pages (currently just /login) the nav
+ * is omitted entirely, since the login page already carries the
+ * brand mark and is a focused authentication surface.
  *
  * Height is 56px; the bottom border is a single hairline in
  * `--border` per the editorial spec. No shadow, no rounding.
