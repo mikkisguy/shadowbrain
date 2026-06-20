@@ -44,12 +44,18 @@ function getDummyHash(): string {
 }
 
 /** Hash a plaintext password with bcrypt. Used at admin setup
- *  time (or wherever ADMIN_PASSWORD_HASH is generated). */
-export async function hashPassword(plain: string): Promise<string> {
+ *  time (or wherever ADMIN_PASSWORD_HASH is generated). The `cost`
+ *  parameter is optional and defaults to `BCRYPT_COST`; the login
+ *  route calls this without it. Operator-facing tooling (e.g. the
+ *  `pnpm hash:password` script) may override it. */
+export async function hashPassword(
+  plain: string,
+  cost: number = BCRYPT_COST
+): Promise<string> {
   if (typeof plain !== "string" || plain.length === 0) {
     throw new Error("Password must be a non-empty string");
   }
-  return bcrypt.hash(plain, BCRYPT_COST);
+  return bcrypt.hash(plain, cost);
 }
 
 /** Plain bcrypt compare. Use `verifyPasswordConstantTime` from a
