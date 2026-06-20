@@ -68,7 +68,7 @@ describe("design system — globals.css tokens", () => {
     ];
     for (const [token, value] of expected) {
       expect(css, `${token} = ${value}`).toMatch(
-        new RegExp(`${token}:\\s*${value.replace("#", "#")}`, "i")
+        new RegExp(`${token}:\\s*${value}`, "i")
       );
     }
   });
