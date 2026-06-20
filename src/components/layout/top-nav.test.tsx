@@ -65,6 +65,18 @@ describe("TopNav", () => {
     expect(html).toMatch(/data-testid="palette-trigger-mobile"/);
   });
 
+  it("shows the non-Mac shortcut (Ctrl K) on the server-rendered trigger", () => {
+    // The server doesn't know the user's platform, so the static
+    // markup always uses the non-Mac default. Mac users get the
+    // ⌘K label on the client after mount (see palette-trigger.tsx).
+    const desktopTrigger = html.match(
+      /<button[^>]*data-testid="palette-trigger-desktop"[\s\S]*?<\/button>/
+    );
+    expect(desktopTrigger).not.toBeNull();
+    expect(desktopTrigger![0]).toMatch(/<kbd[^>]*>Ctrl K<\/kbd>/);
+    expect(desktopTrigger![0]).toMatch(/aria-label="[^"]*Ctrl K/);
+  });
+
   it("renders the user menu placeholder (no theme toggle in v1)", () => {
     expect(html).toMatch(/data-testid="user-menu"/);
     // v1 is dark-only — no theme toggle is shipped.
