@@ -509,6 +509,30 @@ export const contentLinks = {
     return stmt.all(targetId) as ContentLink[];
   },
 
+  /**
+   * True if a link with the given type already exists between `a` and `b`
+   * in either direction. Used by the link API to reject duplicates
+   * (the schema stores bidirectional links as two rows, so a naive
+   * "(source, target, link_type) unique" check would not catch the
+   * reverse-direction duplicate that arrives when the same link is
+   * requested again).
+   */
+  existsBetween: (
+    db: Database.Database,
+    a: string,
+    b: string,
+    linkType: string
+  ) => {
+    const stmt = db.prepare(`
+      SELECT 1 as hit FROM content_links
+      WHERE link_type = ?
+        AND ((source_id = ? AND target_id = ?)
+          OR (source_id = ? AND target_id = ?))
+      LIMIT 1
+    `);
+    return stmt.get(linkType, a, b, b, a) !== undefined;
+  },
+
   delete: (db: Database.Database, id: string) => {
     const stmt = db.prepare("DELETE FROM content_links WHERE id = ?");
     return stmt.run(id);
