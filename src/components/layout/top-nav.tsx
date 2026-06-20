@@ -1,6 +1,5 @@
 import { Brand } from "@/components/layout/brand";
 import { PaletteTrigger } from "@/components/layout/palette-trigger";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UserMenu } from "@/components/layout/user-menu";
 
 /**
@@ -10,7 +9,8 @@ import { UserMenu } from "@/components/layout/user-menu";
  *   1. Logo + brand (left)
  *   2. Centered palette trigger (the global command palette lives in
  *      #88; the trigger itself is a stub here)
- *   3. Theme toggle + user menu (right, placeholders)
+ *   3. User menu placeholder (right; the theme toggle is out of
+ *      scope for v1 — ShadowBrain is dark-only)
  *
  * Height is 56px; the bottom border is a single hairline in
  * `--border` per the editorial spec. No shadow, no rounding.
@@ -31,7 +31,6 @@ export function TopNav() {
         </div>
 
         <div className="flex items-center justify-end gap-2">
-          <ThemeToggle />
           <UserMenu />
         </div>
       </div>

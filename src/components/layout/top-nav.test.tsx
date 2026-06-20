@@ -10,7 +10,8 @@ import { TopNav } from "@/components/layout/top-nav";
  * Renders the TopNav server-side to static markup and checks the
  * editorial structure: brand mark, centered palette trigger (with
  * the data-palette-trigger hook the command palette in #88 will
- * attach to), theme toggle, and user menu placeholder.
+ * attach to), and the user menu placeholder. The theme toggle is
+ * out of scope for v1 (ShadowBrain is dark-only).
  *
  * The nav has very little logic; the value of this test is in
  * catching structural regressions if the layout is refactored.
@@ -64,9 +65,10 @@ describe("TopNav", () => {
     expect(html).toMatch(/data-testid="palette-trigger-mobile"/);
   });
 
-  it("renders the theme toggle and user menu placeholders", () => {
-    expect(html).toMatch(/data-testid="theme-toggle"/);
+  it("renders the user menu placeholder (no theme toggle in v1)", () => {
     expect(html).toMatch(/data-testid="user-menu"/);
+    // v1 is dark-only — no theme toggle is shipped.
+    expect(html).not.toMatch(/data-testid="theme-toggle"/);
   });
 
   it("uses the editorial layout — no rounded corners, no shadows in the nav chrome", () => {

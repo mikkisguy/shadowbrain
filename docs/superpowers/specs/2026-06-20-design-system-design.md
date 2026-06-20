@@ -242,6 +242,12 @@ avatars, image thumbnails, tabs, and navigation items still read
 as essentially square. The intent is a hint of polish on the
 editorial direction, not a move toward a SaaS template.
 
+**Application:** the 2px radius is opt-in per element via the
+`rounded-sm` (or any other `rounded-*`) utility. The default for
+elements without an explicit rounded class is 0 — full-bleed
+elements like the top nav, dividers, and section headers stay
+square on principle.
+
 **Why not zero:** the spec originally called for 0 everywhere, but
 in practice the all-zero reading felt hard rather than considered
 once the shell was running. 2px is the minimum that registers as

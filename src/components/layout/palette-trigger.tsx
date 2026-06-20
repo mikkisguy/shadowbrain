@@ -31,7 +31,7 @@ export function PaletteTrigger() {
         onClick={openPalette}
         aria-label="Open command palette (coming soon)"
         className={cn(
-          "border-border bg-surface-elevated hidden h-8 w-full max-w-sm items-center gap-2 border",
+          "border-border bg-surface-elevated hidden h-8 w-full max-w-sm items-center gap-2 rounded-sm border",
           "text-muted-foreground px-3 text-left text-sm outline-none",
           "hover:border-border-strong hover:bg-surface-muted transition-colors",
           "focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-1",
@@ -44,7 +44,7 @@ export function PaletteTrigger() {
           strokeWidth={1.5}
         />
         <span className="flex-1 truncate">Search or jump to…</span>
-        <kbd className="border-border bg-background text-muted-foreground inline-flex h-5 items-center border px-1.5 font-mono text-[10px] font-medium">
+        <kbd className="border-border bg-background text-muted-foreground inline-flex h-5 items-center rounded-sm border px-1.5 font-mono text-[10px] font-medium">
           ⌘K
         </kbd>
       </button>
@@ -57,7 +57,7 @@ export function PaletteTrigger() {
         onClick={openPalette}
         aria-label="Open command palette (coming soon)"
         className={cn(
-          "border-border bg-surface-elevated inline-flex size-8 items-center justify-center border",
+          "border-border bg-surface-elevated inline-flex size-8 items-center justify-center rounded-sm border",
           "text-muted-foreground transition-colors outline-none",
           "hover:border-border-strong hover:bg-surface-muted hover:text-foreground",
           "focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-1",

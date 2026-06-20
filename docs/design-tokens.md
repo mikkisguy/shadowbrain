@@ -102,15 +102,15 @@ accent on detail view. See the design system spec for the full rule.
 
 ## Layout constants
 
-| Constant           | Value                                           |
-| ------------------ | ----------------------------------------------- |
-| Border radius      | `2px` uniform (all `--radius-*` resolve to 2px) |
-| Shadows            | none (use hairline borders + color contrast)    |
-| Spacing base       | 4px (Tailwind default)                          |
-| Type dots          | 6px filled circle (1.5px inset from badge edge) |
-| Detail edge accent | 2px solid, 16px left padding                    |
-| Focus outline      | 1px solid `--primary`, 2px offset               |
-| Transition timing  | 150ms ease-out, color/opacity only              |
+| Constant           | Value                                                                    |
+| ------------------ | ------------------------------------------------------------------------ |
+| Border radius      | `2px` uniform (all `--radius-*` resolve to 2px, opt-in via `rounded-sm`) |
+| Shadows            | none (use hairline borders + color contrast)                             |
+| Spacing base       | 4px (Tailwind default)                                                   |
+| Type dots          | 6px filled circle (1.5px inset from badge edge)                          |
+| Detail edge accent | 2px solid, 16px left padding                                             |
+| Focus outline      | 1px solid `--primary`, 2px offset                                        |
+| Transition timing  | 150ms ease-out, color/opacity only                                       |
 
 ---
 

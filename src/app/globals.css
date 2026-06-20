@@ -88,9 +88,9 @@
   /* --- Border radius: a uniform 2px softening.
    * The design spec originally called for 0 everywhere; after
    * seeing the shell in action a small radius read as more
-   * polished without compromising the editorial direction. We keep
-   * it small enough that badges, tags, and the inversion state
-   * still read as essentially square. */
+   * polished without compromising the editorial direction. The
+   * 2px value is the design intent; individual elements opt in
+   * via the `rounded-sm` (or larger) utility. */
   --radius-sm: 2px;
   --radius-md: 2px;
   --radius-lg: 2px;

@@ -29,7 +29,7 @@ export default function Home() {
           aria-labelledby="design-system-status"
           className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
         >
-          <article className="border-border bg-surface-elevated flex flex-col gap-3 border p-6">
+          <article className="border-border bg-surface-elevated flex flex-col gap-3 rounded-sm border p-6">
             <p className="text-accent-cyan font-sans text-xs font-medium tracking-[0.12em] uppercase">
               <span className="bg-accent-cyan mr-2 inline-block size-1.5 align-middle" />
               Status
@@ -46,7 +46,7 @@ export default function Home() {
             </p>
           </article>
 
-          <article className="border-border bg-surface-elevated flex flex-col gap-3 border p-6">
+          <article className="border-border bg-surface-elevated flex flex-col gap-3 rounded-sm border p-6">
             <p className="text-accent-violet font-sans text-xs font-medium tracking-[0.12em] uppercase">
               Typography
             </p>
@@ -66,7 +66,7 @@ export default function Home() {
             </p>
           </article>
 
-          <article className="border-border bg-surface-elevated flex flex-col gap-3 border p-6">
+          <article className="border-border bg-surface-elevated flex flex-col gap-3 rounded-sm border p-6">
             <p className="text-primary font-sans text-xs font-medium tracking-[0.12em] uppercase">
               Tokens
             </p>
@@ -80,22 +80,22 @@ export default function Home() {
             <div className="mt-2 flex items-center gap-2">
               <span
                 aria-label="primary"
-                className="bg-primary size-3"
+                className="bg-primary size-3 rounded-sm"
                 title="#3D6BFF"
               />
               <span
                 aria-label="accent-cyan"
-                className="bg-accent-cyan size-3"
+                className="bg-accent-cyan size-3 rounded-sm"
                 title="#4FCFFF"
               />
               <span
                 aria-label="accent-violet"
-                className="bg-accent-violet size-3"
+                className="bg-accent-violet size-3 rounded-sm"
                 title="#7B6AFF"
               />
               <span
                 aria-label="surface-inverted"
-                className="bg-surface-inverted size-3"
+                className="bg-surface-inverted size-3 rounded-sm"
                 title="#E4DCC8"
               />
             </div>
