@@ -38,4 +38,34 @@ export const journalPeriods = {
     );
     return stmt.get(contentId) as JournalPeriod | undefined;
   },
+
+  /**
+   * Idempotent insert — silently skip on a `content_id` collision.
+   * `content_id` is the PRIMARY KEY of `journal_periods`, so a re-run
+   * of the migration script would otherwise throw on the first row
+   * and roll the whole transaction back. Mirrors
+   * `contentItems.createOrIgnore`.
+   */
+  createOrIgnore: (
+    db: Database.Database,
+    period: {
+      content_id: string;
+      period_start: string;
+      period_end: string;
+      raw_count: number;
+      model_used?: string | null;
+    }
+  ) => {
+    const stmt = db.prepare(`
+      INSERT OR IGNORE INTO journal_periods (content_id, period_start, period_end, raw_count, model_used)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      period.content_id,
+      period.period_start,
+      period.period_end,
+      period.raw_count,
+      period.model_used ?? null
+    );
+  },
 };
