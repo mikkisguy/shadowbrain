@@ -54,6 +54,54 @@ export const contentItems = {
     );
   },
 
+  /**
+   * Insert a content_item, but silently skip the row if a row with
+   * the same `id` already exists. Returns the better-sqlite3
+   * `RunResult` so the caller can branch on `changes` to detect
+   * "we actually wrote something" vs. "we silently skipped".
+   *
+   * The migration script and any other bulk-import path that needs
+   * to be re-runnable use this method — `create` throws on a
+   * PRIMARY KEY collision, which would abort the whole transaction
+   * on a re-run.
+   */
+  createOrIgnore: (
+    db: Database.Database,
+    item: {
+      id: string;
+      type: string;
+      title?: string | null;
+      content: string;
+      image_path?: string | null;
+      source?: string;
+      source_url?: string | null;
+      metadata?: string | null;
+      is_private?: number;
+      created_at: string;
+      updated_at: string;
+    }
+  ) => {
+    const stmt = db.prepare(`
+      INSERT OR IGNORE INTO content_items (
+        id, type, title, content, image_path, source, source_url,
+        metadata, is_private, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      item.id,
+      item.type,
+      item.title ?? null,
+      item.content,
+      item.image_path ?? null,
+      item.source ?? "manual",
+      item.source_url ?? null,
+      item.metadata ?? null,
+      item.is_private ?? 0,
+      item.created_at,
+      item.updated_at
+    );
+  },
+
   findById: (db: Database.Database, id: string) => {
     const stmt = db.prepare("SELECT * FROM content_items WHERE id = ?");
     return stmt.get(id) as ContentItem | undefined;
