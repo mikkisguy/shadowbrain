@@ -44,7 +44,9 @@
     ],
     "ignore": [
       "src/db/index.ts",
-      "src/db/test-utils.ts"
+      "src/db/test-utils.ts",
+      "src/db/client.ts",
+      "src/db/repositories/**"
     ]
   },
   "dependencies": {
