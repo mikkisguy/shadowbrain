@@ -17,7 +17,7 @@ export default defineConfig({
         "test-secret-that-is-at-least-32-characters-long-for-vitest",
     },
     setupFiles: [],
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
     exclude: ["node_modules", "dist", ".next"],
   },
 });
