@@ -261,7 +261,9 @@ existing rate-limit and Zod validation apply.
 - The 6-section top nav in #20's acceptance criteria ("Nav links: Browse,
   Chat, Search, Graph, Tags, Settings") is replaced by the minimal nav
   - palette. #20's AC for the top nav is updated to: "minimal nav with
-    centered palette trigger + theme toggle + user menu."
+    centered palette trigger + user menu." (The theme toggle was
+    further dropped during the #20 implementation: ShadowBrain is
+    dark-only for v1 and ships no toggle.)
 - The Browse page's inline search bar (`web-ui-core-design.md` line 36)
   is removed.
 - The `/search` page (web-UI spec line 20) is not built.

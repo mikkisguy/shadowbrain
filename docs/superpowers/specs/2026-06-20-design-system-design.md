@@ -45,7 +45,8 @@ colored card.
    cream for the inversion. Plus universal status colors (green/red/
    amber) that are functional, not decorative. Type colors are limited
    to 6px dots and 2px edge accents.
-6. **Square corners and hairlines everywhere.** No border radius. No
+6. **Softened square corners and hairlines everywhere.** A small,
+   uniform 2px border-radius on chrome. No large radii. No
    drop shadows. Depth is created by color contrast.
 
 ---
@@ -59,11 +60,11 @@ work with shadcn/ui conventions.
 
 | Token                   | Value                       | Use                                              |
 | ----------------------- | --------------------------- | ------------------------------------------------ |
-| `--background`          | `#0A0B14`                   | Page background                                  |
+| `--background`          | `#0A0A0A`                   | Page background                                  |
 | `--foreground`          | `#E4DCC8`                   | Primary text (cream) on dark                     |
 | `--surface-elevated`    | `rgba(228, 220, 200, 0.03)` | Slight tint for cards/panels over `--background` |
 | `--surface-inverted`    | `#E4DCC8`                   | Selected/active state — cream fills, dark text   |
-| `--foreground-inverted` | `#0A0B14`                   | Text on cream (`--surface-inverted`)             |
+| `--foreground-inverted` | `#0A0A0A`                   | Text on cream (`--surface-inverted`)             |
 | `--surface-muted`       | `rgba(228, 220, 200, 0.06)` | Subtle hover/active backgrounds                  |
 | `--border`              | `rgba(228, 220, 200, 0.10)` | Hairlines, dividers, card borders                |
 | `--border-strong`       | `rgba(228, 220, 200, 0.20)` | Stronger dividers, focused input borders         |
@@ -231,18 +232,31 @@ editorial feel depends on generous spacing.
 
 ## Border radius
 
-**All radius: 0.** No exceptions.
+**Uniform 2px across the scale.** All `--radius-*` tokens resolve
+to `2px`; `rounded-sm`, `rounded-md`, `rounded-lg`, `rounded-xl`,
+`rounded-2xl`, etc. all produce the same 2px corner.
 
-Square corners on:
+The radius is a softening, not a feature: it is small enough that
+cards, panels, modals, buttons, inputs, tags, badges, type chips,
+avatars, image thumbnails, tabs, and navigation items still read
+as essentially square. The intent is a hint of polish on the
+editorial direction, not a move toward a SaaS template.
 
-- Cards, panels, modals
-- Buttons, inputs
-- Tags, badges, type chips
-- Avatars, image thumbnails
-- Tabs, navigation items
+**Application:** the 2px radius is opt-in per element via the
+`rounded-sm` (or any other `rounded-*`) utility. The default for
+elements without an explicit rounded class is 0 — full-bleed
+elements like the top nav, dividers, and section headers stay
+square on principle.
 
-This is a defining choice of the editorial direction. Even small
-radii (2–4px) would undermine the "considered" feel.
+**Why not zero:** the spec originally called for 0 everywhere, but
+in practice the all-zero reading felt hard rather than considered
+once the shell was running. 2px is the minimum that registers as
+a softened corner without competing with the hairline borders for
+visual weight.
+
+**Why not larger:** radii above ~4px start to read as "rounded
+button" rather than "softened square." Anything beyond 4px
+undermines the editorial direction.
 
 ---
 
@@ -302,7 +316,7 @@ components should follow these as templates.
 - Background: `--background`
 - Border: 1px solid `--border`
 - Padding: 24px (`spacing-6`)
-- No shadow. No border-radius.
+- No shadow. Corners follow the 2px radius default.
 - On hover: `--surface-muted` background tint (color transition, 150ms)
 - On selected: full inversion — cream fill, dark text, primary action
   becomes inverted-style
@@ -354,7 +368,7 @@ components should follow these as templates.
 - Foreground: `--accent-violet`
 - Padding: `3px 10px`
 - Text: `text-xs`, Inter 500, UPPERCASE, +0.06em tracking
-- No border-radius
+- 2px radius (default)
 - On hover: `--accent-violet` @ 15% background
 
 ### Type badge
@@ -366,7 +380,7 @@ components should follow these as templates.
 - **Type-color dot:** a 6px filled circle on the left side of the badge
   text, using the type's color from the type palette above
 - Text: `text-xs`, Inter 500, UPPERCASE, +0.12em tracking
-- No border-radius
+- 2px radius (default)
 - On hover: `--accent-cyan` @ 15% background
 
 The dot keeps its color even when the card is in the inverted (cream)
@@ -388,7 +402,7 @@ selected state. The type identity persists through state changes.
 - Foreground: `--foreground`
 - **No overlay backdrop blur** — use `rgba(10, 11, 20, 0.7)` solid
   backdrop only
-- No shadow. No border-radius.
+- No shadow. 2px radius (default).
 - Padding: per use case
 
 ### Detail view accent
@@ -452,7 +466,7 @@ one of them, stop and use the editorial alternative.
 | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | Gradient mesh backgrounds (purple/blue/pink)                                                            | Solid `--background`                                                       |
 | Glassmorphism (heavy `backdrop-blur-*`)                                                                 | Hairline borders for separation                                            |
-| Rounded-2xl, rounded-lg, rounded-md on cards/buttons                                                    | `rounded-none` (0 radius)                                                  |
+| Rounded-2xl, rounded-lg, rounded-md on cards/buttons (anything > 4px)                                   | `rounded-sm` or no radius (2px uniform)                                    |
 | `shadow-sm`, `shadow-md`, `shadow-lg` on cards/buttons                                                  | Hairline border + color contrast                                           |
 | Gradient text (`bg-gradient-to-r bg-clip-text`)                                                         | Solid `--foreground`                                                       |
 | Drop shadow on text (`drop-shadow-*`)                                                                   | No shadow on text                                                          |

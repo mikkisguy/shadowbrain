@@ -16,11 +16,11 @@ inverted/selected state — it is a foil, not a primary color.
 
 | Token            | Hex                         | CSS variable            | Usage                                |
 | ---------------- | --------------------------- | ----------------------- | ------------------------------------ |
-| Page background  | `#0A0B14`                   | `--background`          | Root background, page canvas         |
+| Page background  | `#0A0A0A`                   | `--background`          | Root background, page canvas         |
 | Primary text     | `#E4DCC8`                   | `--foreground`          | Default text on dark                 |
 | Elevated surface | `rgba(228, 220, 200, 0.03)` | `--surface-elevated`    | Cards, panels (slight tint)          |
 | Inverted surface | `#E4DCC8`                   | `--surface-inverted`    | Selected/active state — cream fill   |
-| Inverted text    | `#0A0B14`                   | `--foreground-inverted` | Text on cream                        |
+| Inverted text    | `#0A0A0A`                   | `--foreground-inverted` | Text on cream                        |
 | Muted hover      | `rgba(228, 220, 200, 0.06)` | `--surface-muted`       | Subtle hover/active backgrounds      |
 | Hairline         | `rgba(228, 220, 200, 0.10)` | `--border`              | Dividers, card borders               |
 | Strong hairline  | `rgba(228, 220, 200, 0.20)` | `--border-strong`       | Focused input borders, modal borders |
@@ -102,15 +102,15 @@ accent on detail view. See the design system spec for the full rule.
 
 ## Layout constants
 
-| Constant           | Value                                           |
-| ------------------ | ----------------------------------------------- |
-| Border radius      | `0` (no exceptions)                             |
-| Shadows            | none (use hairline borders + color contrast)    |
-| Spacing base       | 4px (Tailwind default)                          |
-| Type dots          | 6px filled circle (1.5px inset from badge edge) |
-| Detail edge accent | 2px solid, 16px left padding                    |
-| Focus outline      | 1px solid `--primary`, 2px offset               |
-| Transition timing  | 150ms ease-out, color/opacity only              |
+| Constant           | Value                                                                    |
+| ------------------ | ------------------------------------------------------------------------ |
+| Border radius      | `2px` uniform (all `--radius-*` resolve to 2px, opt-in via `rounded-sm`) |
+| Shadows            | none (use hairline borders + color contrast)                             |
+| Spacing base       | 4px (Tailwind default)                                                   |
+| Type dots          | 6px filled circle (1.5px inset from badge edge)                          |
+| Detail edge accent | 2px solid, 16px left padding                                             |
+| Focus outline      | 1px solid `--primary`, 2px offset                                        |
+| Transition timing  | 150ms ease-out, color/opacity only                                       |
 
 ---
 
@@ -172,13 +172,13 @@ export default {
       },
       borderRadius: {
         none: "0",
-        DEFAULT: "0",
-        sm: "0",
-        md: "0",
-        lg: "0",
-        xl: "0",
-        "2xl": "0",
-        full: "0",
+        DEFAULT: "2px",
+        sm: "2px",
+        md: "2px",
+        lg: "2px",
+        xl: "2px",
+        "2xl": "2px",
+        full: "2px",
       },
       boxShadow: {
         none: "none",
@@ -211,11 +211,11 @@ export default {
 
 :root {
   /* Surface */
-  --background: #0a0b14;
+  --background: #0a0a0a;
   --foreground: #e4dcc8;
   --surface-elevated: rgba(228, 220, 200, 0.03);
   --surface-inverted: #e4dcc8;
-  --foreground-inverted: #0a0b14;
+  --foreground-inverted: #0a0a0a;
   --surface-muted: rgba(228, 220, 200, 0.06);
   --border: rgba(228, 220, 200, 0.1);
   --border-strong: rgba(228, 220, 200, 0.2);

@@ -1,130 +1,236 @@
+/*
+ * ShadowBrain global styles.
+ *
+ * The design system tokens (color, typography, spacing, motion) are
+ * declared as CSS custom properties in `:root` and exposed to Tailwind
+ * utilities through the `@theme inline` block below.
+ *
+ * See:
+ *   - docs/superpowers/specs/2026-06-20-design-system-design.md
+ *   - docs/design-tokens.md
+ */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
+/* Map our CSS variables to Tailwind v4 theme tokens. The `inline`
+ * modifier means Tailwind references the var() at runtime, so a
+ * token change (e.g. dark → light theme) cascades through the
+ * utilities without a rebuild. */
 @theme inline {
+  /* --- Color: surface --- */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-inverted: var(--surface-inverted);
+  --color-foreground-inverted: var(--foreground-inverted);
+  --color-surface-muted: var(--surface-muted);
   --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
+  --color-border-strong: var(--border-strong);
   --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
+
+  /* --- Color: surface (warm — for featured content) --- */
+  --color-surface-warm: var(--surface-warm);
+  --color-surface-warm-foreground: var(--surface-warm-foreground);
+  --color-surface-warm-border: var(--surface-warm-border);
+
+  /* --- Color: cool accents (brand) --- */
   --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-muted: var(--primary-muted);
+  --color-accent-cyan: var(--accent-cyan);
+  --color-accent-violet: var(--accent-violet);
+
+  /* --- Color: semantic status --- */
+  --color-success: var(--success);
+  --color-error: var(--error);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+
+  /* --- Color: type accents (data markers) --- */
+  --color-type-note: var(--type-note);
+  --color-type-bookmark: var(--type-bookmark);
+  --color-type-journal: var(--type-journal);
+  --color-type-question: var(--type-question);
+  --color-type-project: var(--type-project);
+  --color-type-person: var(--type-person);
+  --color-type-event: var(--type-event);
+  --color-type-dream: var(--type-dream);
+  --color-type-raw: var(--type-raw);
+
+  /* --- shadcn/ui compatibility aliases ----------------------------
+   * The shadcn components we use (Button, Separator, etc.) reference
+   * the standard shadcn token names. We map them onto our ShadowBrain
+   * tokens so installed components pick up the design system without
+   * extra theming. These aliases are *not* the canonical token names
+   * — see the variables in :root for the source of truth. */
+  --color-card: var(--background);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--background);
+  --color-popover-foreground: var(--foreground);
+  --color-secondary: var(--surface-elevated);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--surface-muted);
+  --color-accent: var(--surface-elevated);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--error);
+  --color-input: var(--border-strong);
+  --color-ring: var(--primary);
+
+  /* --- Typography --- */
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+
+  /* --- Border radius: a uniform 2px softening.
+   * The design spec originally called for 0 everywhere; after
+   * seeing the shell in action a small radius read as more
+   * polished without compromising the editorial direction. The
+   * 2px value is the design intent; individual elements opt in
+   * via the `rounded-sm` (or larger) utility. */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 2px;
+  --radius-3xl: 2px;
+  --radius-4xl: 2px;
+  --radius: 2px;
+
+  /* --- Shadows: none. Depth is created by color contrast. --- */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  --shadow-2xl: none;
+  --shadow-inner: none;
+
+  /* --- Default motion: 150ms ease-out, color/opacity only. --- */
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
 }
 
+/* --- Design tokens (the source of truth) ----------------------------
+ * v1 is dark-only; the .dark selector is kept for compatibility with
+ * shadcn components that target it, but the values are identical to
+ * :root. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* Surface — neutral near-black canvas. The previous value
+   * (#0a0b14) had a faint blue cast; #0a0a0a is a true neutral
+   * near-black so the cool-spectrum accents (cyan / blue /
+   * violet) carry the color identity on their own. */
+  --background: #0a0a0a;
+  --foreground: #e4dcc8;
+  --surface-elevated: rgba(228, 220, 200, 0.03);
+  --surface-inverted: #e4dcc8;
+  --foreground-inverted: #0a0a0a;
+  --surface-muted: rgba(228, 220, 200, 0.06);
+  --border: rgba(228, 220, 200, 0.1);
+  --border-strong: rgba(228, 220, 200, 0.2);
+  --muted-foreground: rgba(228, 220, 200, 0.65);
+
+  /* Surface — warm (for featured/elevated content; use sparingly) */
+  --surface-warm: #322b19;
+  --surface-warm-foreground: #e4dcc8;
+  --surface-warm-border: rgba(228, 220, 200, 0.1);
+
+  /* Cool accents — primary is the anchor */
+  --primary: #3d6bff;
+  --primary-foreground: #e4dcc8;
+  --primary-muted: rgba(61, 111, 255, 0.15);
+  --accent-cyan: #4fcfff;
+  --accent-violet: #7b6aff;
+
+  /* Semantic status (functional, never decorative) */
+  --success: #22c55e;
+  --error: #ef4444;
+  --warning: #f59e0b;
+  --info: #3d6bff;
+
+  /* Type colors (data markers — used only as dots/edge accents) */
+  --type-note: #22c55e;
+  --type-bookmark: #f59e0b;
+  --type-journal: #7c5cfc;
+  --type-question: #14b8a6;
+  --type-project: #ec4899;
+  --type-person: #3b82f6;
+  --type-event: #f97316;
+  --type-dream: #a855f7;
+  --type-raw: #6b7280;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* v1 is dark-only; this block mirrors :root so shadcn components
+   * targeting `.dark` see the same palette. */
+  --background: #0a0a0a;
+  --foreground: #e4dcc8;
+  --surface-elevated: rgba(228, 220, 200, 0.03);
+  --surface-inverted: #e4dcc8;
+  --foreground-inverted: #0a0a0a;
+  --surface-muted: rgba(228, 220, 200, 0.06);
+  --border: rgba(228, 220, 200, 0.1);
+  --border-strong: rgba(228, 220, 200, 0.2);
+  --muted-foreground: rgba(228, 220, 200, 0.65);
+  --surface-warm: #322b19;
+  --surface-warm-foreground: #e4dcc8;
+  --surface-warm-border: rgba(228, 220, 200, 0.1);
+  --primary: #3d6bff;
+  --primary-foreground: #e4dcc8;
+  --primary-muted: rgba(61, 111, 255, 0.15);
+  --accent-cyan: #4fcfff;
+  --accent-violet: #7b6aff;
+  --success: #22c55e;
+  --error: #ef4444;
+  --warning: #f59e0b;
+  --info: #3d6bff;
+  --type-note: #22c55e;
+  --type-bookmark: #f59e0b;
+  --type-journal: #7c5cfc;
+  --type-question: #14b8a6;
+  --type-project: #ec4899;
+  --type-person: #3b82f6;
+  --type-event: #f97316;
+  --type-dream: #a855f7;
+  --type-raw: #6b7280;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    @apply font-sans antialiased;
+  }
   body {
     @apply bg-background text-foreground;
+    /* Editorial texture: subtle vignette to give the dark canvas
+     * a touch of depth without resorting to glow or gradients. */
+    background-image: radial-gradient(
+      ellipse at top,
+      rgba(61, 111, 255, 0.04),
+      transparent 60%
+    );
+    background-attachment: fixed;
   }
-  html {
-    @apply font-sans;
+  /* Selection: invert — cream highlight on the cool canvas. */
+  ::selection {
+    background-color: var(--surface-inverted);
+    color: var(--foreground-inverted);
+  }
+
+  /* Respect the user's motion preference. The spec's 150ms ease-out
+   * is the default; users who have asked the OS to reduce motion
+   * get instant transitions and no animations. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0s !important;
+      animation-duration: 0s !important;
+      animation-iteration-count: 1 !important;
+    }
   }
 }
