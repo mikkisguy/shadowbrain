@@ -85,15 +85,20 @@
   --font-serif: var(--font-serif);
   --font-mono: var(--font-mono);
 
-  /* --- Border radius: 0 everywhere. Editorial spec. --- */
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
-  --radius-2xl: 0;
-  --radius-3xl: 0;
-  --radius-4xl: 0;
-  --radius: 0;
+  /* --- Border radius: a uniform 2px softening.
+   * The design spec originally called for 0 everywhere; after
+   * seeing the shell in action a small radius read as more
+   * polished without compromising the editorial direction. We keep
+   * it small enough that badges, tags, and the inversion state
+   * still read as essentially square. */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 2px;
+  --radius-3xl: 2px;
+  --radius-4xl: 2px;
+  --radius: 2px;
 
   /* --- Shadows: none. Depth is created by color contrast. --- */
   --shadow-sm: none;

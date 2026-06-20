@@ -86,12 +86,21 @@ describe("design system — globals.css tokens", () => {
     );
   });
 
-  it("overrides border-radius to 0 across the scale", () => {
-    expect(css).toMatch(/--radius:\s*0\b/);
-    expect(css).toMatch(/--radius-sm:\s*0\b/);
-    expect(css).toMatch(/--radius-md:\s*0\b/);
-    expect(css).toMatch(/--radius-lg:\s*0\b/);
-    expect(css).toMatch(/--radius-xl:\s*0\b/);
+  it("uses a uniform 2px border-radius softening across the scale", () => {
+    for (const token of [
+      "--radius",
+      "--radius-sm",
+      "--radius-md",
+      "--radius-lg",
+      "--radius-xl",
+      "--radius-2xl",
+      "--radius-3xl",
+      "--radius-4xl",
+    ]) {
+      expect(css, `${token} should be 2px`).toMatch(
+        new RegExp(`${token}:\\s*2px`)
+      );
+    }
   });
 
   it("disables box-shadow across the scale", () => {
