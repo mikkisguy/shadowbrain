@@ -1,5 +1,5 @@
 <div align="center">
-<img width="150" height="148" alt="image" src="https://raw.githubusercontent.com/mikkisguy/shadowbrain/refs/heads/main/public/logo_small.png" />
+<img width="150" height="148" alt="image" src="https://raw.githubusercontent.com/mikkisguy/shadowbrain/refs/heads/main/public/logo.png" />
 
 ---
 
