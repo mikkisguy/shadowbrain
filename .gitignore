@@ -13,6 +13,11 @@ data/*
 !data/.gitkeep
 pgdata/
 
+# Markdown notes (the importer reads this dir; users drop their own files in)
+markdown/**/*.md
+!markdown/.gitkeep
+!markdown/README.md
+
 # Dependencies
 node_modules/
 .pnpm-store/
