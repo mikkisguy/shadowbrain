@@ -60,11 +60,11 @@ work with shadcn/ui conventions.
 
 | Token                   | Value                       | Use                                              |
 | ----------------------- | --------------------------- | ------------------------------------------------ |
-| `--background`          | `#0A0B14`                   | Page background                                  |
+| `--background`          | `#0A0A0A`                   | Page background                                  |
 | `--foreground`          | `#E4DCC8`                   | Primary text (cream) on dark                     |
 | `--surface-elevated`    | `rgba(228, 220, 200, 0.03)` | Slight tint for cards/panels over `--background` |
 | `--surface-inverted`    | `#E4DCC8`                   | Selected/active state — cream fills, dark text   |
-| `--foreground-inverted` | `#0A0B14`                   | Text on cream (`--surface-inverted`)             |
+| `--foreground-inverted` | `#0A0A0A`                   | Text on cream (`--surface-inverted`)             |
 | `--surface-muted`       | `rgba(228, 220, 200, 0.06)` | Subtle hover/active backgrounds                  |
 | `--border`              | `rgba(228, 220, 200, 0.10)` | Hairlines, dividers, card borders                |
 | `--border-strong`       | `rgba(228, 220, 200, 0.20)` | Stronger dividers, focused input borders         |

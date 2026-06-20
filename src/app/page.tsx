@@ -104,7 +104,7 @@ export default function Home() {
 
         <footer className="border-border flex flex-col gap-2 border-t pt-6">
           <p className="text-muted-foreground font-mono text-xs">
-            build · {new Date().toISOString().slice(0, 10)} · 0a0b14
+            build · {new Date().toISOString().slice(0, 10)} · 0a0a0a
           </p>
           <p className="text-muted-foreground font-sans text-xs">
             Coming soon — global command palette (<kbd>Ctrl K</kbd>), browse,

@@ -19,13 +19,13 @@ describe("design system — globals.css tokens", () => {
   const css = readFileSync(cssPath, "utf8");
 
   it("declares the surface tokens from the spec", () => {
-    expect(css).toMatch(/--background:\s*#0a0b14/i);
+    expect(css).toMatch(/--background:\s*#0a0a0a/i);
     expect(css).toMatch(/--foreground:\s*#e4dcc8/i);
     expect(css).toMatch(
       /--surface-elevated:\s*rgba\(228,\s*220,\s*200,\s*0\.03\)/i
     );
     expect(css).toMatch(/--surface-inverted:\s*#e4dcc8/i);
-    expect(css).toMatch(/--foreground-inverted:\s*#0a0b14/i);
+    expect(css).toMatch(/--foreground-inverted:\s*#0a0a0a/i);
     expect(css).toMatch(/--border:\s*rgba\(228,\s*220,\s*200,\s*0\.1\)/i);
     expect(css).toMatch(
       /--border-strong:\s*rgba\(228,\s*220,\s*200,\s*0\.2\)/i

@@ -118,12 +118,15 @@
  * shadcn components that target it, but the values are identical to
  * :root. */
 :root {
-  /* Surface — cool, dark canvas */
-  --background: #0a0b14;
+  /* Surface — neutral near-black canvas. The previous value
+   * (#0a0b14) had a faint blue cast; #0a0a0a is a true neutral
+   * near-black so the cool-spectrum accents (cyan / blue /
+   * violet) carry the color identity on their own. */
+  --background: #0a0a0a;
   --foreground: #e4dcc8;
   --surface-elevated: rgba(228, 220, 200, 0.03);
   --surface-inverted: #e4dcc8;
-  --foreground-inverted: #0a0b14;
+  --foreground-inverted: #0a0a0a;
   --surface-muted: rgba(228, 220, 200, 0.06);
   --border: rgba(228, 220, 200, 0.1);
   --border-strong: rgba(228, 220, 200, 0.2);
@@ -162,11 +165,11 @@
 .dark {
   /* v1 is dark-only; this block mirrors :root so shadcn components
    * targeting `.dark` see the same palette. */
-  --background: #0a0b14;
+  --background: #0a0a0a;
   --foreground: #e4dcc8;
   --surface-elevated: rgba(228, 220, 200, 0.03);
   --surface-inverted: #e4dcc8;
-  --foreground-inverted: #0a0b14;
+  --foreground-inverted: #0a0a0a;
   --surface-muted: rgba(228, 220, 200, 0.06);
   --border: rgba(228, 220, 200, 0.1);
   --border-strong: rgba(228, 220, 200, 0.2);
