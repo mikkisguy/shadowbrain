@@ -217,14 +217,26 @@ Request Workflow below).
 
 ## Pull Request Workflow
 
-**Default behavior: in-place fixes.** When the developer asks for a
-fix without explicitly requesting a new branch and PR, do the fix in
-place on the current branch. If a PR is already open, push to the same
-PR. "Scope discipline" means "do not mix unrelated changes into a PR"
-— it does not mean "always split ad-hoc fixes into a new branch and
-PR." Only create a new branch and PR when the developer explicitly
-says so, or when the work is for a separate, distinct issue that has
-been triaged in the issue tracker.
+**Default flow for triaged issues: start on a fresh branch from `main`.**
+When you begin work on a triaged issue, do not commit on whatever
+branch is currently checked out. Instead:
+
+1. `git checkout main`
+2. `git pull origin main` (or `git pull` if `main` already tracks
+   `origin/main`)
+3. Create a branch named after the issue, e.g. `issue/<#>-<slug>`
+   (e.g. `issue/123-rate-limit-auth`).
+4. Implement the issue on that branch.
+
+**Exception: in-place fixes on an existing PR.** If a PR is already
+open for the work — including subsequent review iterations on the
+same issue (checklist fixes, `@oracle` findings, CI failures) — push
+to the same branch and PR. "Scope discipline" means "do not mix
+unrelated changes into a PR" — it does not mean "always split
+ad-hoc fixes into a new branch and PR." Only create a new branch
+and PR when the developer explicitly says so, or when the work is
+for a separate, distinct issue that has been triaged in the issue
+tracker.
 
 When the issue assigned to you is implemented and locally verified
 (`pnpm verify` is green), take the work through to a PR that is green
@@ -255,9 +267,13 @@ decision.**
    change is itself a security/architectural decision.
 
    Pass to `@oracle`: the issue reference, the full diff, the list of
-   files touched, and a one-line description of intent. Address all
-   `must-fix` findings before opening the PR; `should-fix` items are
-   at your discretion but should be acknowledged in the PR body.
+   files touched, and a one-line description of intent. Address every
+   `must-fix` and `should-fix` finding on the branch, then re-delegate
+   to `@oracle` with the updated diff. **Loop until `@oracle` reports
+   no remaining must-fix or should-fix findings** — only then proceed
+   to open the PR. Any item you intentionally defer must be called
+   out in the PR body with a one-line justification; silently skipping
+   a finding is not acceptable.
 
 3. **Stage and commit** only the intended files. Inspect `git status`
    and `git diff` first; never commit secrets. Write a concise commit
