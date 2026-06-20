@@ -1,12 +1,32 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { cleanupTestDb, createTestDb } from "@/db/test-utils";
 import { GET, POST } from "@/app/api/items/route";
 import { GET as GET_BY_ID, PATCH, DELETE } from "@/app/api/items/[id]/route";
+
+// Mock the metadata fetcher so tests don't touch the network. Each test
+// sets its own `fetchBookmarkMetadata` behaviour via the per-test
+// `mockFetcher` mock below.
+vi.mock("@/lib/metadata-fetcher", () => ({
+  fetchBookmarkMetadata: vi.fn(),
+}));
+
+// Imported lazily after the mock is registered so the route handler
+// picks up the mocked implementation.
+import { fetchBookmarkMetadata } from "@/lib/metadata-fetcher";
+const mockFetcher = vi.mocked(fetchBookmarkMetadata);
 
 describe("/api/items", () => {
   beforeEach(() => {
     cleanupTestDb();
     createTestDb().close();
+    mockFetcher.mockReset();
+    // Default to a graceful no-op so unrelated tests don't accidentally
+    // hit the network.
+    mockFetcher.mockResolvedValue({
+      ok: false,
+      reason: "no url in content",
+      metadata: { url: "", fetched_at: new Date().toISOString() },
+    });
   });
 
   afterEach(() => {
@@ -160,5 +180,206 @@ describe("/api/items/[id]", () => {
       params: Promise.resolve({ id: created.id }),
     });
     expect(deleteRes.status).toBe(200);
+  });
+});
+
+describe("/api/items bookmark auto-fetch", () => {
+  beforeEach(() => {
+    cleanupTestDb();
+    createTestDb().close();
+    mockFetcher.mockReset();
+  });
+
+  afterEach(() => {
+    cleanupTestDb();
+  });
+
+  it("stores fetched og:title / description / favicon in metadata", async () => {
+    mockFetcher.mockResolvedValue({
+      ok: true,
+      metadata: {
+        url: "https://example.com/article",
+        title: "Real Title",
+        description: "Real Desc",
+        favicon: "https://example.com/f.ico",
+        site_name: "Example",
+        image: null,
+        fetched_at: "2026-06-20T00:00:00.000Z",
+      },
+    });
+
+    const req = new Request("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "bookmark",
+        content: "https://example.com/article",
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+
+    expect(json.type).toBe("bookmark");
+    expect(json.source_url).toBe("https://example.com/article");
+    const md = JSON.parse(json.metadata);
+    expect(md.title).toBe("Real Title");
+    expect(md.description).toBe("Real Desc");
+    expect(md.favicon).toBe("https://example.com/f.ico");
+    expect(md.url).toBe("https://example.com/article");
+    expect(mockFetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("still saves the bookmark when the fetcher fails (graceful fallback)", async () => {
+    mockFetcher.mockResolvedValue({
+      ok: false,
+      reason: "upstream 503",
+      metadata: {
+        url: "https://example.com/down",
+        fetched_at: "2026-06-20T00:00:00.000Z",
+      },
+    });
+
+    const req = new Request("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "bookmark",
+        content: "https://example.com/down",
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+
+    expect(json.type).toBe("bookmark");
+    expect(json.source_url).toBe("https://example.com/down");
+    // The fetch failure is recorded so the user can see "we tried".
+    const md = JSON.parse(json.metadata);
+    expect(md.auto_fetch).toEqual({
+      status: "error",
+      reason: "upstream 503",
+      url: "https://example.com/down",
+      fetched_at: "2026-06-20T00:00:00.000Z",
+    });
+  });
+
+  it("records a generic reason (no hostnames leaked) when DNS fails", async () => {
+    // The fetcher's DNS error messages must not include the hostname
+    // the user requested — the security baseline says SSRF / DNS error
+    // messages stay generic. The user knows what they typed; no
+    // reason to echo it in the saved metadata.
+    mockFetcher.mockResolvedValue({
+      ok: false,
+      reason: "DNS timeout",
+      metadata: {
+        url: "https://internal.example.com/",
+        fetched_at: "2026-06-20T00:00:00.000Z",
+      },
+    });
+    const req = new Request("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "bookmark",
+        content: "https://internal.example.com/",
+      }),
+    });
+    const res = await POST(req);
+    const json = await res.json();
+    const md = JSON.parse(json.metadata);
+    expect(md.auto_fetch.reason).toBe("DNS timeout");
+    expect(md.auto_fetch.reason).not.toMatch(/internal\.example/);
+  });
+
+  it("user-supplied metadata wins over auto-fetched fields", async () => {
+    mockFetcher.mockResolvedValue({
+      ok: true,
+      metadata: {
+        url: "https://example.com/article",
+        title: "Auto Title",
+        description: "Auto Desc",
+        favicon: "https://example.com/auto.ico",
+        site_name: null,
+        image: null,
+        fetched_at: "2026-06-20T00:00:00.000Z",
+      },
+    });
+
+    const req = new Request("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "bookmark",
+        content: "https://example.com/article",
+        metadata: { title: "My Override", source: "manual" },
+      }),
+    });
+    const res = await POST(req);
+    const json = await res.json();
+    const md = JSON.parse(json.metadata);
+    expect(md.title).toBe("My Override");
+    expect(md.description).toBe("Auto Desc");
+    expect(md.source).toBe("manual");
+  });
+
+  it("honours a user-supplied source_url instead of re-detecting", async () => {
+    mockFetcher.mockResolvedValue({
+      ok: true,
+      metadata: {
+        url: "https://other.example/",
+        title: "X",
+        description: null,
+        favicon: null,
+        site_name: null,
+        image: null,
+        fetched_at: "2026-06-20T00:00:00.000Z",
+      },
+    });
+
+    const req = new Request("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "bookmark",
+        content: "https://other.example/",
+        source_url: "https://canonical.example/article",
+      }),
+    });
+    const res = await POST(req);
+    const json = await res.json();
+    expect(json.source_url).toBe("https://canonical.example/article");
+  });
+
+  it("does not invoke the fetcher for non-bookmark types", async () => {
+    const req = new Request("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "note",
+        content: "https://example.com",
+      }),
+    });
+    await POST(req);
+    expect(mockFetcher).not.toHaveBeenCalled();
+  });
+
+  it("saves a bookmark with no URL and no metadata", async () => {
+    mockFetcher.mockResolvedValue({
+      ok: false,
+      reason: "no url in content",
+      metadata: { url: "", fetched_at: "2026-06-20T00:00:00.000Z" },
+    });
+    const req = new Request("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "bookmark", content: "no link here" }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.type).toBe("bookmark");
+    expect(json.source_url).toBeNull();
+    expect(json.metadata).toBeNull();
   });
 });
