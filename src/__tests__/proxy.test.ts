@@ -127,6 +127,21 @@ describe("proxy", () => {
     expect(decodeURIComponent(location)).toContain("/items/123");
   });
 
+  it("redirects an unauthenticated browser request for / to /login?from=/", async () => {
+    // The home page is the only real surface today, so the proxy
+    // MUST bounce an unauthenticated visitor off it to the sign-in
+    // page (with the intended destination preserved as `from`).
+    const req = new FakeNextRequest({
+      url: "http://localhost/",
+      headers: { Accept: "text/html" },
+    });
+    const res = await proxy(req as never);
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("/login");
+    expect(decodeURIComponent(location)).toContain("from=/");
+  });
+
   it("returns 401 for unauthenticated API requests", async () => {
     const req = new FakeNextRequest({
       url: "http://localhost/api/items",

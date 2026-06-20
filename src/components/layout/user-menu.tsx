@@ -1,26 +1,34 @@
-import Link from "next/link";
 import { CircleUser } from "lucide-react";
 
 /**
- * User menu — entry point to sign in.
+ * User menu — sign out.
  *
- * When unauthenticated, this is a single link to `/login` styled as
- * an icon button. The auth-aware variant (showing the username and a
- * sign-out action) is intentionally out of scope for this issue —
- * the home page is currently the only authenticated surface, and
- * the logout endpoint is reachable directly via `POST
- * /api/auth/logout`. A future "Phase 3" admin shell will replace
- * this component with a real menu.
+ * The top nav is only rendered when the visitor is authenticated
+ * (see `src/app/layout.tsx`), so this component is only ever seen
+ * in that state. A plain HTML form posts to `/api/auth/logout`,
+ * which clears the session cookie and 303-redirects back to
+ * `/login` — no JavaScript required, no client component, the
+ * server is the only source of truth for the auth boundary.
+ *
+ * A future "Phase 3" admin shell will likely replace this with a
+ * dropdown that shows the username and a labelled sign-out action;
+ * for now the icon-only affordance matches the v1 chrome.
  */
 export function UserMenu() {
   return (
-    <Link
-      href="/login"
+    <form
+      action="/api/auth/logout"
+      method="post"
       data-testid="user-menu"
-      aria-label="Sign in"
-      className="border-border bg-surface-elevated text-muted-foreground hover:border-border-strong hover:bg-surface-muted hover:text-foreground inline-flex size-8 items-center justify-center rounded-sm border transition-colors"
+      aria-label="Sign out"
     >
-      <CircleUser aria-hidden="true" className="size-4" strokeWidth={1.5} />
-    </Link>
+      <button
+        type="submit"
+        aria-label="Sign out"
+        className="border-border bg-surface-elevated text-muted-foreground hover:border-border-strong hover:bg-surface-muted hover:text-foreground inline-flex size-8 cursor-pointer items-center justify-center rounded-sm border transition-colors"
+      >
+        <CircleUser aria-hidden="true" className="size-4" strokeWidth={1.5} />
+      </button>
+    </form>
   );
 }

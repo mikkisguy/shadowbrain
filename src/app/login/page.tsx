@@ -8,6 +8,13 @@
  * "Invalid credentials" error and re-renders so the user can
  * retry — the server is the source of truth for the error.
  *
+ * If the visitor is already authenticated, this page redirects
+ * to `/` (or to the safe `from` target if one is supplied). The
+ * proxy would also have allowed the visitor through to `/` if
+ * they had a valid cookie, so the login form is never useful
+ * in that state — the redirect avoids the user re-typing
+ * credentials only to land on the home page anyway.
+ *
  * The page is intentionally server-rendered to keep the
  * HTML payload tiny: the design system already provides the
  * typography tokens, so no client-only CSS is needed for the
@@ -15,8 +22,12 @@
  * the user still gets a working flow even with JS disabled.
  */
 
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
 import { LoginForm } from "./login-form";
 import { getEnv } from "@/lib/env";
+import { isSessionCookieValid } from "@/lib/auth/session";
 
 export const metadata = {
   title: "Sign in — ShadowBrain",
@@ -38,6 +49,23 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   // `SESSION_SECRET` from it via the API route. The returned
   // env object is not used by this page.
   void getEnv();
+
+  // If the visitor is already authenticated, bounce them to the
+  // safe `from` target (or `/`). `redirect()` throws a special
+  // NEXT_REDIRECT error that Next.js catches to issue the 302,
+  // so the rest of this function does not run.
+  const store = await cookies();
+  const sessionCookie = store.get("sb_session");
+  if (sessionCookie) {
+    const env = getEnv();
+    const ok = await isSessionCookieValid(
+      sessionCookie.value,
+      env.SESSION_SECRET
+    );
+    if (ok) {
+      redirect(safeRedirectOrRoot(from));
+    }
+  }
 
   // Validate the `from` parameter to avoid open-redirect via the
   // login bounce-back. Only same-origin paths are accepted.

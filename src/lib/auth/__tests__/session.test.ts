@@ -9,6 +9,7 @@ import {
   buildClearSessionCookie,
   buildSessionCookie,
   getSessionMaxAge,
+  isSessionCookieValid,
   readSessionFromRequest,
   signSessionValue,
   verifySessionValue,
@@ -226,6 +227,39 @@ describe("readSessionFromRequest", () => {
     const result = await readSessionFromRequest(req, SECRET);
     expect(result.ok).toBe(true);
     expect(result.session?.username).toBe("admin");
+  });
+});
+
+describe("isSessionCookieValid", () => {
+  it("returns false for a missing/empty cookie value", async () => {
+    expect(await isSessionCookieValid(null, SECRET)).toBe(false);
+    expect(await isSessionCookieValid(undefined, SECRET)).toBe(false);
+    expect(await isSessionCookieValid("", SECRET)).toBe(false);
+  });
+
+  it("returns true for a freshly signed cookie value", async () => {
+    const value = await signSessionValue({
+      username: "admin",
+      secret: SECRET,
+      maxAgeMs: DEFAULT_SESSION_AGE_MS,
+    });
+    expect(await isSessionCookieValid(value, SECRET)).toBe(true);
+  });
+
+  it("returns false for a malformed cookie value", async () => {
+    expect(await isSessionCookieValid("not-a-real-session", SECRET)).toBe(
+      false
+    );
+  });
+
+  it("returns false for an expired session", async () => {
+    const value = await signSessionValue({
+      username: "admin",
+      secret: SECRET,
+      maxAgeMs: 1000,
+      now: Date.now() - 60 * 60 * 1000,
+    });
+    expect(await isSessionCookieValid(value, SECRET)).toBe(false);
   });
 });
 

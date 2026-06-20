@@ -279,11 +279,14 @@ describe("POST /api/auth/logout", () => {
     createTestDb().close();
   });
 
-  it("returns 200 and a clearing Set-Cookie", async () => {
+  it("returns 303 to /login and a clearing Set-Cookie", async () => {
     const res = await logout(
       new Request("http://localhost/api/auth/logout", { method: "POST" })
     );
-    expect(res.status).toBe(200);
+    // 303 See Other so a plain HTML form submission gives the user
+    // a clean post-logout flow without any client-side JS.
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/login");
     const setCookie = res.headers.get("set-cookie") ?? "";
     expect(setCookie).toContain(`${SESSION_COOKIE_NAME}=`);
     expect(setCookie).toContain("Max-Age=0");

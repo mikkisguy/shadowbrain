@@ -287,6 +287,26 @@ export async function readSessionFromRequest(
   return { ...result, present: true };
 }
 
+/** Lightweight session check for server components / route handlers
+ *  that only need a yes/no answer (e.g. layout chrome, the /login
+ *  page deciding whether to bounce an already-authenticated visitor
+ *  back to /). Builds a minimal `Request` from the supplied
+ *  cookie value (or `null`/`undefined` for "no cookie present")
+ *  and delegates to `readSessionFromRequest`. Never throws — a
+ *  missing, malformed, or expired cookie simply returns `false`. */
+export async function isSessionCookieValid(
+  cookieValue: string | null | undefined,
+  secret: string,
+  maxAgeMs: number = DEFAULT_SESSION_AGE_MS
+): Promise<boolean> {
+  if (!cookieValue) return false;
+  const request = new Request("http://internal/session-check", {
+    headers: { cookie: `${SESSION_COOKIE_NAME}=${cookieValue}` },
+  });
+  const result = await readSessionFromRequest(request, secret, maxAgeMs);
+  return result.ok;
+}
+
 /** Build a `Set-Cookie` header value for the session. The cookie is
  *  HttpOnly, SameSite=Lax, and Secure in production. The path is
  *  `/` so it covers every route. */

@@ -1,10 +1,19 @@
 /**
  * POST /api/auth/logout
  *
- * Clears the session cookie. The endpoint is safe to call without
- * an existing session — the response is the same 200 either way
- * (this avoids leaking whether a cookie was present). The logout
- * event is recorded to `audit_logs` when a session was present.
+ * Clears the session cookie and redirects the browser back to
+ * `/login`. Returning a 303 (See Other) means a plain HTML form
+ * submission — no JS required — gives the user a clean
+ * post-logout flow: the browser POSTs the form, the server
+ * drops the cookie, and the browser follows the redirect to the
+ * sign-in page. The `SameSite=Lax` cookie is cleared on the
+ * response so the next render of `/login` sees the visitor as
+ * unauthenticated.
+ *
+ * The endpoint is safe to call without an existing session —
+ * the response is the same 303 either way (this avoids leaking
+ * whether a cookie was present). The logout event is recorded
+ * to `audit_logs` whenever the request reaches the route.
  */
 
 import { getEnv } from "@/lib/env";
@@ -32,10 +41,10 @@ export async function POST(request: Request) {
   });
   log("info", "auth.logout", { event: "auth.logout", ip });
 
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
+  return new Response(null, {
+    status: 303,
     headers: {
-      "Content-Type": "application/json",
+      Location: "/login",
       "Set-Cookie": cookie,
     },
   });
