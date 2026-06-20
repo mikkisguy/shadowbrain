@@ -239,7 +239,13 @@ async function main(): Promise<void> {
   // hash. The escape survives expansion: the interpolation regex has
   // a negative lookbehind for `\`, and `_resolveEscapeSequences`
   // unescapes `\$` back to `$` after interpolation.
-  const escapedHash = hash.replace(/\$/g, "\\$");
+  //
+  // Backslashes are escaped first so a hash that happens to contain
+  // a literal `\` (none do today — bcrypt's alphabet is
+  // `./A-Za-z0-9` — but the abstraction stays correct if that
+  // ever changes) is not re-escaped by the second pass. This is
+  // what CodeQL's `js/incomplete-string-escaping` is checking for.
+  const escapedHash = hash.replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
   process.stdout.write(`ADMIN_PASSWORD_HASH="${escapedHash}"\n`);
 
   // Best-effort: scrub the plaintext from memory. Strings are
