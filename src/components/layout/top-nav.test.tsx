@@ -8,9 +8,9 @@ import { TopNav } from "@/components/layout/top-nav";
  * Smoke test for the top-nav layout shell.
  *
  * Renders the TopNav server-side to static markup and checks the
- * editorial structure: brand, centered palette trigger (with the
- * data-palette-trigger hook the command palette in #88 will attach
- * to), theme toggle, and user menu placeholder.
+ * editorial structure: brand mark, centered palette trigger (with
+ * the data-palette-trigger hook the command palette in #88 will
+ * attach to), theme toggle, and user menu placeholder.
  *
  * The nav has very little logic; the value of this test is in
  * catching structural regressions if the layout is refactored.
@@ -29,15 +29,33 @@ describe("TopNav", () => {
     expect(headerMatch![0]).toMatch(/\bborder-border\b/);
   });
 
-  it("renders the brand wordmark as a link to home", () => {
-    expect(html).toMatch(/ShadowBrain/);
-    // Next's <Link> renders the aria-label before href in the static
-    // markup; assert both attributes are present on the same <a>.
+  it("renders the brand mark as a link to home (no wordmark, no frame)", () => {
+    // The link's accessible name is still "ShadowBrain — home" so
+    // assistive tech knows what the brand is.
     const brandLink = html.match(
       /<a[^>]*aria-label="ShadowBrain — home"[^>]*>/
     );
     expect(brandLink).not.toBeNull();
     expect(brandLink![0]).toMatch(/href="\/"/);
+
+    // The mark is the project logo served from /public.
+    const brand =
+      brandLink![0] +
+      html
+        .slice(html.indexOf(brandLink![0]) + brandLink![0].length)
+        .split("</a>")[0];
+    expect(brand).toMatch(/<img[^>]*src="\/logo\.png"/);
+    expect(brand).toMatch(/<img[^>]*width="32"/);
+    expect(brand).toMatch(/<img[^>]*height="32"/);
+  });
+
+  it("does not render the wordmark text in the nav", () => {
+    // The wordmark is a brand-mark-only design now; "ShadowBrain"
+    // must appear only in the aria-label, not as a visible <span>.
+    expect(html).toMatch(/ShadowBrain/); // still in aria-label
+    // Strip the aria-label attribute and confirm no visible "ShadowBrain".
+    const visibleText = html.replace(/aria-label="[^"]*"/g, "");
+    expect(visibleText).not.toMatch(/ShadowBrain/);
   });
 
   it("renders the centered palette trigger with the data hook for #88", () => {

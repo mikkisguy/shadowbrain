@@ -1,29 +1,39 @@
 import Link from "next/link";
 
-import { Brain } from "lucide-react";
-
 /**
- * Wordmark + logo lockup for the top nav.
+ * Brand mark for the top nav.
  *
- * Wordmark: Newsreader (serif, brand moments), sentence case, weight
- * 600, per the typographic roles in the design system spec.
+ * Uses the project logo from `/public/logo.png` — a 1024×1024
+ * network-mesh brain mark with a built-in cool-spectrum glow halo
+ * (cyan → blue → violet on transparent). The mark carries its own
+ * depth, so no card frame is needed around it.
+ *
+ * Sizing: 32×32 (h-8 / w-8), a small bump from the previous
+ * icon-in-frame at 28×28 so the mark reads cleanly at the smaller
+ * display size.
+ *
+ * The link's accessible name still resolves to "ShadowBrain — home"
+ * for assistive tech, even though the wordmark is no longer
+ * rendered.
  */
 export function Brand() {
   return (
     <Link
       href="/"
-      className="group/brand focus-visible:ring-ring focus-visible:ring-offset-background inline-flex items-center gap-2 outline-none focus-visible:ring-1 focus-visible:ring-offset-2"
       aria-label="ShadowBrain — home"
+      className="focus-visible:ring-ring focus-visible:ring-offset-background inline-flex items-center outline-none focus-visible:ring-1 focus-visible:ring-offset-2"
     >
-      <span
-        aria-hidden="true"
-        className="border-border bg-surface-elevated text-foreground group-hover/brand:border-border-strong flex size-7 items-center justify-center border transition-colors"
-      >
-        <Brain className="size-4" strokeWidth={1.5} />
-      </span>
-      <span className="font-serif text-base font-semibold tracking-tight">
-        ShadowBrain
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element -- the
+          /public asset is intentionally served as-is for now; if
+          we need a smaller variant, we can switch to next/image. */}
+      <img
+        src="/logo.png"
+        alt=""
+        width={32}
+        height={32}
+        decoding="async"
+        className="block size-8"
+      />
     </Link>
   );
 }
