@@ -1,6 +1,6 @@
 import path from "path";
 import { promises as fs } from "fs";
-import { getImageFullPath } from "@/lib/storage";
+import { getImageFullPath, PathTraversalError } from "@/lib/storage";
 import { errorResponse, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
 
@@ -11,9 +11,15 @@ import { log } from "@/lib/logger";
 const MAX_PATH_LENGTH = 200;
 
 // File extension -> Content-Type. Anything outside this map is
-// served as `application/octet-stream` to avoid MIME-type confusion
-// attacks (e.g. an SVG with embedded script being interpreted by the
-// browser as HTML).
+// served as `application/octet-stream` so unknown extensions cannot
+// trigger MIME sniffing in the browser.
+//
+// Note: SVGs are intentionally mapped to `image/svg+xml`, which means
+// the browser may render them inline and execute any embedded
+// `<script>` blocks. This is an accepted risk for the v1 read-only
+// route: the only writers are the capture pipeline, which controls
+// the source URLs. The App Security Baseline (CSP headers) will
+// mitigate this at a higher layer.
 const CONTENT_TYPES: Record<string, string> = {
   ".webp": "image/webp",
   ".jpg": "image/jpeg",
@@ -70,6 +76,9 @@ export async function GET(
 
     log("debug", "image served", {
       event: "image.serve",
+      // `joined` is user-controlled. We log it server-side only at
+      // debug level, which is suppressed when NODE_ENV=production.
+      // If we ever raise this to info/warn, redact `joined` first.
       path: joined,
       bytes: buffer.byteLength,
       contentType,
@@ -89,10 +98,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message === "Invalid image path: path traversal detected"
-    ) {
+    if (error instanceof PathTraversalError) {
       // Traversal attempts are user errors, not server errors —
       // map to a clean 400 and log at warn level for visibility.
       log("warn", "rejected image path traversal", {

@@ -13,9 +13,11 @@ const FILES: Record<string, string> = {
   "alpha.webp": "RIFF-WEBP-BYTES",
   "beta.png": "PNG-BYTES",
   "gamma.jpg": "JPEG-BYTES",
+  "zeta.jpeg": "JPEG-BYTES",
   "delta.gif": "GIF-BYTES",
   "epsilon.svg": "<svg></svg>",
   "unknown.bin": "BINARY",
+  "ALPHA2.WEBP": "RIFF-WEBP-UPPERCASE",
 };
 
 async function callGet(segments: string[]) {
@@ -56,6 +58,14 @@ describe("GET /api/images/[...path]", () => {
   it("serves a JPEG file (both .jpg and .jpeg)", async () => {
     const jpg = await callGet([FIXTURE_DIR, "gamma.jpg"]);
     expect(jpg.headers.get("Content-Type")).toBe("image/jpeg");
+    const jpeg = await callGet([FIXTURE_DIR, "zeta.jpeg"]);
+    expect(jpeg.headers.get("Content-Type")).toBe("image/jpeg");
+  });
+
+  it("resolves the extension case-insensitively", async () => {
+    const res = await callGet([FIXTURE_DIR, "ALPHA2.WEBP"]);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/webp");
   });
 
   it("serves a GIF file with the correct content-type", async () => {
@@ -128,6 +138,21 @@ describe("GET /api/images/[...path]", () => {
   it("returns 400 for an overlong path", async () => {
     const longSegment = "a".repeat(500);
     const res = await callGet([FIXTURE_DIR, longSegment]);
+    expect(res.status).toBe(400);
+  });
+
+  it("accepts a path at exactly MAX_PATH_LENGTH (200 chars)", async () => {
+    // The MAX_PATH_LENGTH cap applies to the joined path. Use a
+    // single 200-char segment so the joined length is exactly 200:
+    // 200 > 200 is false → the length guard passes and the
+    // missing-file lookup returns 404. The boundary is the value
+    // just past the limit.
+    const res = await callGet(["a".repeat(200)]);
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 for a path at MAX_PATH_LENGTH + 1 (201 chars)", async () => {
+    const res = await callGet(["a".repeat(201)]);
     expect(res.status).toBe(400);
   });
 
