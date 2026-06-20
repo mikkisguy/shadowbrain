@@ -346,3 +346,320 @@ describe("FTS5 triggers integration", () => {
     db.close();
   });
 });
+
+describe("search.queryWithFilters", () => {
+  function seedFtsFixtures(db: ReturnType<typeof createTestDb>) {
+    const noteId = crypto.randomUUID();
+    const bookmarkId = crypto.randomUUID();
+    const otherNoteId = crypto.randomUUID();
+    const now = "2024-01-01T00:00:00.000Z";
+
+    const insert = db.prepare(
+      `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+    insert.run(
+      noteId,
+      "note",
+      "docker notes",
+      "docker compose for local dev",
+      "manual",
+      now,
+      now
+    );
+    insert.run(
+      bookmarkId,
+      "bookmark",
+      "docker hub",
+      "docker hub is a registry",
+      "manual",
+      now,
+      now
+    );
+    insert.run(
+      otherNoteId,
+      "note",
+      "unrelated",
+      "kubernetes is also containers",
+      "manual",
+      now,
+      now
+    );
+
+    const tagId = crypto.randomUUID();
+    const otherTagId = crypto.randomUUID();
+    db.prepare(`INSERT INTO tags (id, name, created_at) VALUES (?, ?, ?)`).run(
+      tagId,
+      "infra",
+      now
+    );
+    db.prepare(`INSERT INTO tags (id, name, created_at) VALUES (?, ?, ?)`).run(
+      otherTagId,
+      "dev",
+      now
+    );
+
+    const link = db.prepare(
+      `INSERT INTO content_tags (content_id, tag_id, created_at) VALUES (?, ?, ?)`
+    );
+    link.run(noteId, tagId, now); // docker note tagged "infra"
+    link.run(otherNoteId, otherTagId, now); // unrelated note tagged "dev"
+
+    return { noteId, bookmarkId, otherNoteId, tagId, otherTagId };
+  }
+
+  it("returns all matches when no filters are provided", () => {
+    const db = createTestDb();
+    seedFtsFixtures(db);
+
+    const results = search.queryWithFilters(db, "docker");
+    const ids = results.map((r) => r.id).sort();
+    expect(ids.length).toBeGreaterThanOrEqual(2);
+    db.close();
+  });
+
+  it("filters by type", () => {
+    const db = createTestDb();
+    const { noteId, bookmarkId } = seedFtsFixtures(db);
+
+    const results = search.queryWithFilters(db, "docker", { type: "note" });
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe(noteId);
+    expect(results[0].type).toBe("note");
+
+    const bookmarkResults = search.queryWithFilters(db, "docker", {
+      type: "bookmark",
+    });
+    expect(bookmarkResults.length).toBe(1);
+    expect(bookmarkResults[0].id).toBe(bookmarkId);
+    db.close();
+  });
+
+  it("filters by tag", () => {
+    const db = createTestDb();
+    const { noteId } = seedFtsFixtures(db);
+
+    const results = search.queryWithFilters(db, "docker", { tag: "infra" });
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe(noteId);
+
+    const empty = search.queryWithFilters(db, "docker", { tag: "nope" });
+    expect(empty).toEqual([]);
+    db.close();
+  });
+
+  it("matches tags case-insensitively (tags table uses COLLATE NOCASE)", () => {
+    const db = createTestDb();
+    const { noteId } = seedFtsFixtures(db);
+
+    const upper = search.queryWithFilters(db, "docker", { tag: "INFRA" });
+    const mixed = search.queryWithFilters(db, "docker", { tag: "Infra" });
+    expect(upper.length).toBe(1);
+    expect(upper[0].id).toBe(noteId);
+    expect(mixed.length).toBe(1);
+    expect(mixed[0].id).toBe(noteId);
+    db.close();
+  });
+
+  it("combines type and tag filters", () => {
+    const db = createTestDb();
+    const { noteId } = seedFtsFixtures(db);
+
+    const matches = search.queryWithFilters(db, "docker", {
+      type: "note",
+      tag: "infra",
+    });
+    expect(matches.length).toBe(1);
+    expect(matches[0].id).toBe(noteId);
+
+    // type=bookmark, tag=infra -> no match (only the note has infra tag)
+    const noMatch = search.queryWithFilters(db, "docker", {
+      type: "bookmark",
+      tag: "infra",
+    });
+    expect(noMatch).toEqual([]);
+    db.close();
+  });
+
+  it("returns empty array when no matches satisfy filters", () => {
+    const db = createTestDb();
+    seedFtsFixtures(db);
+
+    const results = search.queryWithFilters(db, "kubernetes", { tag: "infra" });
+    expect(results).toEqual([]);
+    db.close();
+  });
+
+  it("respects limit and offset", () => {
+    const db = createTestDb();
+    seedFtsFixtures(db);
+
+    const page1 = search.queryWithFilters(db, "docker", {
+      limit: 1,
+      offset: 0,
+    });
+    const page2 = search.queryWithFilters(db, "docker", {
+      limit: 1,
+      offset: 1,
+    });
+    expect(page1.length).toBe(1);
+    expect(page2.length).toBe(1);
+    expect(page1[0].id).not.toBe(page2[0].id);
+    db.close();
+  });
+});
+
+describe("search.countWithFilters", () => {
+  it("returns the total match count ignoring limit/offset", () => {
+    const db = createTestDb();
+    const now = "2024-01-01T00:00:00.000Z";
+    const insert = db.prepare(
+      `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (let i = 0; i < 3; i++) {
+      insert.run(
+        crypto.randomUUID(),
+        "note",
+        `matchable ${i}`,
+        "some uniqueword here",
+        "manual",
+        now,
+        now
+      );
+    }
+    insert.run(
+      crypto.randomUUID(),
+      "note",
+      "no match",
+      "totally different content",
+      "manual",
+      now,
+      now
+    );
+
+    const totalAll = search.countWithFilters(db, "uniqueword");
+    const totalLimited = search.countWithFilters(db, "uniqueword", {
+      type: "note",
+    });
+    expect(totalAll).toBe(3);
+    expect(totalLimited).toBe(3);
+    db.close();
+  });
+
+  it("respects type and tag filters in the count", () => {
+    const db = createTestDb();
+    const now = "2024-01-01T00:00:00.000Z";
+    const noteId = crypto.randomUUID();
+    const bookmarkId = crypto.randomUUID();
+    const insert = db.prepare(
+      `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+    insert.run(
+      noteId,
+      "note",
+      "matchable",
+      "uniqueword inside",
+      "manual",
+      now,
+      now
+    );
+    insert.run(
+      bookmarkId,
+      "bookmark",
+      "matchable",
+      "uniqueword inside",
+      "manual",
+      now,
+      now
+    );
+
+    const tagId = crypto.randomUUID();
+    db.prepare(`INSERT INTO tags (id, name, created_at) VALUES (?, ?, ?)`).run(
+      tagId,
+      "primary",
+      now
+    );
+    db.prepare(
+      `INSERT INTO content_tags (content_id, tag_id, created_at) VALUES (?, ?, ?)`
+    ).run(noteId, tagId, now);
+
+    expect(search.countWithFilters(db, "uniqueword", { type: "note" })).toBe(1);
+    expect(search.countWithFilters(db, "uniqueword", { tag: "primary" })).toBe(
+      1
+    );
+    expect(search.countWithFilters(db, "uniqueword", { tag: "missing" })).toBe(
+      0
+    );
+    db.close();
+  });
+});
+
+describe("search snippet field", () => {
+  it("returns a snippet with <mark> highlighting on query results", () => {
+    const db = createTestDb();
+    db.prepare(
+      `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      crypto.randomUUID(),
+      "note",
+      "alpha",
+      "this body contains the keyword shimmering among other words and more text",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
+
+    const results = search.query(db, "shimmering");
+    expect(results.length).toBe(1);
+    expect(typeof results[0].snippet).toBe("string");
+    expect(results[0].snippet).toContain("<mark>");
+    expect(results[0].snippet).toContain("</mark>");
+    expect(results[0].snippet).toContain("shimmering");
+    db.close();
+  });
+
+  it("attaches snippet to queryByType results", () => {
+    const db = createTestDb();
+    db.prepare(
+      `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      crypto.randomUUID(),
+      "bookmark",
+      "alpha",
+      "text with the keyword noctilucent somewhere here",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
+
+    const results = search.queryByType(db, "noctilucent", "bookmark");
+    expect(results.length).toBe(1);
+    expect(results[0].snippet).toContain("<mark>");
+    db.close();
+  });
+
+  it("returns null snippet when the match is only in the title (snippet is content-only)", () => {
+    // FTS5 snippet() targets column 1 (content). If the match lives only in
+    // column 0 (title), the content snippet is returned without highlights
+    // — the function still produces a string. This test pins the current
+    // behavior so a future change to multi-column snippets is intentional.
+    const db = createTestDb();
+    const id = crypto.randomUUID();
+    db.prepare(
+      `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      "note",
+      "title-only keyword phlogiston",
+      "unrelated body text without the term",
+      "manual",
+      "2024-01-01T00:00:00.000Z",
+      "2024-01-01T00:00:00.000Z"
+    );
+
+    const results = search.query(db, "phlogiston");
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe(id);
+    expect(results[0].snippet).not.toContain("<mark>");
+    db.close();
+  });
+});
