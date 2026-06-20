@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { cleanupTestDb, createTestDb } from "@/db/test-utils";
+import {
+  authedGet,
+  authedRequest,
+  cleanupTestDb,
+  createTestDb,
+} from "@/db/test-utils";
 import { GET } from "@/app/api/search/route";
 import { POST } from "@/app/api/items/route";
 import { getDb, contentTags, tags } from "@/db/index";
@@ -14,7 +19,7 @@ interface SeedResult {
 
 async function seedItems(): Promise<SeedResult> {
   const noteRes = await POST(
-    new Request("http://localhost/api/items", {
+    await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -28,7 +33,7 @@ async function seedItems(): Promise<SeedResult> {
   const note = await noteRes.json();
 
   const bmRes = await POST(
-    new Request("http://localhost/api/items", {
+    await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -42,7 +47,7 @@ async function seedItems(): Promise<SeedResult> {
   const bookmark = await bmRes.json();
 
   const otherRes = await POST(
-    new Request("http://localhost/api/items", {
+    await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -87,7 +92,9 @@ describe("GET /api/search", () => {
   it("returns matched results with rank and snippet", async () => {
     const { noteId } = await seedItems();
 
-    const res = await GET(new Request("http://localhost/api/search?q=docker"));
+    const res = await GET(
+      await authedGet("http://localhost/api/search?q=docker")
+    );
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.query).toBe("docker");
@@ -108,7 +115,9 @@ describe("GET /api/search", () => {
 
   it("returns results in BM25 rank order (best match first)", async () => {
     await seedItems();
-    const res = await GET(new Request("http://localhost/api/search?q=docker"));
+    const res = await GET(
+      await authedGet("http://localhost/api/search?q=docker")
+    );
     const json = await res.json();
     const ranks = json.results.map((r: { rank: number }) => r.rank);
     const sortedAsc = [...ranks].sort((a, b) => a - b);
@@ -118,7 +127,7 @@ describe("GET /api/search", () => {
   it("returns an empty array when nothing matches", async () => {
     await seedItems();
     const res = await GET(
-      new Request("http://localhost/api/search?q=zzzzzznope")
+      await authedGet("http://localhost/api/search?q=zzzzzznope")
     );
     expect(res.status).toBe(200);
     const json = await res.json();
@@ -128,7 +137,7 @@ describe("GET /api/search", () => {
 
   it("returns an empty array when DB is empty", async () => {
     const res = await GET(
-      new Request("http://localhost/api/search?q=anything")
+      await authedGet("http://localhost/api/search?q=anything")
     );
     expect(res.status).toBe(200);
     const json = await res.json();
@@ -140,7 +149,7 @@ describe("GET /api/search", () => {
     const { noteId, bookmarkId } = await seedItems();
 
     const res = await GET(
-      new Request("http://localhost/api/search?q=docker&type=note")
+      await authedGet("http://localhost/api/search?q=docker&type=note")
     );
     const json = await res.json();
     expect(json.results.length).toBe(1);
@@ -148,7 +157,7 @@ describe("GET /api/search", () => {
     expect(json.results[0].type).toBe("note");
 
     const bmRes = await GET(
-      new Request("http://localhost/api/search?q=docker&type=bookmark")
+      await authedGet("http://localhost/api/search?q=docker&type=bookmark")
     );
     const bmJson = await bmRes.json();
     expect(bmJson.results.length).toBe(1);
@@ -159,14 +168,14 @@ describe("GET /api/search", () => {
     const { noteId } = await seedItems();
 
     const res = await GET(
-      new Request("http://localhost/api/search?q=docker&tag=infra")
+      await authedGet("http://localhost/api/search?q=docker&tag=infra")
     );
     const json = await res.json();
     expect(json.results.length).toBe(1);
     expect(json.results[0].id).toBe(noteId);
 
     const none = await GET(
-      new Request("http://localhost/api/search?q=docker&tag=nonexistent")
+      await authedGet("http://localhost/api/search?q=docker&tag=nonexistent")
     );
     const noneJson = await none.json();
     expect(noneJson.results).toEqual([]);
@@ -175,7 +184,9 @@ describe("GET /api/search", () => {
   it("combines type and tag filters", async () => {
     await seedItems();
     const res = await GET(
-      new Request("http://localhost/api/search?q=docker&type=note&tag=infra")
+      await authedGet(
+        "http://localhost/api/search?q=docker&type=note&tag=infra"
+      )
     );
     const json = await res.json();
     expect(json.results.length).toBe(1);
@@ -185,10 +196,10 @@ describe("GET /api/search", () => {
   it("respects pagination", async () => {
     await seedItems();
     const p1 = await GET(
-      new Request("http://localhost/api/search?q=docker&page=1&limit=1")
+      await authedGet("http://localhost/api/search?q=docker&page=1&limit=1")
     );
     const p2 = await GET(
-      new Request("http://localhost/api/search?q=docker&page=2&limit=1")
+      await authedGet("http://localhost/api/search?q=docker&page=2&limit=1")
     );
     const j1 = await p1.json();
     const j2 = await p2.json();
@@ -201,7 +212,7 @@ describe("GET /api/search", () => {
 
   it("handles special characters safely (quotes, asterisks)", async () => {
     await POST(
-      new Request("http://localhost/api/items", {
+      await authedRequest("http://localhost/api/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -216,7 +227,7 @@ describe("GET /api/search", () => {
     // The sanitizer should escape embedded quotes — a malformed FTS query
     // would otherwise throw a syntax error and surface as a 500.
     const res = await GET(
-      new Request(
+      await authedGet(
         `http://localhost/api/search?q=${encodeURIComponent('test"quote')}`
       )
     );
@@ -226,13 +237,13 @@ describe("GET /api/search", () => {
 
     // Prefix search: hel* should not blow up.
     const prefixRes = await GET(
-      new Request("http://localhost/api/search?q=hel*")
+      await authedGet("http://localhost/api/search?q=hel*")
     );
     expect(prefixRes.status).toBe(200);
   });
 
   it("returns 400 when q is missing", async () => {
-    const res = await GET(new Request("http://localhost/api/search"));
+    const res = await GET(await authedGet("http://localhost/api/search"));
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error.code).toBe("VALIDATION_ERROR");
@@ -240,7 +251,7 @@ describe("GET /api/search", () => {
 
   it("returns 400 when q is empty/whitespace", async () => {
     const res = await GET(
-      new Request("http://localhost/api/search?q=%20%20%20")
+      await authedGet("http://localhost/api/search?q=%20%20%20")
     );
     expect(res.status).toBe(400);
     const json = await res.json();
@@ -250,7 +261,7 @@ describe("GET /api/search", () => {
   it("returns 400 when q is too long", async () => {
     const longQ = "a".repeat(257);
     const res = await GET(
-      new Request(`http://localhost/api/search?q=${longQ}`)
+      await authedGet(`http://localhost/api/search?q=${longQ}`)
     );
     expect(res.status).toBe(400);
     const json = await res.json();

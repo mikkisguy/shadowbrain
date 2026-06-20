@@ -152,11 +152,24 @@ src/
 
 ### Rate Limiting
 
-- **Required** for auth endpoints (`/api/auth/login`) — ≈5 attempts / 15 min / IP, enforced by the session module from #53.
+- **Required** for auth endpoints (`/api/auth/login`) — ≈5 attempts / 15 min / IP, enforced by the session module from #53 (`src/lib/auth/login-rate-limit.ts`).
 - **Required** for all other API routes — ≈120 req / min / IP.
 - **Required** for non-API routes — ≈600 req / min / IP.
 - Implemented in `src/lib/rate-limit.ts` (in-memory token bucket per IP) by **#56 — Security: global rate limiting**. Reads the real client IP from the configured trusted proxy header (`X-Forwarded-For` / `X-Real-IP`).
 - Returns `429` with `Retry-After` on exceed.
+
+### Auth (session-based, single-user)
+
+The session-auth foundation lives in `src/lib/auth/` and is enforced at two layers:
+
+- **Proxy (`src/proxy.ts`)** — Next.js's renamed `middleware` (Next 16+). Protects every route except `/login` and `/api/auth/*`; checks the CSRF origin on state-changing methods; redirects unauthenticated browser navigations to `/login?from=…` and returns 401 for unauthenticated API calls. Sliding renewal re-signs the cookie on activity so `SESSION_MAX_AGE` also acts as an inactivity timeout.
+- **Route guard (`src/lib/auth/guard.ts`)** — `requireAuthenticated(request)` is called at the top of every protected route handler as a defense-in-depth check; a unit test that invokes the handler without going through the proxy still fails closed.
+
+Auth library modules: `session.ts` (HMAC-signed cookies, clamping, sliding renewal), `password.ts` (bcrypt + OWASP ASVS V3.2.2 constant-time login via a precomputed dummy hash), `csrf.ts` (origin/referer check, constant-time compare), `exempt-paths.ts` (exact-pathname matching — no suffix/prefix), `audit.ts` (auth event log to `audit_logs`), `client-ip.ts`, `constants.ts`.
+
+Required env vars: `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH` (bcrypt hash, cost ≥ 10), `SESSION_SECRET` (min 32 chars, used to sign cookies). `SESSION_MAX_AGE` is optional (ms; clamped to [1h, 30d]; default 24h). Generate the password hash with `pnpm dlx bcrypt-cli hash 'YOUR_PASSWORD'`.
+
+Test helper: `authedRequest(url, init)` in `src/db/test-utils.ts` signs a session cookie using the test `SESSION_SECRET`, so existing route tests can call the protected handlers directly.
 
 ### Performance
 
@@ -256,7 +269,7 @@ decision.**
    - The diff touches the database layer (schema, migrations,
      query helpers, audit log).
    - The diff adds or changes an API route, route handler, or
-     middleware.
+     proxy.
    - The diff is large (rule of thumb: > 200 changed lines, or any
      single file > 100 changed lines).
    - You are uncertain about an architectural choice.

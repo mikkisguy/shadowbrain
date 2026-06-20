@@ -3,6 +3,7 @@ import { promises as fs } from "fs";
 import { join } from "path";
 import { GET } from "@/app/api/images/[...path]/route";
 import { getImagesDir } from "@/lib/storage";
+import { authedGet } from "@/db/test-utils";
 
 const FIXTURE_DIR = "test-fixtures-route";
 
@@ -24,9 +25,12 @@ const FILES: Record<string, string> = {
 };
 
 async function callGet(segments: string[]) {
-  return GET(new Request("http://localhost/api/images/" + segments.join("/")), {
-    params: Promise.resolve({ path: segments }),
-  });
+  return GET(
+    await authedGet("http://localhost/api/images/" + segments.join("/")),
+    {
+      params: Promise.resolve({ path: segments }),
+    }
+  );
 }
 
 describe("GET /api/images/[...path]", () => {
@@ -140,7 +144,7 @@ describe("GET /api/images/[...path]", () => {
     // simulates a URL-encoded absolute path
     // (e.g. `/api/images/%2Fetc%2Fpasswd` decodes to one segment
     // starting with `/`).
-    const res = await GET(new Request("http://localhost/api/images/etc"), {
+    const res = await GET(await authedGet("http://localhost/api/images/etc"), {
       params: Promise.resolve({ path: ["/etc/passwd"] }),
     });
     expect(res.status).toBe(400);

@@ -8,6 +8,7 @@ import {
 } from "@/lib/api";
 import { log } from "@/lib/logger";
 import { fetchBookmarkMetadata } from "@/lib/metadata-fetcher";
+import { requireAuthenticated } from "@/lib/auth/guard";
 
 const createSchema = z.object({
   type: z.string(),
@@ -20,7 +21,12 @@ const createSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  // TODO: add auth check for item creation.
+  // Proxy already enforces auth on this route, but we double-
+  // check at the route layer too — defense in depth, and so a unit
+  // test that hits the route handler directly without going through
+  // the proxy still fails closed.
+  const auth = await requireAuthenticated(request);
+  if (!auth.ok) return auth.response;
   try {
     let body: unknown;
     try {
@@ -122,7 +128,8 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  // TODO: add auth check for item listing.
+  const auth = await requireAuthenticated(request);
+  if (!auth.ok) return auth.response;
   try {
     const { searchParams } = new URL(request.url);
     const { page, limit, offset } = parsePagination({

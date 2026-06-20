@@ -8,6 +8,7 @@ import {
 } from "@/db/index";
 import { errorResponse, parseJson, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
+import { requireAuthenticated } from "@/lib/auth/guard";
 
 const patchSchema = z.object({
   title: z.string().nullable().optional(),
@@ -17,10 +18,11 @@ const patchSchema = z.object({
 });
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // TODO: add auth check for item read.
+  const auth = await requireAuthenticated(request);
+  if (!auth.ok) return auth.response;
   const { id } = await params;
   try {
     const db = getDb();
@@ -39,7 +41,8 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // TODO: add auth check for item update.
+  const auth = await requireAuthenticated(request);
+  if (!auth.ok) return auth.response;
   const { id } = await params;
   try {
     let body: unknown;
@@ -106,10 +109,11 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // TODO: add auth check for item delete.
+  const auth = await requireAuthenticated(request);
+  if (!auth.ok) return auth.response;
   const { id } = await params;
   try {
     const db = getDb();

@@ -36,6 +36,8 @@
     "$schema": "https://unpkg.com/knip@6/schema.json",
     "entry": [
       "src/app/**/*.{ts,tsx,css}",
+      "src/components/ui/button.tsx",
+      "src/lib/auth/**/*.{ts,tsx}",
       "src/**/__tests__/**/*.{ts,tsx}",
       "src/**/*.test.{ts,tsx}",
       "scripts/**/*.{js,ts}"
@@ -53,6 +55,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
+    "bcrypt": "^5.1.1",
     "better-sqlite3": "^12.11.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -68,6 +71,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.1",
+    "@types/bcrypt": "^6.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.17",

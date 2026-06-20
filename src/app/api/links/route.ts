@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getDb, contentItems, contentLinks, auditLogs } from "@/db/index";
 import { errorResponse, parseJson, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
+import { requireAuthenticated } from "@/lib/auth/guard";
 
 // Link types are part of the issue's public contract for /api/links
 // (see #16). The set is closed: a typo in `link_type` is almost always
@@ -25,7 +26,8 @@ const createSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  // TODO: add auth check for link creation.
+  const auth = await requireAuthenticated(request);
+  if (!auth.ok) return auth.response;
   // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   try {
     let body: unknown;

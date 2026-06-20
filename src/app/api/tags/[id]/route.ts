@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getDb, tags, auditLogs } from "@/db/index";
 import { errorResponse, parseJson, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
+import { requireAuthenticated } from "@/lib/auth/guard";
 
 // Mirrors the constraints in /api/tags POST so a rename can't bypass
 // the same-character / length limits the create path enforces.
@@ -20,7 +21,8 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // TODO: add auth check for tag update.
+  const auth = await requireAuthenticated(request);
+  if (!auth.ok) return auth.response;
   // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   const { id } = await params;
   try {
@@ -107,10 +109,11 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // TODO: add auth check for tag delete.
+  const auth = await requireAuthenticated(request);
+  if (!auth.ok) return auth.response;
   // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   const { id } = await params;
   try {
