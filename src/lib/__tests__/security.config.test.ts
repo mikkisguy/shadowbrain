@@ -124,6 +124,27 @@ describe("buildCspHeader", () => {
     expect(scriptSrc).toContain("'unsafe-eval'");
   });
 
+  it("adds 'unsafe-inline' to style-src in development (dev overlay, font-styles)", () => {
+    // The Next.js dev overlay, the client-side re-injection of
+    // next/font styles (font-styles.tsx), and React 19's hydration
+    // recovery all inject inline <style> tags after the initial
+    // server-rendered HTML is in the DOM. Those client-side
+    // injections never see the server-rendered nonce, so without
+    // 'unsafe-inline' in dev the browser blocks every overlay /
+    // font / error boundary and the dev experience is unusable.
+    // Production keeps the strict, nonce-only policy.
+    const prod = buildCspHeader(NONCE, false);
+    const dev = buildCspHeader(NONCE, true);
+    expect(dev).toContain("'unsafe-inline'");
+    expect(prod).not.toContain("'unsafe-inline'");
+    // It must land in style-src, not anywhere else.
+    const styleSrc = dev
+      .split(";")
+      .find((s) => s.trim().startsWith("style-src"));
+    expect(styleSrc).toBeDefined();
+    expect(styleSrc).toContain("'unsafe-inline'");
+  });
+
   it("uses different nonces for different requests", () => {
     const csp1 = buildCspHeader("nonce-a", false);
     const csp2 = buildCspHeader("nonce-b", false);
@@ -204,6 +225,13 @@ describe("applySecurityHeaders", () => {
     applySecurityHeaders(res, "n", true);
     const csp = res.headers.get("Content-Security-Policy") ?? "";
     expect(csp).toContain("'unsafe-eval'");
+  });
+
+  it("does produce 'unsafe-inline' in style-src in development output (dev overlay)", async () => {
+    const res = await newResponse();
+    applySecurityHeaders(res, "n", true);
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    expect(csp).toContain("'unsafe-inline'");
   });
 
   it("returns the same NextResponse for chaining", async () => {

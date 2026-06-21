@@ -276,15 +276,30 @@ describe("proxy — security response headers", () => {
     const nonceMatch = /'nonce-([^']+)'/.exec(csp ?? "");
     expect(nonceMatch).not.toBeNull();
     expect(nonceMatch?.[1]).toBeTruthy();
-    // 'unsafe-inline' is forbidden in either mode (the whole point
-    // of using a nonce).
-    expect(csp).not.toContain("'unsafe-inline'");
     if (isProd) {
+      // Production: strict, nonce-only. No relaxations anywhere.
+      expect(csp).not.toContain("'unsafe-inline'");
       expect(csp).not.toContain("'unsafe-eval'");
     } else {
-      // Dev / test: 'unsafe-eval' is required for the Next.js
-      // dev server (HMR + RSC payload).
+      // Dev / test: 'unsafe-eval' in script-src (HMR / RSC).
       expect(csp).toContain("'unsafe-eval'");
+      // Dev / test: 'unsafe-inline' in style-src only — the Next.js
+      // dev overlay, the client-side re-injection of next/font
+      // styles, and React's hydration-mismatch recovery all inject
+      // <style> tags after the server-rendered HTML is in the DOM,
+      // and those injections never see the nonce. The relaxation is
+      // scoped to style-src so script-src remains nonce-only.
+      const styleSrc = (csp ?? "")
+        .split(";")
+        .find((s) => s.trim().startsWith("style-src"));
+      expect(styleSrc).toBeDefined();
+      expect(styleSrc).toContain("'unsafe-inline'");
+      // And it must NOT appear in script-src.
+      const scriptSrc = (csp ?? "")
+        .split(";")
+        .find((s) => s.trim().startsWith("script-src"));
+      expect(scriptSrc).toBeDefined();
+      expect(scriptSrc).not.toContain("'unsafe-inline'");
     }
   }
 

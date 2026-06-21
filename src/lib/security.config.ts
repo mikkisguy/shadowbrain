@@ -79,10 +79,10 @@ export const STATIC_SECURITY_HEADERS: Readonly<Record<string, string>> = {
  *
  *  Per the security spec: strict, `'self'`, no `unsafe-inline` /
  *  `unsafe-eval`, block frames / objects, pin `form-action` /
- *  `base-uri` to `'self'`. The dev-only relaxations (`'unsafe-eval'`
- *  in `script-src` for webpack HMR) are added by `buildCspHeader`
- *  when `isDev` is true, not baked into the base policy, so the
- *  production policy is a single readable line per directive. */
+ *  `base-uri` to `'self'`. The dev-only relaxations are added by
+ *  `buildCspHeader` when `isDev` is true, not baked into the base
+ *  policy, so the production policy is a single readable line per
+ *  directive. */
 const CSP_DIRECTIVE_TEMPLATES: readonly string[] = [
   "default-src 'self'",
   "script-src 'self' 'nonce-${nonce}' 'strict-dynamic'",
@@ -103,21 +103,36 @@ const CSP_DIRECTIVE_TEMPLATES: readonly string[] = [
   "upgrade-insecure-requests",
 ];
 
-/** Dev-only relaxation for webpack / Next.js HMR. `'unsafe-eval'` is
- *  required by the dev server (RSC payload decoding, HMR client).
- *  It is **never** included in the production policy. */
+/** Dev-only relaxation for `script-src` (webpack / Next.js HMR —
+ *  `'unsafe-eval'` is required by the RSC client and the HMR
+ *  runtime). It is **never** included in the production policy. */
 const DEV_SCRIPT_SRC_RELAXATION = " 'unsafe-eval'";
+
+/** Dev-only relaxation for `style-src` (`'unsafe-inline'`). The
+ *  Next.js dev overlay (`devtool-style-inject.js`), the dev-time
+ *  re-injection of `next/font` styles (`font-styles.tsx`), and
+ *  React 19's hydration-mismatch recovery all inject inline
+ *  `<style>` tags **client-side** after the initial server-rendered
+ *  HTML is in the DOM. Those client-side injections never see the
+ *  server-rendered nonce, so without `'unsafe-inline'` in dev the
+ *  browser blocks every overlay font / error boundary / HMR
+ *  indicator. (In production, the framework's server-rendered
+ *  inline `<style>` tags are nonce-attached automatically, so the
+ *  relaxation is not needed.) */
+const DEV_STYLE_SRC_RELAXATION = " 'unsafe-inline'";
 
 /** Build the full `Content-Security-Policy` header value for a
  *  given nonce. The nonce is interpolated into `script-src` and
  *  `style-src`; everywhere else, the policy is static.
  *
  *  In production, the policy has no `unsafe-inline` and no
- *  `unsafe-eval`. In development, `'unsafe-eval'` is added to
- *  `script-src` so the webpack dev server (HMR + RSC) can run —
- *  the alternative is a broken dev experience with no security
- *  gain in production. The relaxation is explicit and discoverable
- *  in this one function. */
+ *  `unsafe-eval`. In development, both relaxations are added:
+ *  `'unsafe-eval'` in `script-src` (HMR / RSC payload decoding)
+ *  and `'unsafe-inline'` in `style-src` (Next.js dev overlay,
+ *  client-side font-style re-injection, React error boundaries).
+ *  Without them the dev experience is unusable and there is no
+ *  security gain in production. Both relaxations are explicit and
+ *  discoverable in this one function. */
 export function buildCspHeader(nonce: string, isDev: boolean): string {
   if (!nonce) {
     throw new Error("buildCspHeader: nonce is required");
@@ -126,6 +141,10 @@ export function buildCspHeader(nonce: string, isDev: boolean): string {
     if (d.startsWith("script-src ")) {
       const base = d.replace("${nonce}", nonce);
       return isDev ? base + DEV_SCRIPT_SRC_RELAXATION : base;
+    }
+    if (d.startsWith("style-src ")) {
+      const base = d.replace("${nonce}", nonce);
+      return isDev ? base + DEV_STYLE_SRC_RELAXATION : base;
     }
     if (d.includes("${nonce}")) {
       return d.replace("${nonce}", nonce);
