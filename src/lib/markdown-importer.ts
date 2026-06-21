@@ -247,7 +247,15 @@ export async function importMarkdownDirectory(
       // audit_log entry must succeed or fail together so we never
       // leave the two tables out of sync.
       const perFileTx = db.transaction(() => {
-        const existing = contentItems.findById(db, id);
+        // The importer is a system-level operation, not a browse view —
+        // it must see hidden / private items so a re-import of a
+        // previously imported private file can update it instead of
+        // accidentally re-inserting (which would hit the PRIMARY KEY
+        // and throw SQLITE_CONSTRAINT).
+        const existing = contentItems.findById(db, id, {
+          includeHidden: true,
+          includePrivate: true,
+        });
         if (existing) {
           const contentUnchanged = existing.content === parsed.body;
           const metaUnchanged = existing.metadata === metadata;

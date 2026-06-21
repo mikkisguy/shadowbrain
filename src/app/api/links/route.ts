@@ -59,8 +59,21 @@ export async function POST(request: Request) {
     // references a row that doesn't exist), not a route-not-found.
     // We check both items together; the same response is used for
     // either miss so we don't leak which side is wrong.
-    const source = contentItems.findById(db, parsed.data.source_id);
-    const target = contentItems.findById(db, parsed.data.target_id);
+    //
+    // Linking is an admin operation (this route is already gated by
+    // `requireAuthenticated` above) and the response exposes no item
+    // content — only the link row's id, type, context, and timestamp.
+    // So we always look up the source / target with the visibility
+    // opt-in forced on; the admin must be able to link hidden and
+    // private items.
+    const source = contentItems.findById(db, parsed.data.source_id, {
+      includeHidden: true,
+      includePrivate: true,
+    });
+    const target = contentItems.findById(db, parsed.data.target_id, {
+      includeHidden: true,
+      includePrivate: true,
+    });
     if (!source || !target) {
       return errorResponse(
         "VALIDATION_ERROR",

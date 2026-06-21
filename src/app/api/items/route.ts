@@ -4,11 +4,14 @@ import {
   parsePagination,
   errorResponse,
   parseJson,
+  parseIncludeFlag,
   logServerError,
 } from "@/lib/api";
 import { log } from "@/lib/logger";
 import { fetchBookmarkMetadata } from "@/lib/metadata-fetcher";
 import { requireAuthenticated } from "@/lib/auth/guard";
+
+const visibilityFlag = z.coerce.number().int().min(0).max(1).optional();
 
 const createSchema = z.object({
   type: z.string(),
@@ -17,16 +20,17 @@ const createSchema = z.object({
   source: z.string().optional(),
   source_url: z.string().url().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  is_private: z.coerce.number().int().min(0).max(1).optional(),
+  is_private: visibilityFlag,
+  is_hidden: visibilityFlag,
 });
 
 export async function POST(request: Request) {
-  // Proxy already enforces auth on this route, but we double-
-  // check at the route layer too — defense in depth, and so a unit
-  // test that hits the route handler directly without going through
-  // the proxy still fails closed.
+  // Defense in depth: the proxy already enforces auth, but the route
+  // re-checks so a test that calls this function directly (without
+  // going through the proxy) still fails closed.
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
+
   try {
     let body: unknown;
     try {
@@ -87,6 +91,12 @@ export async function POST(request: Request) {
     const sourceUrl =
       parsed.data.source_url ?? (fetchOutcome?.metadata.url || null) ?? null;
 
+    // Visibility flags are admin-only. The proxy already gates every
+    // request reaching this route, so the `auth.ok` branch above is
+    // the "authenticated" path; the body fields are trusted.
+    const isPrivate = parsed.data.is_private ?? 0;
+    const isHidden = parsed.data.is_hidden ?? 0;
+
     const tx = db.transaction(() => {
       contentItems.create(db, {
         id,
@@ -96,7 +106,8 @@ export async function POST(request: Request) {
         source: parsed.data.source ?? "manual",
         source_url: sourceUrl,
         metadata,
-        is_private: parsed.data.is_private ?? 0,
+        is_private: isPrivate,
+        is_hidden: isHidden,
         created_at: now,
         updated_at: now,
       });
@@ -120,7 +131,17 @@ export async function POST(request: Request) {
       type: parsed.data.type,
       bookmarkFetchOk: fetchOutcome?.ok ?? null,
     });
-    return Response.json(contentItems.findById(db, id), { status: 201 });
+    // The admin just created the row — return it with the visibility
+    // opt-in forced on so a hidden / private item is still visible
+    // in the response body. Without this, the response would be `null`
+    // for any creation with `is_hidden: 1` or `is_private: 1`.
+    return Response.json(
+      contentItems.findById(db, id, {
+        includeHidden: true,
+        includePrivate: true,
+      }),
+      { status: 201 }
+    );
   } catch (error) {
     logServerError(error, { route: "/api/items", method: "POST" });
     return errorResponse("INTERNAL_ERROR", "Something went wrong", 500);
@@ -128,14 +149,24 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  // Defense in depth: the proxy already enforces auth.
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const { page, limit, offset } = parsePagination({
       page: searchParams.get("page") ?? undefined,
       limit: searchParams.get("limit") ?? undefined,
     });
+
+    // Visibility opt-in is admin-only. The authenticated request above
+    // already cleared the auth gate, so the parsed flags are trusted
+    // and we just forward them to the read helper.
+    const includeHidden = parseIncludeFlag(searchParams.get("include_hidden"));
+    const includePrivate = parseIncludeFlag(
+      searchParams.get("include_private")
+    );
 
     const db = getDb();
     const result = contentItems.listWithFilters(db, {
@@ -146,11 +177,15 @@ export async function GET(request: Request) {
       endDate: searchParams.get("endDate") ?? undefined,
       limit,
       offset,
+      includeHidden,
+      includePrivate,
     });
 
     log("info", "content_items listed", {
       event: "content_item.list",
       count: result.items.length,
+      includeHidden,
+      includePrivate,
     });
 
     return Response.json({

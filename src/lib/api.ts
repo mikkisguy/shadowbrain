@@ -48,3 +48,20 @@ export function logServerError(
       : { message: String(error) };
   log("error", "Unhandled server error", { ...context, error: err });
 }
+
+/**
+ * Parse one of the two-level visibility opt-in query parameters
+ * (`include_hidden` / `include_private`). The route spec (App
+ * Security Baseline §2) uses the literal string `"1"` to opt in;
+ * anything else — including the param being absent, empty, `"0"`,
+ * `"true"` — is treated as `false`.
+ *
+ * The auth gate is upstream of this helper: every route must call
+ * `requireAuthenticated(request)` and short-circuit with 401 before
+ * the opt-in is ever parsed. The unauthenticated request therefore
+ * never reaches this function, so the parsed flag can never leak
+ * rows to an anonymous caller even if they pass `?include_private=1`.
+ */
+export function parseIncludeFlag(value: string | null | undefined): boolean {
+  return value === "1";
+}

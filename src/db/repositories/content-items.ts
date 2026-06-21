@@ -2,6 +2,23 @@ import Database from "better-sqlite3";
 import { contentLinks } from "./content-links";
 import { contentTags } from "./content-tags";
 
+/**
+ * Two-level visibility flags.
+ *
+ * - `is_hidden = 1` — excluded from default views; the chat AI *may* use
+ *   these items in RAG context by default. See issue #54 and the App
+ *   Security Baseline spec §2.
+ * - `is_private = 1` — excluded from default views; the chat AI may only
+ *   use these items when a thread / message has explicitly opted in.
+ *   `is_private` is for ShadowBrain-stored content the user does not
+ *   want shared externally. True secrets (passwords, bank details) live
+ *   in Proton Pass and will be reached via a future `pass-cli`
+ *   integration; they are not stored in ShadowBrain.
+ *
+ * Both columns default to `0` (visible). The read helpers below take
+ * `includeHidden` / `includePrivate` options that default to `false`,
+ * so a route that forgets to pass them still hides the row.
+ */
 export interface ContentItem {
   id: string;
   type: string;
@@ -12,8 +29,20 @@ export interface ContentItem {
   source_url: string | null;
   metadata: string | null;
   is_private: number;
+  is_hidden: number;
   created_at: string;
   updated_at: string;
+}
+
+/** Options shared by the read helpers below. All flags default to
+ *  `false` so a caller that forgets to opt in still hides the row. */
+export interface VisibilityOptions {
+  /** When false (default), rows with `is_hidden = 1` are excluded from
+   *  the result. */
+  includeHidden?: boolean;
+  /** When false (default), rows with `is_private = 1` are excluded from
+   *  the result. */
+  includePrivate?: boolean;
 }
 
 export const contentItems = {
@@ -29,6 +58,7 @@ export const contentItems = {
       source_url?: string | null;
       metadata?: string | null;
       is_private?: number;
+      is_hidden?: number;
       created_at: string;
       updated_at: string;
     }
@@ -36,8 +66,8 @@ export const contentItems = {
     const stmt = db.prepare(`
       INSERT INTO content_items (
         id, type, title, content, image_path, source, source_url,
-        metadata, is_private, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        metadata, is_private, is_hidden, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     return stmt.run(
       item.id,
@@ -49,6 +79,7 @@ export const contentItems = {
       item.source_url ?? null,
       item.metadata ?? null,
       item.is_private ?? 0,
+      item.is_hidden ?? 0,
       item.created_at,
       item.updated_at
     );
@@ -77,6 +108,7 @@ export const contentItems = {
       source_url?: string | null;
       metadata?: string | null;
       is_private?: number;
+      is_hidden?: number;
       created_at: string;
       updated_at: string;
     }
@@ -84,8 +116,8 @@ export const contentItems = {
     const stmt = db.prepare(`
       INSERT OR IGNORE INTO content_items (
         id, type, title, content, image_path, source, source_url,
-        metadata, is_private, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        metadata, is_private, is_hidden, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     return stmt.run(
       item.id,
@@ -97,28 +129,67 @@ export const contentItems = {
       item.source_url ?? null,
       item.metadata ?? null,
       item.is_private ?? 0,
+      item.is_hidden ?? 0,
       item.created_at,
       item.updated_at
     );
   },
 
-  findById: (db: Database.Database, id: string) => {
-    const stmt = db.prepare("SELECT * FROM content_items WHERE id = ?");
-    return stmt.get(id) as ContentItem | undefined;
+  /**
+   * Look up a single content_item by id, honouring the two-level
+   * visibility flags. With `includeHidden` / `includePrivate` defaulting
+   * to `false`, a row whose `is_hidden` or `is_private` is set is
+   * treated as not-found and the function returns `null` — the caller
+   * (typically a route handler) surfaces a 404. This is the strictest
+   * interpretation: an item with both flags set requires *both*
+   * opt-ins to be returned.
+   *
+   * The return type is `ContentItem | null` (not `| undefined`) so the
+   * not-found and the filtered-out cases share a single branch in
+   * callers.
+   */
+  findById: (
+    db: Database.Database,
+    id: string,
+    options: VisibilityOptions = {}
+  ): ContentItem | null => {
+    const includeHidden = options.includeHidden ?? false;
+    const includePrivate = options.includePrivate ?? false;
+    const stmt = db.prepare(`
+      SELECT * FROM content_items
+      WHERE id = ?
+        AND (is_hidden = 0 OR ?)
+        AND (is_private = 0 OR ?)
+    `);
+    return (
+      (stmt.get(id, includeHidden ? 1 : 0, includePrivate ? 1 : 0) as
+        | ContentItem
+        | undefined) ?? null
+    );
   },
 
   findAll: (
     db: Database.Database,
-    options?: { type?: string; limit?: number; offset?: number }
+    options?: {
+      type?: string;
+      limit?: number;
+      offset?: number;
+    } & VisibilityOptions
   ) => {
-    let sql = "SELECT * FROM content_items";
-    const params: (string | number | null)[] = [];
+    const includeHidden = options?.includeHidden ?? false;
+    const includePrivate = options?.includePrivate ?? false;
+    const where: string[] = ["(is_hidden = 0 OR ?)", "(is_private = 0 OR ?)"];
+    const params: (string | number)[] = [
+      includeHidden ? 1 : 0,
+      includePrivate ? 1 : 0,
+    ];
 
     if (options?.type) {
-      sql += " WHERE type = ?";
+      where.push("type = ?");
       params.push(options.type);
     }
 
+    let sql = `SELECT * FROM content_items WHERE ${where.join(" AND ")}`;
     sql += " ORDER BY created_at DESC";
 
     if (options?.limit) {
@@ -143,6 +214,7 @@ export const contentItems = {
       content?: string;
       metadata?: string | null;
       is_private?: number;
+      is_hidden?: number;
       updated_at: string;
     }
   ) => {
@@ -165,6 +237,10 @@ export const contentItems = {
       fields.push("is_private = ?");
       params.push(updates.is_private);
     }
+    if (updates.is_hidden !== undefined) {
+      fields.push("is_hidden = ?");
+      params.push(updates.is_hidden);
+    }
 
     fields.push("updated_at = ?");
     params.push(updates.updated_at);
@@ -176,6 +252,13 @@ export const contentItems = {
     return stmt.run(...params);
   },
 
+  /**
+   * Paginated list with filters. Visibility flags filter the result set
+   * (in addition to the caller's other filters): rows with any set
+   * visibility flag without the matching opt-in are excluded. The total
+   * count is the *post-filter* count so pagination math stays correct
+   * even when hidden / private rows exist.
+   */
   listWithFilters: (
     db: Database.Database,
     options: {
@@ -186,10 +269,19 @@ export const contentItems = {
       endDate?: string;
       limit: number;
       offset: number;
-    }
+    } & VisibilityOptions
   ) => {
-    const where: string[] = [];
-    const params: (string | number)[] = [];
+    const includeHidden = options.includeHidden ?? false;
+    const includePrivate = options.includePrivate ?? false;
+
+    const where: string[] = [
+      "(ci.is_hidden = 0 OR ?)",
+      "(ci.is_private = 0 OR ?)",
+    ];
+    const params: (string | number)[] = [
+      includeHidden ? 1 : 0,
+      includePrivate ? 1 : 0,
+    ];
 
     if (options.type) {
       where.push("ci.type = ?");
@@ -218,7 +310,7 @@ export const contentItems = {
       params.push(options.tag);
     }
 
-    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const whereSql = `WHERE ${where.join(" AND ")}`;
 
     const countStmt = db.prepare(`
       SELECT COUNT(*) as count
@@ -245,8 +337,17 @@ export const contentItems = {
     return { items, total };
   },
 
-  findWithRelations: (db: Database.Database, id: string) => {
-    const item = contentItems.findById(db, id);
+  /**
+   * Same visibility rules as `findById`: the item is returned only if
+   * every set visibility flag is covered by the corresponding opt-in.
+   * Otherwise the function returns `null` (treated as 404 by the route).
+   */
+  findWithRelations: (
+    db: Database.Database,
+    id: string,
+    options: VisibilityOptions = {}
+  ) => {
+    const item = contentItems.findById(db, id, options);
     if (!item) return null;
 
     const tags = contentTags.findByContent(db, id);

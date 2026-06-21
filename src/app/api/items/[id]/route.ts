@@ -6,27 +6,48 @@ import {
   deleteEmbedding,
   isVecExtensionLoaded,
 } from "@/db/index";
-import { errorResponse, parseJson, logServerError } from "@/lib/api";
+import {
+  errorResponse,
+  parseJson,
+  parseIncludeFlag,
+  logServerError,
+} from "@/lib/api";
 import { log } from "@/lib/logger";
 import { requireAuthenticated } from "@/lib/auth/guard";
+
+const visibilityFlag = z.coerce.number().int().min(0).max(1).optional();
 
 const patchSchema = z.object({
   title: z.string().nullable().optional(),
   content: z.string().min(1).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  is_private: z.number().int().min(0).max(1).optional(),
+  is_private: visibilityFlag,
+  is_hidden: visibilityFlag,
 });
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Defense in depth: the proxy already enforces auth.
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
+
   const { id } = await params;
   try {
+    const { searchParams } = new URL(request.url);
+    // Visibility opt-in is admin-only; the auth check above cleared
+    // the gate, so the parsed flags are trusted.
+    const includeHidden = parseIncludeFlag(searchParams.get("include_hidden"));
+    const includePrivate = parseIncludeFlag(
+      searchParams.get("include_private")
+    );
+
     const db = getDb();
-    const result = contentItems.findWithRelations(db, id);
+    const result = contentItems.findWithRelations(db, id, {
+      includeHidden,
+      includePrivate,
+    });
     if (!result) {
       return errorResponse("NOT_FOUND", "Item not found", 404);
     }
@@ -41,8 +62,10 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Defense in depth: the proxy already enforces auth.
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
+
   const { id } = await params;
   try {
     let body: unknown;
@@ -58,8 +81,21 @@ export async function PATCH(
       });
     }
 
+    const { searchParams } = new URL(request.url);
+    const includeHidden = parseIncludeFlag(searchParams.get("include_hidden"));
+    const includePrivate = parseIncludeFlag(
+      searchParams.get("include_private")
+    );
+
     const db = getDb();
-    const existing = contentItems.findById(db, id);
+    // Use the same visibility opt-in as the GET: an item that the
+    // caller cannot see cannot be edited either. With auth already
+    // passed above, the proxy blocks anonymous access — this check
+    // additionally hides the row from an admin who did not opt in.
+    const existing = contentItems.findById(db, id, {
+      includeHidden,
+      includePrivate,
+    });
     if (!existing) {
       return errorResponse("NOT_FOUND", "Item not found", 404);
     }
@@ -77,6 +113,8 @@ export async function PATCH(
         parsed.data.is_private !== undefined
           ? parsed.data.is_private
           : undefined,
+      is_hidden:
+        parsed.data.is_hidden !== undefined ? parsed.data.is_hidden : undefined,
       updated_at: now,
     };
 
@@ -96,7 +134,10 @@ export async function PATCH(
     });
     tx();
 
-    const updated = contentItems.findWithRelations(db, id);
+    const updated = contentItems.findWithRelations(db, id, {
+      includeHidden: true,
+      includePrivate: true,
+    });
     log("info", "content_item updated", {
       event: "content_item.update",
       id,
@@ -112,12 +153,23 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Defense in depth: the proxy already enforces auth.
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
+
   const { id } = await params;
   try {
+    const { searchParams } = new URL(request.url);
+    const includeHidden = parseIncludeFlag(searchParams.get("include_hidden"));
+    const includePrivate = parseIncludeFlag(
+      searchParams.get("include_private")
+    );
+
     const db = getDb();
-    const existing = contentItems.findById(db, id);
+    const existing = contentItems.findById(db, id, {
+      includeHidden,
+      includePrivate,
+    });
     if (!existing) {
       return errorResponse("NOT_FOUND", "Item not found", 404);
     }

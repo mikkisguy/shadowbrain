@@ -22,7 +22,8 @@ CREATE TABLE content_items (
     source      TEXT NOT NULL DEFAULT 'manual',-- 'discord', 'web', 'api', 'import', 'hermes'
     source_url  TEXT,                          -- Original URL (bookmarks, imported content)
     metadata    TEXT,                          -- JSON blob for type-specific fields
-    is_private  INTEGER NOT NULL DEFAULT 0,    -- 1 = never surfaced in AI queries
+    is_private  INTEGER NOT NULL DEFAULT 0,    -- Two-level visibility: see §Visibility below
+    is_hidden   INTEGER NOT NULL DEFAULT 0,    -- Two-level visibility: see §Visibility below
     created_at  DATETIME NOT NULL,
     updated_at  DATETIME NOT NULL
 );
@@ -31,7 +32,32 @@ CREATE INDEX idx_content_type ON content_items(type);
 CREATE INDEX idx_content_source ON content_items(source);
 CREATE INDEX idx_content_created ON content_items(created_at);
 CREATE INDEX idx_content_updated ON content_items(updated_at);
+CREATE INDEX idx_content_is_hidden ON content_items(is_hidden);
 ```
+
+### Visibility (two-level)
+
+`is_hidden` and `is_private` are the two-level visibility flags from
+the [App Security Baseline](./superpowers/specs/2026-06-19-app-security-baseline-design.md)
+(issue #54). They are both hidden from default read paths; the
+difference is the AI / RAG behavior:
+
+- `is_hidden = 1` — excluded from default views. AI _may_ use in chat
+  context by default. Toggled with `?include_hidden=1` on
+  `GET /api/items`, `GET /api/items/[id]`, and `GET /api/search`
+  (admin-only).
+- `is_private = 1` — excluded from default views. AI may use only on
+  explicit per-thread / per-send opt-in. Toggled with
+  `?include_private=1` on the same routes (admin-only).
+
+A row with both flags set requires _both_ opt-ins to be returned.
+Without the opt-in, the row is treated as not found (the route
+returns 404). The opt-ins are gated behind authentication — the
+unauthenticated request always sees the strict default. See
+`src/db/repositories/content-items.ts` and `src/db/search.ts` for
+the SQL filter; the route plumbing lives in
+`src/app/api/items/route.ts`, `src/app/api/items/[id]/route.ts`, and
+`src/app/api/search/route.ts`.
 
 ### Content Types (`type` column)
 
