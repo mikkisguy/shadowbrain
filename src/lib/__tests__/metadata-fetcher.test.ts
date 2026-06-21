@@ -244,14 +244,15 @@ describe("safeFetchHtml", () => {
 
   const makeFakeFetch =
     (
-      handler: (url: URL, lookup: unknown) => UpstreamResponseLike
+      handler: (_url: URL, _lookup: unknown) => UpstreamResponseLike
     ): NonNullable<Parameters<typeof safeFetchHtml>[1]>["fetchImpl"] =>
     async (url, opts) =>
       handler(url, opts.lookup);
 
   it("returns the HTML body on a 200 response", async () => {
     const html = "<html><title>OK</title></html>";
-    const fakeFetch = makeFakeFetch((url) => ({
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const fakeFetch = makeFakeFetch((_url) => ({
       statusCode: 200,
       headers: { "content-type": "text/html" },
       body: readable(html),
@@ -451,7 +452,8 @@ describe("safeFetchHtml", () => {
 
   it("follows safe redirects (≤ MAX_REDIRECTS hops)", async () => {
     let n = 0;
-    const fetchImpl = makeFakeFetch((url) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const fetchImpl = makeFakeFetch((_url) => {
       n++;
       if (n < 3) {
         return {
@@ -474,7 +476,8 @@ describe("safeFetchHtml", () => {
   });
 
   it("rejects redirect chains longer than MAX_REDIRECT_HOPS", async () => {
-    const fetchImpl = makeFakeFetch((url) => ({
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const fetchImpl = makeFakeFetch((_url) => ({
       statusCode: 302,
       headers: { location: "https://example.com/loop" },
       body: readable(""),

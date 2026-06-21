@@ -377,3 +377,48 @@ describe("CORS posture", () => {
     }
   });
 });
+
+/**
+ * SSRF policy values — per the App Security Baseline design spec §7.
+ * `SSRF_POLICY` is the single source of truth for the URL-fetch
+ * endpoint knobs (timeout, DNS timeout, response size cap, redirect
+ * hop limit). The metadata-fetcher destructures it on import, so a
+ * future drift between the policy object and the caller's defaults
+ * would be silent. These tests pin the values themselves and assert
+ * the destructuring is still in place.
+ */
+describe("SSRF policy values (security.config.ts)", () => {
+  it("pins the spec values (timeout 5s, DNS 3s, body 1 MiB, 3 redirect hops)", async () => {
+    const { SSRF_POLICY } = await import("../security.config");
+    expect(SSRF_POLICY.defaultTimeoutMs).toBe(5_000);
+    expect(SSRF_POLICY.defaultDnsTimeoutMs).toBe(3_000);
+    expect(SSRF_POLICY.defaultMaxBytes).toBe(1_048_576);
+    expect(SSRF_POLICY.maxRedirectHops).toBe(3);
+  });
+
+  it("metadata-fetcher destructures SSRF_POLICY for all four knobs", async () => {
+    // The fetcher destructures SSRF_POLICY at module load. A future
+    // edit that re-introduces local constants (e.g. DEFAULT_TIMEOUT_MS)
+    // would drift away from the policy. This test reads the source
+    // file and asserts the destructuring is still in place.
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.join(process.cwd(), "src/lib/metadata-fetcher.ts"),
+      "utf-8"
+    );
+    // All four knobs are destructured from SSRF_POLICY.
+    expect(src).toMatch(
+      /const \{[\s\S]*defaultTimeoutMs[\s\S]*\} = SSRF_POLICY/
+    );
+    expect(src).toMatch(
+      /const \{[\s\S]*defaultDnsTimeoutMs[\s\S]*\} = SSRF_POLICY/
+    );
+    expect(src).toMatch(
+      /const \{[\s\S]*defaultMaxBytes[\s\S]*\} = SSRF_POLICY/
+    );
+    expect(src).toMatch(
+      /const \{[\s\S]*maxRedirectHops[\s\S]*\} = SSRF_POLICY/
+    );
+  });
+});
