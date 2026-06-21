@@ -98,9 +98,3 @@ export const STATE_CHANGING_METHODS: ReadonlySet<string> = new Set([
   "PATCH",
   "DELETE",
 ]);
-
-/** Login rate limit: ≈5 attempts per 15 minutes per IP. The spec calls
- *  for an in-memory token bucket; this is process-local and resets on
- *  process restart, which is acceptable for a single VPS. */
-export const LOGIN_RATE_LIMIT_MAX = 5;
-export const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;

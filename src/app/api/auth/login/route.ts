@@ -8,8 +8,12 @@
  * `"Invalid credentials"` message — the same message for both
  * "user not found" and "wrong password".
  *
- * Rate-limited per IP: 5 attempts per 15 minutes. When the bucket
- * is empty, the response is 429 with `Retry-After`.
+ * Rate-limited per IP at ≈5 attempts / 15 min. The check itself
+ * lives in the **proxy** (`src/proxy.ts`) so the limit is enforced
+ * before the request reaches this handler; this module just resets
+ * the bucket on a successful login (a legitimate user should not
+ * be penalised for typos) and reads the same `loginRateLimiter`
+ * singleton the proxy uses.
  *
  * All attempts (success and failure) are logged to `audit_logs`.
  */
@@ -22,7 +26,7 @@ import { errorResponse, parseJson } from "@/lib/api";
 import { getClientIp } from "@/lib/auth/client-ip";
 import { logAuthEvent } from "@/lib/auth/audit";
 import { verifyPasswordConstantTime } from "@/lib/auth/password";
-import { loginRateLimiter } from "@/lib/auth/login-rate-limit";
+import { resetLoginRateLimit } from "@/lib/auth/login-rate-limit";
 import {
   buildSessionCookie,
   getSessionMaxAge,
@@ -36,40 +40,13 @@ const loginSchema = z.object({
 
 export async function POST(request: Request) {
   const env = getEnv();
-  const ip = getClientIp(request);
+  // Read the client IP from the configured trusted-proxy header
+  // (the same one the proxy uses for the rate-limit bucket), so
+  // the audit log entry and the bucket key agree.
+  const ip = getClientIp(request, { header: env.TRUSTED_PROXY_HEADER });
   const userAgent = request.headers.get("user-agent");
 
-  // ── 1. Rate-limit check (per IP) ────────────────────────────
-  const rate = loginRateLimiter.check(ip);
-  if (!rate.allowed) {
-    logAuthEvent({
-      action: "auth.login.failure",
-      success: false,
-      ip,
-      userAgent,
-      metadata: {
-        reason: "rate-limited",
-        retryAfterSeconds: rate.retryAfterSeconds,
-      },
-    });
-    return new Response(
-      JSON.stringify({
-        error: {
-          code: "RATE_LIMITED",
-          message: "Too many login attempts. Try again later.",
-        },
-      }),
-      {
-        status: 429,
-        headers: {
-          "Content-Type": "application/json",
-          "Retry-After": String(rate.retryAfterSeconds),
-        },
-      }
-    );
-  }
-
-  // ── 2. Validate body shape ──────────────────────────────────
+  // ── 1. Validate body shape ──────────────────────────────────
   let rawBody: unknown;
   try {
     rawBody = await request.json();
@@ -114,7 +91,7 @@ export async function POST(request: Request) {
     return errorResponse("UNAUTHORIZED", "Invalid credentials", 401);
   }
 
-  // ── 3. Issue session cookie ─────────────────────────────────
+  // ── 2. Issue session cookie ─────────────────────────────────
   const maxAgeMs = getSessionMaxAge(env.SESSION_MAX_AGE);
   const value = await signSessionValue({
     username: env.ADMIN_USERNAME,
@@ -124,9 +101,10 @@ export async function POST(request: Request) {
   const isProd = env.NODE_ENV === "production";
   const cookie = buildSessionCookie(value, maxAgeMs, isProd);
 
-  // Reset the rate-limit bucket on a successful login so a
-  // legitimate user is not penalised for typos.
-  loginRateLimiter.reset(ip);
+  // Reset the shared rate-limit bucket on a successful login so a
+  // legitimate user is not penalised for typos. The proxy enforces
+  // the same bucket before this handler runs.
+  resetLoginRateLimit(ip);
 
   logAuthEvent({
     action: "auth.login.success",

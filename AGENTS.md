@@ -191,11 +191,12 @@ the opt-in cannot be used to bypass auth.
 
 ### Rate Limiting
 
-- **Required** for auth endpoints (`/api/auth/login`) — ≈5 attempts / 15 min / IP, enforced by the session module from #53 (`src/lib/auth/login-rate-limit.ts`).
+- **Required** for auth endpoints (`/api/auth/login`) — ≈5 attempts / 15 min / IP.
 - **Required** for all other API routes — ≈120 req / min / IP.
 - **Required** for non-API routes — ≈600 req / min / IP.
-- Implemented in `src/lib/rate-limit.ts` (in-memory token bucket per IP) by **#56 — Security: global rate limiting**. Reads the real client IP from the configured trusted proxy header (`X-Forwarded-For` / `X-Real-IP`).
-- Returns `429` with `Retry-After` on exceed.
+- Implemented in `src/lib/rate-limit.ts` (in-memory token bucket per IP) by **#56 — Security: global rate limiting**. The proxy (`src/proxy.ts`) is the enforcement layer: it picks the right bucket per path, consumes a token, and returns 429 + `Retry-After` before the request reaches the route handler. Route handlers do not consume tokens of their own — the login route only calls `resetLoginRateLimit(ip)` on a successful login so a legitimate user is not penalised for typos.
+- Reads the real client IP from the configured trusted proxy header. The header name is the `TRUSTED_PROXY_HEADER` env var (default `X-Forwarded-For`; nginx typically sets it via `proxy_set_header X-Forwarded-For $remote_addr;`). When the configured header is missing, the IP falls back to `"unknown"` and every request lands in the same bucket — that is a deployment problem (no trusted proxy), not a code bug.
+- Returns `429` with `Retry-After` on exceed. The 429 response is generic (no internal paths, no DB errors) and carries the same security response headers (CSP, HSTS, …) as every other code path; see the App Security Baseline design spec §Error Handling.
 
 ### Auth (session-based, single-user)
 
@@ -206,7 +207,7 @@ The session-auth foundation lives in `src/lib/auth/` and is enforced at two laye
 
 Auth library modules: `session.ts` (HMAC-signed cookies, clamping, sliding renewal), `password.ts` (bcrypt + OWASP ASVS V3.2.2 constant-time login via a precomputed dummy hash), `csrf.ts` (origin/referer check, constant-time compare), `exempt-paths.ts` (exact-pathname matching — no suffix/prefix), `audit.ts` (auth event log to `audit_logs`), `client-ip.ts`, `constants.ts`.
 
-Required env vars: `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH` (bcrypt hash, cost ≥ 10), `SESSION_SECRET` (min 32 chars, used to sign cookies). `SESSION_MAX_AGE` is optional (ms; clamped to [1h, 30d]; default 24h). Generate the password hash with `pnpm hash:password` — a hidden-prompt script in `scripts/hash-password.ts` that reuses the app's `bcryptjs` and `BCRYPT_COST` so the hash is guaranteed to verify against the login route.
+Required env vars: `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH` (bcrypt hash, cost ≥ 10), `SESSION_SECRET` (min 32 chars, used to sign cookies). `SESSION_MAX_AGE` is optional (ms; clamped to [1h, 30d]; default 24h). `TRUSTED_PROXY_HEADER` is optional (default `X-Forwarded-For`; the rate limiter and audit log read the client IP from this header — see `### Rate Limiting` above and the App Security Baseline design spec §5). Generate the password hash with `pnpm hash:password` — a hidden-prompt script in `scripts/hash-password.ts` that reuses the app's `bcryptjs` and `BCRYPT_COST` so the hash is guaranteed to verify against the login route.
 
 Test helper: `authedRequest(url, init)` in `src/db/test-utils.ts` signs a session cookie using the test `SESSION_SECRET`, so existing route tests can call the protected handlers directly.
 

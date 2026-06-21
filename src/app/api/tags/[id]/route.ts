@@ -23,7 +23,6 @@ export async function PATCH(
 ) {
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
-  // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   const { id } = await params;
   try {
     let body: unknown;
@@ -114,7 +113,6 @@ export async function DELETE(
 ) {
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
-  // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   const { id } = await params;
   try {
     const db = getDb();

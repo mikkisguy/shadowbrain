@@ -21,7 +21,6 @@ const searchSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   // Defense in depth: the proxy already enforces auth, but the route
   // re-checks so a direct call still fails closed.
   const auth = await requireAuthenticated(request);

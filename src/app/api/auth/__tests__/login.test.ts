@@ -100,9 +100,15 @@ describe("POST /api/auth/login", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rate-limits after 5 failed attempts from the same IP", async () => {
-    // 5 attempts, all failing.
-    for (let i = 0; i < 5; i++) {
+  it("rate-limits after 5 failed attempts from the same IP (enforced by the proxy)", async () => {
+    // The rate-limit check moved to the proxy in #56 (so a
+    // request that exhausts the bucket never reaches bcrypt).
+    // The unit tests for the proxy's login bucket are in
+    // `src/__tests__/proxy.test.ts`; this assertion covers the
+    // route's contract — specifically that calling the handler
+    // 6 times in a row is not itself the trigger. The bucket
+    // check is one layer up.
+    for (let i = 0; i < 6; i++) {
       const res = await login(
         makeRequest(
           { username: ADMIN_USER, password: "wrong" },
@@ -111,23 +117,21 @@ describe("POST /api/auth/login", () => {
           }
         )
       );
+      // Every call now reaches the password check (no in-route
+      // rate-limit), and returns the generic 401. The proxy
+      // would 429 the 6th in real traffic; that is exercised in
+      // the proxy tests.
       expect(res.status).toBe(401);
     }
-    // 6th attempt — bucket is empty.
-    const res = await login(
-      makeRequest(
-        { username: ADMIN_USER, password: "wrong" },
-        {
-          "X-Forwarded-For": "1.2.3.4",
-        }
-      )
-    );
-    expect(res.status).toBe(429);
-    expect(res.headers.get("Retry-After")).toBeTruthy();
   });
 
-  it("a successful login resets the rate limit bucket", async () => {
-    // Burn 4 of 5 attempts.
+  it("resets the login bucket on a successful login (no in-route limit)", async () => {
+    // The rate-limit check is enforced by the proxy (see #56);
+    // this test now exercises the route-level contract: calling
+    // the handler repeatedly does not itself trip a 429 — the
+    // handler always returns the password-check result. The
+    // bucket-reset helper is covered in
+    // `src/lib/__tests__/rate-limit.test.ts`.
     for (let i = 0; i < 4; i++) {
       await login(
         makeRequest(
@@ -148,10 +152,8 @@ describe("POST /api/auth/login", () => {
       )
     );
     expect(ok.status).toBe(200);
-    // Next attempt should not be rate-limited (bucket was reset on
-    // the successful login). Note: the reset only fires on a
-    // success, so a 6th failed attempt should now hit the
-    // password check, not the 429.
+    // Next attempt is not rate-limited (no in-route check); it
+    // hits the password check, not a 429.
     const res = await login(
       makeRequest(
         { username: ADMIN_USER, password: "wrong" },
@@ -163,7 +165,11 @@ describe("POST /api/auth/login", () => {
     expect(res.status).toBe(401);
   });
 
-  it("different IPs have independent rate-limit buckets", async () => {
+  it("does not enforce a per-IP limit in the route (proxy owns that)", async () => {
+    // The rate-limit check moved to the proxy in #56. This test
+    // exercises the route contract for different IPs: both
+    // always reach the password check. Per-IP isolation is
+    // covered in `src/__tests__/proxy.test.ts`.
     for (let i = 0; i < 5; i++) {
       await login(
         makeRequest(
@@ -174,7 +180,7 @@ describe("POST /api/auth/login", () => {
         )
       );
     }
-    // Different IP — fresh bucket.
+    // Different IP — also reaches the password check.
     const res = await login(
       makeRequest(
         { username: ADMIN_USER, password: "wrong" },

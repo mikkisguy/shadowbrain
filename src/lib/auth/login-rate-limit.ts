@@ -1,21 +1,19 @@
 /**
- * Module-singleton rate limiter for the login endpoint.
+ * Backward-compat re-export.
  *
- * The auth module exports a single `loginRateLimiter` instance and
- * a test-only `__resetLoginRateLimiter()` to drop all bucket state
- * between tests. Production code does not need to call the reset.
+ * The login rate limiter now lives in `@/lib/rate-limit.ts` alongside
+ * the other category limiters, so the proxy and the login route
+ * share the **same** `Map` for the login bucket (otherwise the proxy
+ * and the route would each have an independent counter, doubling
+ * the effective limit).
+ *
+ * This file is kept as a thin re-export so existing callers
+ * (the login route's `resetLoginRateLimit` and the auth tests'
+ * `__resetLoginRateLimiter`) keep working without an import path
+ * change. New code should import from `@/lib/rate-limit` directly.
  */
 
-import { createRateLimiter } from "./rate-limit";
-import { LOGIN_RATE_LIMIT_MAX, LOGIN_RATE_LIMIT_WINDOW_MS } from "./constants";
-
-export const loginRateLimiter = createRateLimiter({
-  max: LOGIN_RATE_LIMIT_MAX,
-  windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
-});
-
-/** Test-only: drop all stored buckets. Production code should not
- *  call this. */
-export function __resetLoginRateLimiter(): void {
-  loginRateLimiter.resetAll();
-}
+export {
+  __resetAllRateLimiters as __resetLoginRateLimiter,
+  resetLoginRateLimit,
+} from "@/lib/rate-limit";

@@ -22,7 +22,6 @@ const createSchema = z.object({
 export async function GET(request: Request) {
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
-  // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   try {
     const db = getDb();
     const rows = tags.listWithCounts(db);
@@ -41,7 +40,6 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
-  // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   try {
     let body: unknown;
     try {
