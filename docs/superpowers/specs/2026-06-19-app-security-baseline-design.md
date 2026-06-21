@@ -139,7 +139,9 @@ restrictive set, centralized in `src/lib/security.config.ts`:
 - `X-Frame-Options: DENY`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
-- `Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()`
+- `Permissions-Policy: camera=(), microphone=(), geolocation()`
+
+  _(The original draft listed `interest-cohort=()` (FLoC opt-out). Chrome has since dropped both FLoC and its successor Topics, and modern Chromium logs `Unrecognized feature` for either directive. We therefore ship only the directives the browser actually understands today. If FLoC / Topics (or any successor) returns, the directive can be re-added at that time.)_
 
 ### 5. Rate limiting
 
