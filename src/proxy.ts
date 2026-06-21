@@ -26,6 +26,15 @@
  *     50% of its lifetime, attach a fresh `Set-Cookie` to the
  *     response.
  *
+ * On every non-static response (exempt routes, protected success,
+ * 401, 403, 302 redirect), the proxy also applies the **security
+ * response headers** (CSP with a per-request nonce, HSTS,
+ * X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+ * Permissions-Policy). The policy is defined in one place —
+ * `src/lib/security.config.ts` — and applied uniformly so the
+ * defense is the same on every code path. See that file for the
+ * full rationale.
+ *
  * The exempt list is matched by **exact normalized pathname** — not
  * by suffix or prefix. See `src/lib/auth/exempt-paths.ts`.
  */
@@ -45,6 +54,7 @@ import {
   isExemptFromAuth,
   isStaticAsset,
 } from "@/lib/auth/exempt-paths";
+import { applySecurityHeaders, generateNonce } from "@/lib/security.config";
 
 export const config = {
   matcher: [
@@ -69,32 +79,48 @@ export const config = {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1. Static assets — pass through.
+  // 1. Static assets — pass through. The security spec scopes the
+  // headers to API and pages (see security.config.ts); static
+  // assets are same-origin cacheable resources and do not need
+  // them.
   if (isStaticAsset(pathname)) {
     return NextResponse.next();
   }
 
+  // The remaining code paths all return a response that carries
+  // the security headers (CSP + static set). Generate a fresh
+  // nonce per request — it lands in the CSP `script-src` /
+  // `style-src` directives and on the request headers as
+  // `x-nonce` so the layout (and any other RSC) can read it.
+  const env = getEnv();
+  const isProd = env.NODE_ENV === "production";
+  const nonce = generateNonce();
+
   // 2. Exempt routes — allow without auth or CSRF.
   if (isExemptFromAuth(pathname)) {
-    return NextResponse.next();
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-nonce", nonce);
+    const response = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
+    return applySecurityHeaders(response, nonce, !isProd);
   }
 
   // From this point on, we are on a protected route.
 
   // 3. CSRF — state-changing methods need a matching Origin/Referer.
-  const env = getEnv();
-  const isProd = env.NODE_ENV === "production";
   const allowedOrigin = deriveAllowedOrigin(env.DOMAIN, isProd);
   const csrf = checkCsrfOrigin(request, { allowedOrigin });
   if (!csrf.allowed) {
     // Generic 403 — never leak the specific reason to the client.
-    return new NextResponse(
+    const response = new NextResponse(
       JSON.stringify({ error: { code: "FORBIDDEN", message: "Forbidden" } }),
       {
         status: 403,
         headers: { "Content-Type": "application/json" },
       }
     );
+    return applySecurityHeaders(response, nonce, !isProd);
   }
 
   // 4. Auth — verify session cookie. Pass the configured
@@ -120,9 +146,10 @@ export async function proxy(request: NextRequest) {
       const from = pathname + request.nextUrl.search;
       const loginUrl = new URL("/login", request.url);
       loginUrl.searchParams.set("from", from);
-      return NextResponse.redirect(loginUrl, 302);
+      const response = NextResponse.redirect(loginUrl, 302);
+      return applySecurityHeaders(response, nonce, !isProd);
     }
-    return new NextResponse(
+    const response = new NextResponse(
       JSON.stringify({
         error: { code: "UNAUTHORIZED", message: "Unauthorized" },
       }),
@@ -131,12 +158,17 @@ export async function proxy(request: NextRequest) {
         headers: { "Content-Type": "application/json" },
       }
     );
+    return applySecurityHeaders(response, nonce, !isProd);
   }
 
   // 5. Sliding renewal — if the session is past 50% of its life,
   // attach a fresh Set-Cookie so the user does not have to log in
   // again mid-session.
-  const response = NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
   if (verify.shouldRenew && verify.session) {
     const value = await signSessionValue({
       username: verify.session.username,
@@ -147,5 +179,5 @@ export async function proxy(request: NextRequest) {
     response.headers.append("Set-Cookie", setCookie);
   }
 
-  return response;
+  return applySecurityHeaders(response, nonce, !isProd);
 }
