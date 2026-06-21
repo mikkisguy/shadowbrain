@@ -4,6 +4,7 @@ import {
   parsePagination,
   errorResponse,
   parseJson,
+  parseIncludeFlag,
   logServerError,
 } from "@/lib/api";
 import { log } from "@/lib/logger";
@@ -20,9 +21,12 @@ const searchSchema = z.object({
 });
 
 export async function GET(request: Request) {
+  // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
+  // Defense in depth: the proxy already enforces auth, but the route
+  // re-checks so a direct call still fails closed.
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
-  // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
+
   try {
     const { searchParams } = new URL(request.url);
 
@@ -42,16 +46,26 @@ export async function GET(request: Request) {
       limit: searchParams.get("limit") ?? undefined,
     });
 
+    // Visibility opt-in is admin-only; auth above cleared the gate.
+    const includeHidden = parseIncludeFlag(searchParams.get("include_hidden"));
+    const includePrivate = parseIncludeFlag(
+      searchParams.get("include_private")
+    );
+
     const db = getDb();
     const results = search.queryWithFilters(db, parsed.data.q, {
       type: parsed.data.type,
       tag: parsed.data.tag,
       limit,
       offset,
+      includeHidden,
+      includePrivate,
     });
     const total = search.countWithFilters(db, parsed.data.q, {
       type: parsed.data.type,
       tag: parsed.data.tag,
+      includeHidden,
+      includePrivate,
     });
 
     log("info", "search executed", {
@@ -59,6 +73,8 @@ export async function GET(request: Request) {
       queryLength: parsed.data.q.length,
       count: results.length,
       total,
+      includeHidden,
+      includePrivate,
     });
 
     return Response.json({

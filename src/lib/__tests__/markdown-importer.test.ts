@@ -184,6 +184,59 @@ describe("importMarkdownDirectory", () => {
     }
   });
 
+  it("re-imports a previously hidden or private item without throwing (issue #54 regression)", async () => {
+    // Issue #54 made the read helpers hide rows whose visibility flag
+    // is set by default. The importer is a system-level operation, not
+    // a browse view — it must still see hidden / private items so a
+    // re-import of a previously imported private file can update it
+    // instead of falling through to `contentItems.create` (which would
+    // hit the PRIMARY KEY and throw SQLITE_CONSTRAINT).
+    const path = join(workdir, "alpha.md");
+    await writeFile(path, "v1\n");
+
+    const db = createTestDb();
+    try {
+      await importMarkdownDirectory(db, workdir);
+      const id = generateStableId("alpha.md");
+      // Manually flag the imported item as both hidden AND private —
+      // the strictest combination.
+      db.prepare(
+        "UPDATE content_items SET is_hidden = 1, is_private = 1 WHERE id = ?"
+      ).run(id);
+
+      // Default-visibility findById must NOT find the row (sanity check
+      // that the visibility filter still works in this test).
+      expect(contentItems.findById(db, id)).toBeNull();
+      // Opt-in findById must see it.
+      expect(
+        contentItems.findById(db, id, {
+          includeHidden: true,
+          includePrivate: true,
+        })?.id
+      ).toBe(id);
+
+      // Re-import with a changed file. The importer must see the
+      // existing row and update it, not throw.
+      await writeFile(path, "v2\n");
+      const second = await importMarkdownDirectory(db, workdir);
+      expect(second.failed).toBe(0);
+      expect(second.updated).toBe(1);
+      expect(second.created).toBe(0);
+
+      // The row's content is updated, the visibility flags are
+      // preserved (the importer does not touch them).
+      const after = contentItems.findById(db, id, {
+        includeHidden: true,
+        includePrivate: true,
+      });
+      expect(after?.content).toBe("v2");
+      expect(after?.is_hidden).toBe(1);
+      expect(after?.is_private).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
   it("skips hidden files and walks subdirectories", async () => {
     await mkdir(join(workdir, "topics"));
     await writeFile(join(workdir, "topics", "deep.md"), "deep note\n");

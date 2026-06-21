@@ -1,5 +1,12 @@
 import Database from "better-sqlite3";
 
+/**
+ * Two-level visibility flags are projected onto the search result so
+ * callers can decide whether to surface hidden / private items in the
+ * chat RAG context. The read helpers below filter rows out by default
+ * (`includeHidden` and `includePrivate` both default to `false`) and
+ * rely on the route layer to gate the opt-in behind authentication.
+ */
 export interface SearchResult {
   id: string;
   type: string;
@@ -10,6 +17,7 @@ export interface SearchResult {
   source_url: string | null;
   metadata: string | null;
   is_private: number;
+  is_hidden: number;
   created_at: string;
   updated_at: string;
   rank: number;
@@ -19,6 +27,14 @@ export interface SearchResult {
    * ellipsis. Null when the row has no FTS-indexed text.
    */
   snippet: string | null;
+}
+
+/** Visibility opt-in options shared by every search helper. The
+ *  flags default to `false` so a caller that forgets to opt in still
+ *  hides the row. */
+export interface SearchVisibilityOptions {
+  includeHidden?: boolean;
+  includePrivate?: boolean;
 }
 
 export function sanitizeFts5Query(query: string): string {
@@ -52,41 +68,60 @@ export function sanitizeFts5Query(query: string): string {
 const SNIPPET_SQL =
   "snippet(content_items_search, 1, '<mark>', '</mark>', '…', 16)";
 
+/** SQL fragment for the visibility filter. Bound parameters must
+ *  follow in the order: hidden-opt-in (0/1), private-opt-in (0/1).
+ *  Encapsulating the fragment here keeps the visibility rule in one
+ *  place — every read helper agrees on the same predicate. */
+const VISIBILITY_WHERE = "(ci.is_hidden = 0 OR ?) AND (ci.is_private = 0 OR ?)";
+
 export const search = {
   query: (
     db: Database.Database,
     query: string,
-    options?: { limit?: number; offset?: number }
+    options?: { limit?: number; offset?: number } & SearchVisibilityOptions
   ): SearchResult[] => {
     const limit = options?.limit ?? 50;
     const offset = options?.offset ?? 0;
+    const includeHidden = options?.includeHidden ? 1 : 0;
+    const includePrivate = options?.includePrivate ? 1 : 0;
 
     const stmt = db.prepare(`
       SELECT ci.*, bm25(content_items_search) as rank, ${SNIPPET_SQL} as snippet
       FROM content_items ci
       JOIN content_items_search cis ON ci.rowid = cis.rowid
       WHERE content_items_search MATCH ?
+        AND ${VISIBILITY_WHERE}
       ORDER BY rank
       LIMIT ? OFFSET ?
     `);
 
-    return stmt.all(sanitizeFts5Query(query), limit, offset) as SearchResult[];
+    return stmt.all(
+      sanitizeFts5Query(query),
+      includeHidden,
+      includePrivate,
+      limit,
+      offset
+    ) as SearchResult[];
   },
 
   queryByType: (
     db: Database.Database,
     query: string,
     type: string,
-    options?: { limit?: number; offset?: number }
+    options?: { limit?: number; offset?: number } & SearchVisibilityOptions
   ): SearchResult[] => {
     const limit = options?.limit ?? 50;
     const offset = options?.offset ?? 0;
+    const includeHidden = options?.includeHidden ? 1 : 0;
+    const includePrivate = options?.includePrivate ? 1 : 0;
 
     const stmt = db.prepare(`
       SELECT ci.*, bm25(content_items_search) as rank, ${SNIPPET_SQL} as snippet
       FROM content_items ci
       JOIN content_items_search cis ON ci.rowid = cis.rowid
-      WHERE content_items_search MATCH ? AND ci.type = ?
+      WHERE content_items_search MATCH ?
+        AND ci.type = ?
+        AND ${VISIBILITY_WHERE}
       ORDER BY rank
       LIMIT ? OFFSET ?
     `);
@@ -94,6 +129,8 @@ export const search = {
     return stmt.all(
       sanitizeFts5Query(query),
       type,
+      includeHidden,
+      includePrivate,
       limit,
       offset
     ) as SearchResult[];
@@ -107,13 +144,19 @@ export const search = {
       tag?: string;
       limit?: number;
       offset?: number;
-    }
+    } & SearchVisibilityOptions
   ): SearchResult[] => {
     const limit = options?.limit ?? 50;
     const offset = options?.offset ?? 0;
+    const includeHidden = options?.includeHidden ? 1 : 0;
+    const includePrivate = options?.includePrivate ? 1 : 0;
 
-    const where: string[] = ["content_items_search MATCH ?"];
-    const params: (string | number)[] = [sanitizeFts5Query(query)];
+    const where: string[] = ["content_items_search MATCH ?", VISIBILITY_WHERE];
+    const params: (string | number)[] = [
+      sanitizeFts5Query(query),
+      includeHidden,
+      includePrivate,
+    ];
 
     let joins = "JOIN content_items_search cis ON ci.rowid = cis.rowid";
 
@@ -149,10 +192,17 @@ export const search = {
   countWithFilters: (
     db: Database.Database,
     query: string,
-    options?: { type?: string; tag?: string }
+    options?: { type?: string; tag?: string } & SearchVisibilityOptions
   ): number => {
-    const where: string[] = ["content_items_search MATCH ?"];
-    const params: (string | number)[] = [sanitizeFts5Query(query)];
+    const includeHidden = options?.includeHidden ? 1 : 0;
+    const includePrivate = options?.includePrivate ? 1 : 0;
+
+    const where: string[] = ["content_items_search MATCH ?", VISIBILITY_WHERE];
+    const params: (string | number)[] = [
+      sanitizeFts5Query(query),
+      includeHidden,
+      includePrivate,
+    ];
 
     let joins = "JOIN content_items_search cis ON ci.rowid = cis.rowid";
 
