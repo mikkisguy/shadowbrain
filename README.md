@@ -5,6 +5,8 @@
 
 # ShadowBrain
 
+[![Version](https://img.shields.io/badge/version-0.5.1-yellow)](CHANGELOG.md)
+
 </div>
 
 ShadowBrain is a personal knowledge management system that treats every thought - raw captures, journal entries, knowledge notes, bookmarks, people, projects, questions, and events - as nodes in a rich, typed graph.
