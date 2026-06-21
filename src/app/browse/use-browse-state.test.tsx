@@ -331,4 +331,224 @@ describe("useBrowseState", () => {
       expect(fetchSpy.callCount).toBeGreaterThan(before);
     });
   });
+
+  it("derives hasMore from items.length vs total", async () => {
+    fetchMock.mockResolvedValueOnce(
+      buildResponse({
+        items: [
+          {
+            id: "a",
+            type: "note",
+            title: null,
+            content: "x",
+            image_url: null,
+            source: "manual",
+            source_url: null,
+            created_at: "2026-06-21T00:00:00.000Z",
+            updated_at: "2026-06-21T00:00:00.000Z",
+          },
+        ],
+        total: 5,
+        page: 1,
+        limit: 20,
+      })
+    );
+    const { result } = renderHook(() => useBrowseState(), {
+      wrapper: StoreSubscriber,
+    });
+    await waitFor(() => {
+      expect(result.current.status).toBe("success");
+    });
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.total).toBe(5);
+    expect(result.current.hasMore).toBe(true);
+  });
+
+  it("loadMore fetches the next page and appends to items", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        buildResponse({
+          items: [
+            {
+              id: "1",
+              type: "note",
+              title: null,
+              content: "x",
+              image_url: null,
+              source: "manual",
+              source_url: null,
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+            },
+            {
+              id: "2",
+              type: "note",
+              title: null,
+              content: "y",
+              image_url: null,
+              source: "manual",
+              source_url: null,
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+            },
+          ],
+          total: 4,
+          page: 1,
+          limit: 20,
+        })
+      )
+      .mockResolvedValueOnce(
+        buildResponse({
+          items: [
+            {
+              id: "3",
+              type: "note",
+              title: null,
+              content: "z",
+              image_url: null,
+              source: "manual",
+              source_url: null,
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+            },
+            {
+              id: "4",
+              type: "note",
+              title: null,
+              content: "w",
+              image_url: null,
+              source: "manual",
+              source_url: null,
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+            },
+          ],
+          total: 4,
+          page: 2,
+          limit: 20,
+        })
+      );
+
+    const { result } = renderHook(() => useBrowseState(), {
+      wrapper: StoreSubscriber,
+    });
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(2);
+    });
+    expect(result.current.hasMore).toBe(true);
+
+    act(() => {
+      result.current.loadMore();
+    });
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(4);
+    });
+    expect(result.current.hasMore).toBe(false);
+    // The second call should have requested page 2.
+    expect(fetchSpy.lastPage).toBe(2);
+  });
+
+  it("loadMore is a no-op when hasMore is false", async () => {
+    fetchMock.mockResolvedValueOnce(
+      buildResponse({
+        items: [
+          {
+            id: "a",
+            type: "note",
+            title: null,
+            content: "x",
+            image_url: null,
+            source: "manual",
+            source_url: null,
+            created_at: "2026-06-21T00:00:00.000Z",
+            updated_at: "2026-06-21T00:00:00.000Z",
+          },
+        ],
+        total: 1,
+        page: 1,
+        limit: 20,
+      })
+    );
+    const { result } = renderHook(() => useBrowseState(), {
+      wrapper: StoreSubscriber,
+    });
+    await waitFor(() => {
+      expect(result.current.status).toBe("success");
+    });
+    expect(result.current.hasMore).toBe(false);
+    const before = fetchSpy.callCount;
+    act(() => {
+      result.current.loadMore();
+    });
+    expect(fetchSpy.callCount).toBe(before);
+  });
+
+  it("filter change resets the accumulated items", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        buildResponse({
+          items: [
+            {
+              id: "1",
+              type: "note",
+              title: null,
+              content: "x",
+              image_url: null,
+              source: "manual",
+              source_url: null,
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+            },
+          ],
+          total: 4,
+          page: 1,
+          limit: 20,
+        })
+      )
+      .mockResolvedValueOnce(
+        // The filter change consumes the next queued response.
+        // It returns a single journal item so the accumulated
+        // list resets to that one row.
+        buildResponse({
+          items: [
+            {
+              id: "2",
+              type: "journal",
+              title: null,
+              content: "y",
+              image_url: null,
+              source: "manual",
+              source_url: null,
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 20,
+        })
+      );
+    const { result } = renderHook(() => useBrowseState(), {
+      wrapper: StoreSubscriber,
+    });
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1);
+    });
+    // Sanity: total is 4, hasMore is true.
+    expect(result.current.hasMore).toBe(true);
+    act(() => {
+      result.current.setFilters({ type: "journal" });
+    });
+    await waitFor(() => {
+      // `every` on an empty array returns true, so we also assert
+      // the length to avoid a vacuous match.
+      expect(
+        result.current.items.length === 1 &&
+          result.current.items.every((i) => i.type === "journal")
+      ).toBe(true);
+    });
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.total).toBe(1);
+    expect(result.current.hasMore).toBe(false);
+  });
 });

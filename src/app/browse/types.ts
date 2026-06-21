@@ -27,6 +27,12 @@ export interface BrowseItem {
   type: string;
   title: string | null;
   content: string;
+  /** Full URL to an attached image, ready to drop into an
+   *  `<img src=…>`. The DB column is a relative path
+   *  (`notes/2026-01/uuid.webp`); the API client prefixes it with
+   *  `/api/images/` so the card never has to know the URL shape.
+   *  `null` when the item has no attached image. */
+  image_url: string | null;
   source: string;
   source_url: string | null;
   created_at: string;
@@ -53,6 +59,21 @@ export const BROWSE_TYPE_TABS = [
   "question",
 ] as const;
 export type BrowseTypeTab = (typeof BROWSE_TYPE_TABS)[number];
+
+/** Display modes for the feed. `grid` is the editorial multi-
+ *  column card layout (default); `list` is the wide single-
+ *  column row. The view is a local display preference, not a
+ *  filter, and lives outside the URL filter set. */
+export const BROWSE_VIEWS = ["grid", "list"] as const;
+export type BrowseView = (typeof BROWSE_VIEWS)[number];
+
+/** Coerce an arbitrary string into a valid view id. */
+export function coerceBrowseView(value: string | null | undefined): BrowseView {
+  if (!value) return "grid";
+  return (BROWSE_VIEWS as readonly string[]).includes(value)
+    ? (value as BrowseView)
+    : "grid";
+}
 
 /** Map from a tab id to the value we send to the API. The "all" tab
  *  sends an empty string so the filter helper omits the `type` param. */

@@ -20,26 +20,35 @@ import { BrowsePage } from "./browse-page";
 const setFilters = vi.fn();
 const clearFilters = vi.fn();
 const retry = vi.fn();
+const loadMore = vi.fn();
 
 const hookValues: {
   status: "idle" | "loading" | "success" | "error";
   filters: Record<string, string>;
-  data: null | { items: unknown[]; total: number };
+  items: unknown[];
+  total: number;
   error: string | null;
   isSearchPending: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
   setFilters: typeof setFilters;
   clearFilters: typeof clearFilters;
   retry: typeof retry;
+  loadMore: typeof loadMore;
   typeTab: string;
 } = {
   status: "success",
   filters: {},
-  data: { items: [], total: 0 },
+  items: [],
+  total: 0,
   error: null,
   isSearchPending: false,
+  isLoadingMore: false,
+  hasMore: false,
   setFilters,
   clearFilters,
   retry,
+  loadMore,
   typeTab: "all",
 };
 
@@ -51,11 +60,15 @@ beforeEach(() => {
   setFilters.mockReset();
   clearFilters.mockReset();
   retry.mockReset();
+  loadMore.mockReset();
   hookValues.status = "success";
   hookValues.filters = {};
-  hookValues.data = { items: [], total: 0 };
+  hookValues.items = [];
+  hookValues.total = 0;
   hookValues.error = null;
   hookValues.isSearchPending = false;
+  hookValues.isLoadingMore = false;
+  hookValues.hasMore = false;
   hookValues.typeTab = "all";
 });
 
@@ -65,7 +78,7 @@ afterEach(() => {
 
 describe("BrowsePage", () => {
   it("renders the page header with the total count from the hook", () => {
-    hookValues.data = { items: [], total: 42 };
+    hookValues.total = 42;
     render(<BrowsePage />);
     expect(screen.getByTestId("browse-page")).toBeInTheDocument();
     expect(screen.getByText(/42 items/)).toBeInTheDocument();
@@ -108,8 +121,9 @@ describe("BrowsePage", () => {
     expect(screen.getByTestId("advanced-tag")).toBeInTheDocument();
   });
 
-  it("renders the empty state when data has no items and no filters are set", () => {
-    hookValues.data = { items: [], total: 0 };
+  it("renders the empty state when items is empty and no filters are set", () => {
+    hookValues.items = [];
+    hookValues.total = 0;
     render(<BrowsePage />);
     expect(screen.getByTestId("feed-empty")).toBeInTheDocument();
   });
@@ -121,10 +135,116 @@ describe("BrowsePage", () => {
     expect(screen.getByTestId("feed-error")).toHaveTextContent("Boom");
   });
 
-  it("renders the loading skeleton when status is loading with no data", () => {
+  it("renders the loading skeleton when status is loading with no items", () => {
     hookValues.status = "loading";
-    hookValues.data = null;
+    hookValues.items = [];
     render(<BrowsePage />);
     expect(screen.getByTestId("feed-loading")).toBeInTheDocument();
+  });
+
+  it("starts on the grid view", () => {
+    hookValues.items = [];
+    render(<BrowsePage />);
+    const grid = screen.getByTestId("view-grid");
+    expect(grid).toHaveAttribute("aria-pressed", "true");
+    const list = screen.getByTestId("view-list");
+    expect(list).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("switches to the list view when the list button is clicked", async () => {
+    const user = userEvent.setup();
+    hookValues.items = [];
+    render(<BrowsePage />);
+    await user.click(screen.getByTestId("view-list"));
+    expect(screen.getByTestId("view-list")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByTestId("view-grid")).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+  });
+
+  it("starts on the larger-dot indicator variant", () => {
+    hookValues.items = [];
+    render(<BrowsePage />);
+    const dot = screen.getByTestId("indicator-dot");
+    expect(dot).toHaveAttribute("aria-pressed", "true");
+    const pill = screen.getByTestId("indicator-pill");
+    expect(pill).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("switches to the pill variant when the pill button is clicked", async () => {
+    const user = userEvent.setup();
+    hookValues.items = [];
+    render(<BrowsePage />);
+    await user.click(screen.getByTestId("indicator-pill"));
+    expect(screen.getByTestId("indicator-pill")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByTestId("indicator-dot")).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+  });
+
+  it("forwards the active variant to the feed so each card renders it", async () => {
+    const user = userEvent.setup();
+    hookValues.items = [
+      {
+        id: "1",
+        type: "note",
+        title: "Note",
+        content: "Hello",
+        image_url: null,
+        source: "manual",
+        source_url: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+    render(<BrowsePage />);
+    // Default: `larger-dot` — the card carries a `size-2.5` dot
+    // and no pill.
+    expect(screen.queryByTestId("content-card-pill")).toBeNull();
+    const dot = screen
+      .getByTestId("content-card")
+      .querySelector("span.bg-type-note.rounded-full");
+    expect(dot?.className).toMatch(/size-2\.5/);
+
+    // Flip to `pill` — the card drops the dot and renders a
+    // filled chip with the type name.
+    await user.click(screen.getByTestId("indicator-pill"));
+    const pill = screen.getByTestId("content-card-pill");
+    expect(pill).toHaveTextContent(/note/i);
+    expect(
+      screen
+        .getByTestId("content-card")
+        .querySelector("span.bg-type-note.rounded-full")
+    ).toBeNull();
+  });
+
+  it("wires the load-more affordance to the hook's loadMore", async () => {
+    const user = userEvent.setup();
+    hookValues.items = [
+      {
+        id: "1",
+        type: "note",
+        title: "Note",
+        content: "Hello",
+        image_url: null,
+        source: "manual",
+        source_url: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+    hookValues.total = 40;
+    hookValues.hasMore = true;
+    render(<BrowsePage />);
+    await user.click(screen.getByTestId("feed-load-more-button"));
+    expect(loadMore).toHaveBeenCalledOnce();
   });
 });

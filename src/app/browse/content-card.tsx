@@ -4,19 +4,32 @@
  * Feed card for a single content item.
  *
  * The card is a presentational component — it does not own any
- * state and does not route the user anywhere (the item detail page
- * does not exist yet, so a click target would be a dead link). The
- * spec calls for type-coloured badges, a serif title, a sans
- * preview line-clamped to ~3 lines, a tag strip, and a relative
- * timestamp. All of those are derived from the props; the parent
- * (the feed) passes them in.
+ * state and does not route the user anywhere (the item detail
+ * page does not exist yet, so a click target would be a dead
+ * link). The spec calls for type-coloured badges, a serif
+ * title, a sans preview line-clamped to ~3 lines, a tag strip,
+ * and a relative timestamp. All of those are derived from the
+ * props; the parent (the feed) passes them in.
  *
- * The card is wrapped in a `<article>` with a `data-testid` so the
- * feed tests can assert on the rendered shape without coupling to
- * the visual classes.
+ * When `image_url` is set, the card renders an `<img>` at the
+ * top — fixed 16:9 aspect, `object-fit: cover`, full card
+ * width. The image is the visual focal point; the type badge,
+ * title, preview, and tags flow underneath in a stacked layout.
+ *
+ * Layout: the article is `h-full` so it fills the grid cell's
+ * height. The inner content body is `flex-1` so the body grows
+ * to match the tallest card in the row, and the tag strip is
+ * `mt-auto` so it always sticks to the bottom — even when the
+ * preview is short. This is what gives the grid the "fluid"
+ * feel: every card in a row has the same outer height, with
+ * internal content distributed top-to-bottom.
+ *
+ * The card is wrapped in a `<article>` with a `data-testid` so
+ * the feed tests can assert on the rendered shape without
+ * coupling to the visual classes.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import type { BrowseItem } from "./types";
@@ -27,6 +40,19 @@ export interface ContentCardProps {
    *  request). When omitted the card renders the tag strip
    *  without entries. */
   tags?: string[];
+  /**
+   * Visual treatment for the type indicator. Two options, both
+   * live in the card header (no chrome on the card body):
+   *   - `"pill"` — the dot + uppercase text become a filled
+   *     coloured chip with the type name. Higher visual weight;
+   *     pre-attentively scannable in a long feed.
+   *   - `"larger-dot"` — the header dot is bumped from 1.5 px to
+   *     2.5 px. Minimal change; keeps the editorial whitespace.
+   *
+   * The two are surfaced together via a toggle on the Browse
+   * page; the default is `"larger-dot"`.
+   */
+  variant?: "pill" | "larger-dot";
 }
 
 const TYPE_DOT_CLASS: Record<string, string> = {
@@ -99,60 +125,129 @@ export function previewText(content: string, max: number = 180): string {
   return `${slice.slice(0, cut).trimEnd()}…`;
 }
 
-export function ContentCard({ item, tags = [] }: ContentCardProps) {
+export function ContentCard({
+  item,
+  tags = [],
+  variant = "larger-dot",
+}: ContentCardProps) {
   const dotClass = TYPE_DOT_CLASS[item.type] ?? "bg-type-raw";
   const typeLabel = TYPE_LABEL[item.type] ?? item.type;
   const relative = useMemo(
     () => formatRelativeTime(item.created_at),
     [item.created_at]
   );
+  // When the image 404s, show a text placeholder instead of the
+  // browser's default broken-image glyph. The file may genuinely
+  // not exist (the image capture pipeline hasn't created it yet),
+  // so a soft fallback keeps the card wall looking intentional.
+  const [imageError, setImageError] = useState(false);
 
   return (
     <article
       data-testid="content-card"
       data-item-id={item.id}
       data-item-type={item.type}
+      data-has-image={item.image_url ? "true" : "false"}
+      data-variant={variant}
       className={cn(
-        "border-border bg-surface-elevated flex flex-col gap-3 rounded-sm border p-4",
+        "border-border bg-surface-elevated relative flex flex-col overflow-hidden rounded-sm border",
         "hover:border-border-strong transition-colors"
       )}
     >
-      <header className="flex items-center justify-between gap-3">
-        <span className="text-muted-foreground inline-flex items-center gap-2 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase">
-          <span aria-hidden className={cn("size-1.5 rounded-full", dotClass)} />
-          {typeLabel}
-        </span>
-        <time
-          dateTime={item.created_at}
-          title={item.created_at}
-          className="text-muted-foreground font-mono text-[0.7rem]"
+      {item.image_url && !imageError ? (
+        <div className="border-border bg-surface-muted relative aspect-video w-full overflow-hidden border-b">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={item.image_url}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={() => setImageError(true)}
+            className="absolute inset-0 size-full object-cover"
+            data-testid="content-card-image"
+          />
+        </div>
+      ) : null}
+
+      {/* Fallback for broken / missing images: a subtle placeholder
+          so cards with and without images still feel like part of
+          the same grid, rather than showing a browser broken-icon. */}
+      {item.image_url && imageError ? (
+        <div
+          className="border-border bg-surface-muted flex aspect-video w-full items-center justify-center border-b"
+          data-testid="content-card-image-error"
         >
-          {relative}
-        </time>
-      </header>
-
-      {item.title ? (
-        <h3 className="text-foreground font-serif text-lg leading-snug font-semibold tracking-[-0.01em]">
-          {item.title}
-        </h3>
+          <p className="text-muted-foreground font-sans text-xs">
+            Image unavailable
+          </p>
+        </div>
       ) : null}
 
-      <p className="text-muted-foreground line-clamp-3 font-sans text-sm leading-relaxed">
-        {previewText(item.content)}
-      </p>
-
-      {tags.length > 0 ? (
-        <ul aria-label="Tags" className="flex flex-wrap items-center gap-1.5">
-          {tags.slice(0, 4).map((tag) => (
-            <li
-              key={tag}
-              className="border-border bg-background text-muted-foreground rounded-sm border px-1.5 py-0.5 font-mono text-[0.65rem] tracking-wide"
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <header className="flex items-center justify-between gap-3">
+          {variant === "pill" ? (
+            // Filled coloured chip — replaces both the dot and
+            // the muted-foreground text. The chip background
+            // uses the type token; the text uses the surface
+            // foreground (cream) for contrast.
+            <span
+              data-testid="content-card-pill"
+              className={cn(
+                "inline-flex items-center rounded-sm px-2 py-0.5 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase",
+                dotClass,
+                "text-background"
+              )}
             >
-              #{tag}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+              {typeLabel}
+            </span>
+          ) : (
+            // `larger-dot` variant: a slightly chunkier dot
+            // (2.5 px instead of 1.5 px) so the type identity
+            // reads from across the feed. Keeps the editorial
+            // whitespace.
+            <span className="text-muted-foreground inline-flex items-center gap-2 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase">
+              <span
+                aria-hidden
+                className={cn("size-2.5 rounded-full", dotClass)}
+              />
+              {typeLabel}
+            </span>
+          )}
+          <time
+            dateTime={item.created_at}
+            title={item.created_at}
+            className="text-muted-foreground font-mono text-[0.7rem]"
+          >
+            {relative}
+          </time>
+        </header>
+
+        {item.title ? (
+          <h3 className="text-foreground font-serif text-lg leading-snug font-semibold tracking-[-0.01em]">
+            {item.title}
+          </h3>
+        ) : null}
+
+        <p className="text-muted-foreground line-clamp-3 font-sans text-sm leading-relaxed">
+          {previewText(item.content)}
+        </p>
+
+        {tags.length > 0 ? (
+          <ul
+            aria-label="Tags"
+            className="mt-auto flex flex-wrap items-center gap-1.5 pt-2"
+          >
+            {tags.slice(0, 4).map((tag) => (
+              <li
+                key={tag}
+                className="border-border bg-background text-muted-foreground rounded-sm border px-1.5 py-0.5 font-mono text-[0.65rem] tracking-wide"
+              >
+                #{tag}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
     </article>
   );
 }

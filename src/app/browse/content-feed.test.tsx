@@ -2,7 +2,7 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContentFeed } from "./content-feed";
 import type { BrowseItem } from "./types";
@@ -13,7 +13,12 @@ import type { BrowseItem } from "./types";
  * The feed has four visual states: loading, error, empty, and
  * success. The component is purely presentational — its only
  * "input" is the status enum plus the items array. The tests
- * pin the four states and the retry hook-up.
+ * pin the four states, the retry hook-up, and the
+ * load-more affordance (sentinel + button + end-of-results).
+ *
+ * The view toggle (grid / list) is tested in browse-page.test.tsx
+ * since the page owns that state. The feed only renders the
+ * layout the page hands it.
  */
 
 const item: BrowseItem = {
@@ -21,13 +26,46 @@ const item: BrowseItem = {
   type: "note",
   title: "Note",
   content: "Hello",
+  image_url: null,
   source: "manual",
   source_url: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 };
 
+const defaultProps = {
+  view: "grid" as const,
+  isLoadingMore: false,
+  hasMore: false,
+  onLoadMore: () => undefined,
+};
+
 describe("ContentFeed", () => {
+  beforeEach(() => {
+    // jsdom does not implement IntersectionObserver. The feed
+    // short-circuits the effect when the constructor is
+    // missing, so we mock it for the load-more tests to verify
+    // the observer setup does not throw.
+    class MockIntersectionObserver {
+      readonly root: Element | null = null;
+      readonly rootMargin: string = "0px";
+      readonly thresholds: ReadonlyArray<number> = [];
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).IntersectionObserver = MockIntersectionObserver;
+  });
+
+  afterEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (globalThis as any).IntersectionObserver;
+  });
+
   it("renders a loading skeleton when status is loading and no items", () => {
     render(
       <ContentFeed
@@ -36,6 +74,7 @@ describe("ContentFeed", () => {
         error={null}
         onRetry={() => undefined}
         hasActiveFilters={false}
+        {...defaultProps}
       />
     );
     expect(screen.getByTestId("feed-loading")).toBeInTheDocument();
@@ -51,6 +90,7 @@ describe("ContentFeed", () => {
         error="Boom"
         onRetry={onRetry}
         hasActiveFilters={false}
+        {...defaultProps}
       />
     );
     expect(screen.getByTestId("feed-error")).toHaveTextContent("Boom");
@@ -66,6 +106,7 @@ describe("ContentFeed", () => {
         error={null}
         onRetry={() => undefined}
         hasActiveFilters={false}
+        {...defaultProps}
       />
     );
     expect(screen.getByTestId("feed-empty")).toHaveTextContent(
@@ -78,6 +119,7 @@ describe("ContentFeed", () => {
         error={null}
         onRetry={() => undefined}
         hasActiveFilters
+        {...defaultProps}
       />
     );
     expect(screen.getByTestId("feed-empty")).toHaveTextContent(
@@ -93,6 +135,7 @@ describe("ContentFeed", () => {
         error={null}
         onRetry={() => undefined}
         hasActiveFilters={false}
+        {...defaultProps}
       />
     );
     const list = screen.getByTestId("feed");
@@ -100,5 +143,93 @@ describe("ContentFeed", () => {
     expect(list.querySelectorAll('[data-testid="content-card"]')).toHaveLength(
       1
     );
+    // Default view is grid — the list carries a data-view marker
+    // the CSS hooks off of.
+    expect(list).toHaveAttribute("data-view", "grid");
+  });
+
+  it("renders the list view as a single column", () => {
+    render(
+      <ContentFeed
+        items={[item]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+        view="list"
+      />
+    );
+    const list = screen.getByTestId("feed");
+    expect(list).toHaveAttribute("data-view", "list");
+    expect(list.className).toMatch(/flex-col/);
+  });
+
+  it("renders the load-more affordance when hasMore is true", () => {
+    const onLoadMore = vi.fn();
+    render(
+      <ContentFeed
+        items={[item]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+        hasMore
+        onLoadMore={onLoadMore}
+      />
+    );
+    expect(screen.getByTestId("feed-sentinel")).toBeInTheDocument();
+    expect(screen.getByTestId("feed-load-more-button")).toBeInTheDocument();
+  });
+
+  it("renders the 'loading more' indicator while isLoadingMore is true", () => {
+    render(
+      <ContentFeed
+        items={[item]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+        hasMore
+        isLoadingMore
+      />
+    );
+    expect(screen.getByText(/loading more/i)).toBeInTheDocument();
+  });
+
+  it("renders the end-of-results line when hasMore is false and items are present", () => {
+    render(
+      <ContentFeed
+        items={[item]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+        hasMore={false}
+      />
+    );
+    expect(screen.getByTestId("feed-end")).toBeInTheDocument();
+  });
+
+  it("calls onLoadMore when the load-more button is clicked", async () => {
+    const onLoadMore = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ContentFeed
+        items={[item]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+        hasMore
+        onLoadMore={onLoadMore}
+      />
+    );
+    await user.click(screen.getByTestId("feed-load-more-button"));
+    expect(onLoadMore).toHaveBeenCalledOnce();
   });
 });

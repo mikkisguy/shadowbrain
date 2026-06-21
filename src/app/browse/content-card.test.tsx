@@ -25,6 +25,7 @@ const baseItem: BrowseItem = {
   type: "note",
   title: "Docker networking basics",
   content: "Bridge networks are the default. Each container joins…",
+  image_url: null,
   source: "manual",
   source_url: null,
   created_at: new Date().toISOString(),
@@ -32,15 +33,18 @@ const baseItem: BrowseItem = {
 };
 
 describe("ContentCard", () => {
-  it("renders the type label and the correct coloured dot", () => {
+  it("renders the type label and a coloured dot in the default (larger-dot) variant", () => {
     render(<ContentCard item={baseItem} />);
     const card = screen.getByTestId("content-card");
     expect(card).toHaveAttribute("data-item-type", "note");
     expect(card).toHaveTextContent(/note/i);
-    // The dot is a span with `bg-type-note` so the colour token
-    // is applied via Tailwind utility.
+    // The dot carries the `bg-type-note` token. The
+    // `larger-dot` variant uses `size-2.5` so the dot is
+    // slightly chunkier than the original 1.5-px dot.
     const dot = card.querySelector("span.bg-type-note");
     expect(dot).not.toBeNull();
+    expect(dot?.className).toMatch(/size-2\.5/);
+    expect(dot?.className).toMatch(/rounded-full/);
   });
 
   it("renders the title in a serif heading", () => {
@@ -86,6 +90,75 @@ describe("ContentCard", () => {
     const time = screen.getByRole("time");
     expect(time.textContent).toMatch(/ago|minute/);
     expect(time).toHaveAttribute("datetime");
+  });
+
+  it("does not render the image frame when image_url is null", () => {
+    render(<ContentCard item={baseItem} />);
+    const card = screen.getByTestId("content-card");
+    expect(card).toHaveAttribute("data-has-image", "false");
+    expect(screen.queryByTestId("content-card-image")).not.toBeInTheDocument();
+  });
+
+  it("renders the image at the top when image_url is set", () => {
+    const withImage: BrowseItem = {
+      ...baseItem,
+      image_url: "/api/images/notes/docker.png",
+    };
+    render(<ContentCard item={withImage} />);
+    const card = screen.getByTestId("content-card");
+    expect(card).toHaveAttribute("data-has-image", "true");
+    const img = screen.getByTestId("content-card-image");
+    expect(img).toHaveAttribute("src", "/api/images/notes/docker.png");
+    // The image frame is the first child of the article, before
+    // the content body. We assert it comes before the type badge.
+    const firstChildTag = card.firstElementChild?.tagName;
+    expect(firstChildTag).toBe("DIV");
+  });
+
+  it("the card has natural height — not forced to fill a grid row", () => {
+    render(<ContentCard item={baseItem} />);
+    const card = screen.getByTestId("content-card");
+    expect(card.className).not.toMatch(/\bh-full\b/);
+  });
+
+  it("the body grows to fill the card and pushes the tag strip to the bottom", () => {
+    const baseWithTags: BrowseItem = { ...baseItem };
+    const { container } = render(
+      <ContentCard item={baseWithTags} tags={["docker"]} />
+    );
+    // The body div is `flex-1`; the tag <ul> is `mt-auto`. These
+    // are the two properties that make a card's content distribute
+    // vertically — the tag strip always ends at the card's
+    // natural bottom.
+    const body = container.querySelector("article > .flex-1");
+    expect(body).not.toBeNull();
+    const tagList = screen.getByRole("list", { name: /tags/i });
+    expect(tagList.className).toMatch(/mt-auto/);
+  });
+
+  it("the 'pill' variant replaces the dot + text with a filled coloured chip", () => {
+    render(<ContentCard item={baseItem} variant="pill" />);
+    const pill = screen.getByTestId("content-card-pill");
+    expect(pill).toHaveTextContent(/note/i);
+    // The pill background uses the type token; the foreground is
+    // the surface colour for contrast.
+    expect(pill.className).toMatch(/bg-type-note/);
+    expect(pill.className).toMatch(/text-background/);
+    // No standalone dot is rendered in the pill variant — the
+    // chip itself is the indicator.
+    const card = screen.getByTestId("content-card");
+    expect(card.querySelector("span.bg-type-note.rounded-full")).toBeNull();
+  });
+
+  it("the 'larger-dot' variant uses the chunkier 2.5-px dot (not the pill)", () => {
+    render(<ContentCard item={baseItem} variant="larger-dot" />);
+    const card = screen.getByTestId("content-card");
+    // Dot uses `size-2.5` and stays rounded.
+    const dot = card.querySelector("span.bg-type-note");
+    expect(dot?.className).toMatch(/size-2\.5/);
+    expect(dot?.className).toMatch(/rounded-full/);
+    // No pill in this variant.
+    expect(card.querySelector("[data-testid='content-card-pill']")).toBeNull();
   });
 });
 

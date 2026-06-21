@@ -67,10 +67,101 @@ describe("fetchBrowseItems", () => {
     expect(call.url).toMatch(/^\/api\/items\?/);
     expect(call.url).not.toMatch(/q=/);
     expect(call.init.credentials).toBe("same-origin");
-    expect(result.items).toEqual([{ id: "a", type: "note" }]);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].id).toBe("a");
+    expect(result.items[0].type).toBe("note");
+    expect(result.items[0].image_url).toBeNull();
     expect(result.total).toBe(1);
     expect(result.page).toBe(1);
     expect(result.limit).toBe(20);
+  });
+
+  it("prefixes a relative image_path with /api/images/ in /api/items results", async () => {
+    nextResponse = () =>
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "1",
+              type: "note",
+              title: null,
+              content: "x",
+              image_path: "notes/2026-01/abc.webp",
+              source: "manual",
+              source_url: null,
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 20,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+
+    const result = await fetchBrowseItems({});
+    expect(result.items[0].image_url).toBe(
+      "/api/images/notes/2026-01/abc.webp"
+    );
+  });
+
+  it("normalises a leading-slash image_path so the prefix isn't doubled", async () => {
+    nextResponse = () =>
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "1",
+              type: "note",
+              title: null,
+              content: "x",
+              image_path: "/notes/2026-01/abc.webp",
+              source: "manual",
+              source_url: null,
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 20,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+
+    const result = await fetchBrowseItems({});
+    expect(result.items[0].image_url).toBe(
+      "/api/images/notes/2026-01/abc.webp"
+    );
+  });
+
+  it("returns image_url: null when the row has no image", async () => {
+    nextResponse = () =>
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "1",
+              type: "note",
+              title: null,
+              content: "x",
+              image_path: null,
+              source: "manual",
+              source_url: null,
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 20,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+
+    const result = await fetchBrowseItems({});
+    expect(result.items[0].image_url).toBeNull();
   });
 
   it("routes to /api/search when q is set", async () => {

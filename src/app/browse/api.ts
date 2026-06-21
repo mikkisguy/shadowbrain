@@ -74,32 +74,59 @@ function endpointFor(filters: BrowseFilters): {
       // shape so the feed component never has to branch.
       mapResults: (body) =>
         Array.isArray(body.results)
-          ? (body.results as BrowseItem[]).map(stripSearchOnly)
+          ? (body.results as Record<string, unknown>[]).map(stripSearchOnly)
           : [],
     };
   }
   return {
     url: "/api/items",
+    // The items endpoint returns rows from the DB (with `image_path`,
+    // no `image_url`); normalise to the canonical BrowseItem shape.
     mapResults: (body) =>
-      Array.isArray(body.items) ? (body.items as BrowseItem[]) : [],
+      Array.isArray(body.items)
+        ? (body.items as Record<string, unknown>[]).map(normaliseItem)
+        : [],
   };
+}
+
+/** Prefix a relative image path with the canonical `/api/images/`
+ *  route so the card never has to know the URL shape. The DB
+ *  stores the path as `notes/2026-01/uuid.webp`; the Browse
+ *  feed wants `/api/images/notes/2026-01/uuid.webp`. A `null`
+ *  stays `null`. */
+function toImageUrl(imagePath: string | null | undefined): string | null {
+  if (!imagePath) return null;
+  // Normalise: strip a leading slash so we don't end up with
+  // `//api/images/...`, then join with a single slash.
+  const trimmed = imagePath.replace(/^\/+/, "");
+  return `/api/images/${trimmed}`;
 }
 
 /** The search endpoint carries a `rank` and a `snippet` per row;
  *  the items endpoint does not. Both are valid for the Browse feed,
- *  but the type only declares the shared columns. Strip the extra
- *  fields so the response matches `BrowseItem` exactly. */
-function stripSearchOnly<T extends BrowseItem>(row: T): BrowseItem {
+ *  but the type only declares the shared columns. This normaliser
+ *  maps a raw DB row to the canonical `BrowseItem` shape — it
+ *  prefixes the `image_path` with `/api/images/` and drops any
+ *  search-only fields (`rank`, `snippet`). */
+function normaliseItem(row: Record<string, unknown>): BrowseItem {
   return {
-    id: row.id,
-    type: row.type,
-    title: row.title,
-    content: row.content,
-    source: row.source,
-    source_url: row.source_url,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
+    id: String(row.id),
+    type: String(row.type),
+    title: (row.title as string | null) ?? null,
+    content: String(row.content),
+    image_url: toImageUrl((row.image_path as string | null) ?? null),
+    source: String(row.source ?? "manual"),
+    source_url: (row.source_url as string | null) ?? null,
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
   };
+}
+
+/** The search endpoint returns `results` (with a `rank` and a
+ *  FTS5 `snippet`); we strip those to the canonical BrowseItem
+ *  shape so the feed component never has to branch. */
+function stripSearchOnly(row: Record<string, unknown>): BrowseItem {
+  return normaliseItem(row);
 }
 
 export async function fetchBrowseItems(

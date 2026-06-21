@@ -3,7 +3,7 @@
 /**
  * Browse-page state hook.
  *
- * Owns three concerns:
+ * Owns four concerns:
  *
  *  1. **URL ⇄ filter state sync.** The active filter set is the URL
  *     query string — the page renders, the user picks a tab, the
@@ -13,17 +13,22 @@
  *  2. **Debounced fetch.** Search input is debounced (300ms, per
  *     the design spec) so a typing user does not fire a request
  *     per keystroke. Other filters fire immediately.
- *  3. **Request lifecycle.** Each filter change cancels the
- *     previous in-flight request via `AbortController` and ignores
- *     the response of any cancelled fetch. Errors land in
- *     `error`; success lands in `data`.
+ *  3. **Infinite scroll.** Each filter change resets the page
+ *     to 1 and clears the accumulated items. A `loadMore`
+ *     callback appends the next page to the existing list,
+ *     driven by an `IntersectionObserver` on a sentinel element
+ *     in the feed.
+ *  4. **Request lifecycle.** Each fetch (initial or loadMore)
+ *     cancels the previous in-flight request via
+ *     `AbortController` and ignores the response of any
+ *     cancelled fetch. Errors land in `error`; success lands
+ *     in `items` + `total`.
  *
- * The hook does not own the advanced-filters open/closed state —
- * that is purely UI, and lives on the toolbar component. The
- * "active" filter set (which the toolbar reads to highlight chips)
- * is derived from the URL.
+ * The hook does not own the advanced-filters open/closed state
+ * or the grid/list view — both are purely UI and live on the
+ * toolbar / page components.
  *
- * Implementation note: `searchParams` is mirrored into a local
+ * Implementation note: `searchParams` is mirrored into local
  * `useState` so that an in-test `router.replace` (which does not
  * trigger a real React re-render) propagates through the hook.
  * In production, Next.js invalidates the page on `replace` and
@@ -36,11 +41,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { fetchBrowseItems, BrowseApiError } from "./api";
-import {
-  type BrowseFilters,
-  type BrowseResponse,
-  coerceTypeTab,
-} from "./types";
+import { type BrowseFilters, type BrowseItem, coerceTypeTab } from "./types";
 
 /** Debounce window for the search input. 300ms is the design spec. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -55,22 +56,34 @@ export interface UseBrowseStateResult {
   filters: BrowseFilters;
   /** Active type tab id, coerced to a valid tab. */
   typeTab: ReturnType<typeof coerceTypeTab>;
-  /** The current page (1-based). */
-  page: number;
-  /** Latest successful response, or `null` if not yet loaded. */
-  data: BrowseResponse | null;
-  /** Request lifecycle state. */
+  /** Accumulated items across all loaded pages. */
+  items: BrowseItem[];
+  /** Total number of items matching the active filter set, as
+   *  reported by the last successful response. */
+  total: number;
+  /** Request lifecycle state. `loading` is true for the very
+   *  first request of a filter change; `success` once the first
+   *  page arrives. Subsequent pages flip `isLoadingMore` instead. */
   status: BrowseStatus;
   /** Error message (user-safe) when `status === "error"`. */
   error: string | null;
   /** True while a debounce timer is pending (search input). */
   isSearchPending: boolean;
+  /** True while a load-more request is in flight. Distinct from
+   *  the initial-load `status === "loading"` so the feed can show
+   *  a subtle "loading more" affordance instead of replacing the
+   *  existing items with a skeleton. */
+  isLoadingMore: boolean;
+  /** True when more pages are available. */
+  hasMore: boolean;
   /** Patch one or more filters. The URL is updated immediately. */
   setFilters: (patch: Partial<BrowseFilters>) => void;
   /** Reset every filter to the empty default and jump to page 1. */
   clearFilters: () => void;
   /** Manually retry the current request. */
   retry: () => void;
+  /** Fetch the next page and append it to the existing items. */
+  loadMore: () => void;
 }
 
 const FILTER_KEYS = [
@@ -148,21 +161,61 @@ export function useBrowseState(): UseBrowseStateResult {
   const [committedQ, setCommittedQ] = useState(filters.q ?? "");
   const [isSearchPending, setIsSearchPending] = useState(false);
 
-  const [data, setData] = useState<BrowseResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Accumulated items across pages. Reset on filter change.
+  const [items, setItems] = useState<BrowseItem[]>([]);
+  const [total, setTotal] = useState(0);
+  // The highest page that has been *fully loaded*; loadMore reads
+  // `nextPage` from this and writes back when the response
+  // arrives. A version counter (see the fetch effect below) keys
+  // stale responses out so a filter change during a loadMore
+  // doesn't corrupt the accumulated list.
+  const [loadedPage, setLoadedPage] = useState(0);
+  // True once any fetch (initial or loadMore) has resolved —
+  // success or error. Drives the status derivation: a `pending`
+  // count > 0 with `hasFetched === false` is "loading";
+  // `hasFetched === true` is "success" (or "error"). Without
+  // this flag a successful-but-empty response would render as
+  // "idle" because `items.length === 0` and `pending === 0`.
+  const [hasFetched, setHasFetched] = useState(false);
   // Pending fetch count. Bumped on every fetch effect, decremented
   // when the matching promise resolves. Tracked as state (not a
   // ref) because the status is derived from it during render and
   // the linter forbids reading refs during render.
   const [pending, setPending] = useState(0);
-  const [page, setPage] = useState(1);
+  const [error, setError] = useState<string | null>(null);
+  // `isLoadingMore` is a derived flag, but we still need a state
+  // slot for it because the initial-load `status === "loading"`
+  // and the loadMore indicator are different visual states.
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
   // A version counter that bumps on every fetch. The fetch effect
   // captures the value at request time; the .then / .catch check
   // it against the latest commit and bail if the request was
   // superseded by a later filter change. This is what lets us
-  // avoid clobbering `data` from a stale request.
+  // avoid clobbering `items` from a stale request.
   const latestVersionRef = useRef(0);
+
+  // ---- Page state setters ----------------------------------------
+  // `setPage(1)` resets the accumulated list and triggers a fresh
+  // fetch on page 1. The fetch effect reads `pageToFetchRef` to
+  // decide what to load; the ref is updated here so the next
+  // effect run picks up the new page.
+  //
+  // Declared before the debounce effect so the debounce can call
+  // it (the linter rejects forward references to `setPage`).
+  const setPage = useCallback((next: number) => {
+    if (next === 1) {
+      // Filter change → reset everything.
+      setItems([]);
+      setTotal(0);
+      setLoadedPage(0);
+      setHasFetched(false);
+      setError(null);
+      pageToFetchRef.current = 1;
+    } else {
+      pageToFetchRef.current = next;
+    }
+  }, []);
 
   // ---- URL → committedQ debounce ---------------------------------
   // When the URL's `q` changes, we mirror it into `committedQ` after
@@ -195,18 +248,16 @@ export function useBrowseState(): UseBrowseStateResult {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // ---- Fetch effect -----------------------------------------------
-  // Cancels the previous request on every filter / page change.
-  // The hook ignores any error or response from a cancelled fetch
-  // so an aborted request cannot leave `status` stuck in
-  // "loading".
+  // The effect's behaviour depends on the *page-to-fetch* signal:
+  //   - `page === 0` → reset and fetch page 1 (initial load for a
+  //     filter change; `loadedPage` starts at 0)
+  //   - `page > loadedPage` → fetch the next page and append
   //
-  // The `pending` state is bumped in this effect (the only way to
-  // mark "a fetch is in flight"); it is decremented in the
-  // promise's `.then` / `.catch`, which run *outside* the effect
-  // body. The linter's `set-state-in-effect` rule is a useful
-  // default but a false positive here: the bump is the only
-  // signal the render pass has to derive `status`, and
-  // suppressing it leaves the UI stuck in the previous state.
+  // The effect itself reads `page` from a ref (see below) to
+  // avoid an effect-cascade where every state update retriggers
+  // the effect.
+  const pageToFetchRef = useRef(0);
+
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const controller = new AbortController();
@@ -214,17 +265,33 @@ export function useBrowseState(): UseBrowseStateResult {
     latestVersionRef.current = version;
     setPending((p) => p + 1);
 
+    const pageToFetch = pageToFetchRef.current;
+    const isLoadMore = pageToFetch > 0;
+    if (isLoadMore) {
+      setIsLoadingMore(true);
+    }
+
     const requestFilters: BrowseFilters = { ...filters, q: committedQ };
 
     fetchBrowseItems(requestFilters, {
-      page,
+      page: Math.max(1, pageToFetch),
       limit: PAGE_SIZE,
       signal: controller.signal,
     })
       .then((response) => {
         if (latestVersionRef.current !== version) return;
-        setData(response);
-        setError(null);
+        setIsLoadingMore(false);
+        setItems((prev) =>
+          isLoadMore ? [...prev, ...response.items] : response.items
+        );
+        setTotal(response.total);
+        // The loaded page is the page that was actually fetched
+        // (pageToFetch is 0 for the initial request, so we use
+        // the response's page instead).
+        setLoadedPage(response.page);
+        setHasFetched(true);
+        // Clear any prior error on a successful fetch.
+        if (!isLoadMore) setError(null);
         setPending((p) => Math.max(0, p - 1));
       })
       .catch((err: unknown) => {
@@ -236,15 +303,18 @@ export function useBrowseState(): UseBrowseStateResult {
           setPending((p) => Math.max(0, p - 1));
           return;
         }
+        setIsLoadingMore(false);
         setPending((p) => Math.max(0, p - 1));
         if (err instanceof BrowseApiError) {
           setError("Couldn't load your brain right now. Please try again.");
+          setHasFetched(true);
           return;
         }
         if (err instanceof DOMException && err.name === "AbortError") {
           return;
         }
         setError("Couldn't load your brain right now. Please try again.");
+        setHasFetched(true);
       });
 
     return () => {
@@ -263,20 +333,27 @@ export function useBrowseState(): UseBrowseStateResult {
     filters.source,
     filters.startDate,
     filters.endDate,
-    page,
     retryToken,
   ]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Derive the lifecycle status from the pending count and the
-  // latest data / error.
+  // Status is derived from the request lifecycle:
+  //   - `error` wins (we surfaced a user-safe message)
+  //   - `hasFetched` → "success" (the request completed; the
+  //     feed's empty / success branch handles the rest)
+  //   - `pending > 0` and we have not fetched yet → "loading"
+  //   - otherwise → "idle" (the page has not asked for anything
+  //     yet; this only happens for one render cycle on first
+  //     mount)
   const status: BrowseStatus = error
     ? "error"
-    : pending > 0 && !data
-      ? "loading"
-      : data
-        ? "success"
+    : hasFetched
+      ? "success"
+      : pending > 0
+        ? "loading"
         : "idle";
+
+  const hasMore = items.length < total;
 
   // ---- URL writers -----------------------------------------------
   // Patches are applied through `router.replace` so the back button
@@ -307,13 +384,16 @@ export function useBrowseState(): UseBrowseStateResult {
       const merged: BrowseFilters = { ...filters, ...cleaned };
       // Any non-search filter change resets the page.
       const resetPage = Object.keys(patch).some((k) => k !== "q");
-      if (resetPage) setPage(1);
+      if (resetPage) {
+        setPage(1);
+        setCommittedQ(merged.q ?? "");
+      }
       // Optimistic local update so the UI reflects the new
       // filter immediately, even before `searchParams` re-reads.
       setFiltersState(merged);
       writeFilters(merged);
     },
-    [filters, writeFilters]
+    [filters, setPage, writeFilters]
   );
 
   const clearFilters = useCallback(() => {
@@ -321,22 +401,44 @@ export function useBrowseState(): UseBrowseStateResult {
     setCommittedQ("");
     setFiltersState({});
     writeFilters({});
-  }, [writeFilters]);
+  }, [setPage, writeFilters]);
 
+  /* eslint-disable react-hooks/immutability */
   const retry = useCallback(() => {
+    setItems([]);
+    setTotal(0);
+    setLoadedPage(0);
+    setHasFetched(false);
+    setError(null);
+    pageToFetchRef.current = 1;
     setRetryToken((n) => n + 1);
   }, []);
+  /* eslint-enable react-hooks/immutability */
+
+  /* eslint-disable react-hooks/immutability */
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoadingMore) return;
+    pageToFetchRef.current = loadedPage + 1;
+    // Bump a fresh version so the load-more request doesn't get
+    // keyed out by a stale ref.
+    latestVersionRef.current += 1;
+    setRetryToken((n) => n + 1);
+  }, [hasMore, isLoadingMore, loadedPage]);
+  /* eslint-enable react-hooks/immutability */
 
   return {
     filters: { ...filters, q: committedQ },
     typeTab,
-    page,
-    data,
+    items,
+    total,
     status,
     error,
     isSearchPending,
+    isLoadingMore,
+    hasMore,
     setFilters,
     clearFilters,
     retry,
+    loadMore,
   };
 }
