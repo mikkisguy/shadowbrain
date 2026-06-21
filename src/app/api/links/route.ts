@@ -28,7 +28,6 @@ const createSchema = z.object({
 export async function POST(request: Request) {
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
-  // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   try {
     let body: unknown;
     try {

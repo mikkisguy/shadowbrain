@@ -13,23 +13,28 @@
  * Responsibilities, in order:
  *
  *  1. **Static assets** — pass through immediately.
- *  2. **Exempt routes** (`/login`, `/api/auth/*`) — allow
+ *  2. **Rate limit** — per-IP token bucket (per the App Security
+ *     Baseline design spec §5). The login route uses the strict
+ *     ≈5 / 15 min / IP bucket; every other `/api/…` route uses
+ *     ≈120 / min / IP; every other (page) route uses ≈600 / min /
+ *     IP. Returns 429 + `Retry-After` when the bucket is empty.
+ *  3. **Exempt routes** (`/login`, `/api/auth/*`) — allow
  *     unauthenticated access. The CSRF check is also skipped for
  *     these (the login form is the legitimate entry point).
- *  3. **CSRF** — for state-changing methods, require a matching
+ *  4. **CSRF** — for state-changing methods, require a matching
  *     `Origin` or `Referer`. Mismatch → 403.
- *  4. **Auth** — read and verify the session cookie. No cookie or
+ *  5. **Auth** — read and verify the session cookie. No cookie or
  *     expired/invalid cookie:
  *      - **Browser navigation** → 302 redirect to `/login?from=…`
  *      - **API call** → 401 JSON
- *  5. **Sliding renewal** — when the verified session is past
+ *  6. **Sliding renewal** — when the verified session is past
  *     50% of its lifetime, attach a fresh `Set-Cookie` to the
  *     response.
  *
  * On every non-static response (exempt routes, protected success,
- * 401, 403, 302 redirect), the proxy also applies the **security
- * response headers** (CSP with a per-request nonce, HSTS,
- * X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+ * 401, 403, 429, 302 redirect), the proxy also applies the
+ * **security response headers** (CSP with a per-request nonce,
+ * HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
  * Permissions-Policy). The policy is defined in one place —
  * `src/lib/security.config.ts` — and applied uniformly so the
  * defense is the same on every code path. See that file for the
@@ -42,6 +47,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getEnv } from "@/lib/env";
+import { log } from "@/lib/logger";
 import {
   buildSessionCookie,
   getSessionMaxAge,
@@ -49,12 +55,18 @@ import {
   signSessionValue,
 } from "@/lib/auth/session";
 import { checkCsrfOrigin, deriveAllowedOrigin } from "@/lib/auth/csrf";
+import { getClientIp } from "@/lib/auth/client-ip";
 import {
   isBrowserNavigation,
   isExemptFromAuth,
   isStaticAsset,
 } from "@/lib/auth/exempt-paths";
 import { applySecurityHeaders, generateNonce } from "@/lib/security.config";
+import {
+  buildRateLimitResponse,
+  checkRateLimitForPath,
+  getRateLimitCategory,
+} from "@/lib/rate-limit";
 
 export const config = {
   matcher: [
@@ -82,7 +94,8 @@ export async function proxy(request: NextRequest) {
   // 1. Static assets — pass through. The security spec scopes the
   // headers to API and pages (see security.config.ts); static
   // assets are same-origin cacheable resources and do not need
-  // them.
+  // them. They are also exempt from rate limiting (no point
+  // counting a cached image hit).
   if (isStaticAsset(pathname)) {
     return NextResponse.next();
   }
@@ -96,7 +109,29 @@ export async function proxy(request: NextRequest) {
   const isProd = env.NODE_ENV === "production";
   const nonce = generateNonce();
 
-  // 2. Exempt routes — allow without auth or CSRF.
+  // 2. Rate limit — per-IP token bucket. The category is
+  // determined by the path; the IP comes from the configured
+  // trusted-proxy header. The check happens before auth / CSRF
+  // so an attacker that exhausts the bucket can never reach the
+  // bcrypt / session-verify code paths.
+  const ip = getClientIp(request, { header: env.TRUSTED_PROXY_HEADER });
+  const rateLimit = checkRateLimitForPath(pathname, ip);
+  if (!rateLimit.allowed) {
+    log("warn", "rate-limit.exceeded", {
+      event: "rate-limit.exceeded",
+      category: getRateLimitCategory(pathname),
+      pathname,
+      ip,
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+    });
+    return applySecurityHeaders(
+      buildRateLimitResponse(rateLimit),
+      nonce,
+      !isProd
+    );
+  }
+
+  // 3. Exempt routes — allow without auth or CSRF.
   if (isExemptFromAuth(pathname)) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-nonce", nonce);
@@ -108,7 +143,7 @@ export async function proxy(request: NextRequest) {
 
   // From this point on, we are on a protected route.
 
-  // 3. CSRF — state-changing methods need a matching Origin/Referer.
+  // 4. CSRF — state-changing methods need a matching Origin/Referer.
   const allowedOrigin = deriveAllowedOrigin(env.DOMAIN, isProd);
   const csrf = checkCsrfOrigin(request, { allowedOrigin });
   if (!csrf.allowed) {
@@ -123,7 +158,7 @@ export async function proxy(request: NextRequest) {
     return applySecurityHeaders(response, nonce, !isProd);
   }
 
-  // 4. Auth — verify session cookie. Pass the configured
+  // 5. Auth — verify session cookie. Pass the configured
   // `maxAgeMs` so the sliding-renewal threshold is 50% of the
   // actual lifetime, not the default.
   const maxAgeMs = getSessionMaxAge(env.SESSION_MAX_AGE);
@@ -161,7 +196,7 @@ export async function proxy(request: NextRequest) {
     return applySecurityHeaders(response, nonce, !isProd);
   }
 
-  // 5. Sliding renewal — if the session is past 50% of its life,
+  // 6. Sliding renewal — if the session is past 50% of its life,
   // attach a fresh Set-Cookie so the user does not have to log in
   // again mid-session.
   const requestHeaders = new Headers(request.headers);

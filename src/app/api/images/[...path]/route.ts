@@ -40,7 +40,6 @@ export async function GET(
 ) {
   const auth = await requireAuthenticated(request);
   if (!auth.ok) return auth.response;
-  // TODO: apply per-IP rate limit once src/lib/rate-limit.ts lands (#56).
   try {
     const { path: segments } = await params;
 

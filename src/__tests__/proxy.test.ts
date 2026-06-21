@@ -7,6 +7,12 @@ import {
   DEFAULT_SESSION_AGE_MS,
 } from "@/lib/auth/constants";
 import { signSessionValue } from "@/lib/auth/session";
+import { __resetAllRateLimiters } from "@/lib/rate-limit";
+import {
+  RATE_LIMIT_API_MAX,
+  RATE_LIMIT_DEFAULT_MAX,
+  RATE_LIMIT_LOGIN_MAX,
+} from "@/lib/security.config";
 
 /**
  * Minimal NextRequest-like object for the Proxy.
@@ -80,6 +86,11 @@ describe("proxy", () => {
   beforeEach(() => {
     cleanupTestDb();
     createTestDb().close();
+    // The rate limiters are module-singletons; reset them
+    // between tests so a test that exercises a 429 cannot
+    // bleed into the next one (the limiters are process-local
+    // and would otherwise carry state across the suite).
+    __resetAllRateLimiters();
   });
 
   it("passes through /_next/static (static asset)", async () => {
@@ -441,5 +452,253 @@ describe("proxy — security response headers", () => {
     expect(csp).toContain("base-uri 'self'");
     expect(csp).toContain("form-action 'self'");
     expect(csp).toContain("upgrade-insecure-requests");
+  });
+});
+
+/**
+ * Rate-limit integration tests — the proxy is the layer that
+ * applies the global per-IP limits from the App Security Baseline
+ * design spec §5. These tests exercise the proxy end-to-end:
+ *
+ *  - under threshold → request passes;
+ *  - over threshold → 429 with `Retry-After`;
+ *  - different IPs are isolated;
+ *  - static assets are exempt;
+ *  - the login route uses the strict ≈5 / 15 min bucket;
+ *  - the API bucket (≈120 / min) is separate from the default
+ *    page bucket (≈600 / min);
+ *  - 429 responses carry the full security-header policy.
+ *
+ * The helpers below pre-build a request with the given
+ * `X-Forwarded-For` value — the default trusted proxy header
+ * — so the test exercises the same code path the production
+ * nginx setup uses.
+ */
+describe("proxy — rate limiting", () => {
+  beforeEach(() => {
+    cleanupTestDb();
+    createTestDb().close();
+    __resetAllRateLimiters();
+  });
+
+  /** Build a request that carries the given trusted-proxy
+   *  forwarded IP, with an authed session so non-rate-limit
+   *  reasons cannot mask a 429. */
+  async function authedReq(
+    url: string,
+    ip: string,
+    init: { method?: string; headers?: Record<string, string> } = {}
+  ) {
+    return authedRequest(url, {
+      ...init,
+      headers: {
+        ...(init.headers ?? {}),
+        "X-Forwarded-For": ip,
+      },
+    });
+  }
+
+  it("passes a request under the API threshold", async () => {
+    const req = await authedReq("http://localhost/api/items", "10.0.0.1");
+    const res = await proxy(req as never);
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 429 + Retry-After once the API bucket is exhausted", async () => {
+    const ip = "10.0.0.2";
+    // Burn the bucket. We use the full configured value so a
+    // future change to the limit cannot drift away silently.
+    for (let i = 0; i < RATE_LIMIT_API_MAX; i++) {
+      const req = await authedReq("http://localhost/api/items", ip);
+      const res = await proxy(req as never);
+      expect(res.status).toBe(200);
+    }
+    // The (RATE_LIMIT_API_MAX + 1)-th request must 429.
+    const req = await authedReq("http://localhost/api/items", ip);
+    const res = await proxy(req as never);
+    expect(res.status).toBe(429);
+    const retryAfter = Number(res.headers.get("Retry-After") ?? "0");
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(60);
+    const body = await res.json();
+    expect(body.error.code).toBe("RATE_LIMITED");
+  });
+
+  it("isolates the API bucket per IP", async () => {
+    const a = "10.0.0.3";
+    for (let i = 0; i < RATE_LIMIT_API_MAX; i++) {
+      await proxy((await authedReq("http://localhost/api/items", a)) as never);
+    }
+    // `a` is exhausted.
+    expect(
+      (await proxy((await authedReq("http://localhost/api/items", a)) as never))
+        .status
+    ).toBe(429);
+    // `b` is fresh.
+    expect(
+      (
+        await proxy(
+          (await authedReq("http://localhost/api/items", "10.0.0.4")) as never
+        )
+      ).status
+    ).toBe(200);
+  });
+
+  it("uses the strict login bucket for /api/auth/login (≈5 / 15 min)", async () => {
+    const ip = "10.0.0.5";
+    // /api/auth/login is exempt from auth, so we can hit it
+    // without a session.
+    for (let i = 0; i < RATE_LIMIT_LOGIN_MAX; i++) {
+      const req = new FakeNextRequest({
+        url: "http://localhost/api/auth/login",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Forwarded-For": ip,
+        },
+      });
+      const res = await proxy(req as never);
+      // The proxy passes the request through; the route itself
+      // would still 401/400. We only care that the proxy does
+      // not 429 yet.
+      expect(res.status).not.toBe(429);
+    }
+    const blocked = new FakeNextRequest({
+      url: "http://localhost/api/auth/login",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-For": ip,
+      },
+    });
+    const res = await proxy(blocked as never);
+    expect(res.status).toBe(429);
+  });
+
+  it("keeps the login bucket separate from the API bucket (per IP)", async () => {
+    const ip = "10.0.0.6";
+    // Burn the login bucket.
+    for (let i = 0; i < RATE_LIMIT_LOGIN_MAX; i++) {
+      await proxy(
+        new FakeNextRequest({
+          url: "http://localhost/api/auth/login",
+          method: "POST",
+          headers: { "X-Forwarded-For": ip },
+        }) as never
+      );
+    }
+    // /api/auth/login is exhausted.
+    expect(
+      (
+        await proxy(
+          new FakeNextRequest({
+            url: "http://localhost/api/auth/login",
+            method: "POST",
+            headers: { "X-Forwarded-For": ip },
+          }) as never
+        )
+      ).status
+    ).toBe(429);
+    // The same IP still has full quota on /api/items and on a
+    // page route.
+    expect(
+      (
+        await proxy(
+          (await authedReq("http://localhost/api/items", ip)) as never
+        )
+      ).status
+    ).toBe(200);
+    expect(
+      (await proxy((await authedReq("http://localhost/items/1", ip)) as never))
+        .status
+    ).toBe(200);
+  });
+
+  it("uses the default page bucket for non-API routes", async () => {
+    // The default bucket refills 10 tokens/sec (600 / 60s); in a
+    // 600-call loop the wall clock advances enough for the
+    // bucket to refill a few tokens, so the simple "do
+    // RATE_LIMIT_DEFAULT_MAX calls and assert the next one 429s"
+    // pattern races with the refill. Freeze time with
+    // `vi.useFakeTimers` (and the manual `Date.now` shim) so the
+    // bucket can only drain. `vi.useRealTimers` is sufficient to
+    // restore the real `Date.now` — the restorer is the framework,
+    // not the test.
+    vi.useFakeTimers();
+    const now = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      const ip = "10.0.0.7";
+      for (let i = 0; i < RATE_LIMIT_DEFAULT_MAX; i++) {
+        const req = await authedReq("http://localhost/items/1", ip);
+        const res = await proxy(req as never);
+        expect(res.status).toBe(200);
+      }
+      const req = await authedReq("http://localhost/items/1", ip);
+      const res = await proxy(req as never);
+      expect(res.status).toBe(429);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not rate-limit static assets", async () => {
+    // Even after a flood, /_next/static passes through. The
+    // matcher in src/proxy.ts already excludes these from the
+    // proxy, but the assertion is here so a future change
+    // cannot silently start applying the limit to them.
+    for (let i = 0; i < RATE_LIMIT_API_MAX + 5; i++) {
+      const req = new FakeNextRequest({
+        url: "http://localhost/_next/static/chunks/foo.js",
+        headers: { "X-Forwarded-For": "10.0.0.8" },
+      });
+      const res = await proxy(req as never);
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("applies the full security-header policy to a 429 response", async () => {
+    const ip = "10.0.0.9";
+    for (let i = 0; i < RATE_LIMIT_API_MAX; i++) {
+      await proxy((await authedReq("http://localhost/api/items", ip)) as never);
+    }
+    const res = await proxy(
+      (await authedReq("http://localhost/api/items", ip)) as never
+    );
+    expect(res.status).toBe(429);
+    // The 429 must carry the same static security headers as a
+    // 200 — the spec is uniform across every code path.
+    expect(res.headers.get("Strict-Transport-Security")).toBe(
+      "max-age=63072000; includeSubDomains"
+    );
+    expect(res.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(res.headers.get("Referrer-Policy")).toBe(
+      "strict-origin-when-cross-origin"
+    );
+    expect(res.headers.get("Content-Security-Policy")).not.toBeNull();
+  });
+
+  it("falls back to 'unknown' IP when no X-Forwarded-For is present", async () => {
+    // A request with no trusted-proxy header buckets under
+    // "unknown". The test exercises the "no XFF" path of the
+    // helper; under a single misconfigured client this can
+    // crowd out legitimate traffic, but that's the deployment
+    // problem, not a code bug.
+    for (let i = 0; i < RATE_LIMIT_LOGIN_MAX; i++) {
+      const req = new FakeNextRequest({
+        url: "http://localhost/api/auth/login",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const res = await proxy(req as never);
+      expect(res.status).not.toBe(429);
+    }
+    const blocked = new FakeNextRequest({
+      url: "http://localhost/api/auth/login",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect((await proxy(blocked as never)).status).toBe(429);
   });
 });

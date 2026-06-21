@@ -38,6 +38,17 @@ const envSchema = z.object({
   // at runtime by getSessionMaxAge(); invalid or out-of-range values
   // fall back to 24h. See src/lib/auth/session.ts.
   SESSION_MAX_AGE: z.coerce.number().int().positive().optional(),
+
+  // Optional. The HTTP header that carries the real client IP when the
+  // app runs behind a trusted reverse proxy (e.g. nginx setting
+  // `proxy_set_header X-Forwarded-For $remote_addr;`). The rate
+  // limiter and audit log read the client IP from this header. The
+  // deployment must set the header and the app must trust it; if the
+  // app is exposed without a trusted proxy, the IP falls back to
+  // `"unknown"` and every request lands in the same bucket. See
+  // `src/lib/auth/client-ip.ts` and the App Security Baseline design
+  // spec §5. Default: X-Forwarded-For.
+  TRUSTED_PROXY_HEADER: z.string().default("X-Forwarded-For"),
 });
 
 export type Env = z.infer<typeof envSchema>;
