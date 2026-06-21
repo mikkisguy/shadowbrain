@@ -12,7 +12,10 @@ import { describe, it, expect } from "vitest";
 
 import {
   applySecurityHeaders,
+  assertNoCorsHeaders,
   buildCspHeader,
+  CORS_POLICY,
+  FORBIDDEN_CORS_HEADERS,
   generateNonce,
   HSTS_VALUE,
   PERMISSIONS_POLICY_VALUE,
@@ -275,5 +278,102 @@ describe("applySecurityHeaders", () => {
     const res = await newResponse();
     const result = applySecurityHeaders(res, "n", false);
     expect(result).toBe(res);
+  });
+});
+
+/**
+ * CORS posture — per the App Security Baseline design spec §6.
+ * The app is same-origin only, so no `Access-Control-*` header
+ * may ever appear on a response. These tests pin the policy as
+ * data (`CORS_POLICY`), pin the full list of headers that must
+ * never appear (`FORBIDDEN_CORS_HEADERS`), and assert that
+ * `applySecurityHeaders` (the single chokepoint for proxy-side
+ * response headers) does not set any of them in either
+ * production or dev mode.
+ */
+describe("CORS posture", () => {
+  it("CORS_POLICY pins same-origin only and allowlist-only", () => {
+    // The posture is data so a future reviewer can read it
+    // without parsing prose. A future change that wants to
+    // weaken either flag should be a loud, visible edit.
+    expect(CORS_POLICY.sameOriginOnly).toBe(true);
+    expect(CORS_POLICY.allowlistOnly).toBe(true);
+  });
+
+  it("FORBIDDEN_CORS_HEADERS lists every standard CORS response header", () => {
+    // Pin the list so a future careless edit cannot silently
+    // drop a header from the invariant. The set covers every
+    // `Access-Control-*` response header defined by the Fetch
+    // spec that a server would set in response to a cross-origin
+    // request, plus the two request headers (which would only
+    // appear as a response to a preflight, which the app never
+    // serves).
+    expect(FORBIDDEN_CORS_HEADERS).toEqual([
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Credentials",
+      "Access-Control-Allow-Methods",
+      "Access-Control-Allow-Headers",
+      "Access-Control-Expose-Headers",
+      "Access-Control-Max-Age",
+      "Access-Control-Request-Headers",
+      "Access-Control-Request-Method",
+    ]);
+  });
+
+  it("STATIC_SECURITY_HEADERS does not include any CORS header", () => {
+    // The static set is the single source of truth for
+    // non-CSP security headers. A regression that adds
+    // `Access-Control-Allow-Origin` here would silently
+    // weaken the posture; this test fails first.
+    for (const name of Object.keys(STATIC_SECURITY_HEADERS)) {
+      expect(name.toLowerCase()).not.toMatch(/^access-control-/);
+    }
+  });
+
+  it("applySecurityHeaders never sets a CORS response header (production)", async () => {
+    const { NextResponse } = await import("next/server");
+    const res = new NextResponse("ok", { status: 200 });
+    applySecurityHeaders(res, "test-nonce", false);
+    for (const name of FORBIDDEN_CORS_HEADERS) {
+      expect(res.headers.get(name), `must not set ${name}`).toBeNull();
+    }
+  });
+
+  it("applySecurityHeaders never sets a CORS response header (development)", async () => {
+    // The dev relaxation adds 'unsafe-eval' to script-src for
+    // HMR / RSC. It must never widen the CORS posture — dev
+    // and prod both stay same-origin.
+    const { NextResponse } = await import("next/server");
+    const res = new NextResponse("ok", { status: 200 });
+    applySecurityHeaders(res, "test-nonce", true);
+    for (const name of FORBIDDEN_CORS_HEADERS) {
+      expect(res.headers.get(name), `must not set ${name}`).toBeNull();
+    }
+  });
+
+  it("assertNoCorsHeaders is a no-op on a response with no CORS headers", async () => {
+    const { NextResponse } = await import("next/server");
+    const res = new NextResponse("ok", { status: 200 });
+    expect(() => assertNoCorsHeaders(res)).not.toThrow();
+  });
+
+  it("assertNoCorsHeaders throws when Access-Control-Allow-Origin is set", async () => {
+    const { NextResponse } = await import("next/server");
+    const res = new NextResponse("ok", { status: 200 });
+    res.headers.set("Access-Control-Allow-Origin", "*");
+    expect(() => assertNoCorsHeaders(res)).toThrow(
+      /Access-Control-Allow-Origin/
+    );
+  });
+
+  it("assertNoCorsHeaders throws for every forbidden CORS header", async () => {
+    // Iterate the full list so a future header added to
+    // FORBIDDEN_CORS_HEADERS is also covered by the tripwire.
+    const { NextResponse } = await import("next/server");
+    for (const name of FORBIDDEN_CORS_HEADERS) {
+      const res = new NextResponse("ok", { status: 200 });
+      res.headers.set(name, "value");
+      expect(() => assertNoCorsHeaders(res)).toThrow(name);
+    }
   });
 });
