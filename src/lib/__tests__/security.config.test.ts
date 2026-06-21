@@ -39,9 +39,14 @@ describe("static security header values", () => {
     expect(REFERRER_POLICY_VALUE).toBe("strict-origin-when-cross-origin");
   });
 
-  it("Permissions-Policy denies camera, microphone, geolocation, FLoC", () => {
+  it("Permissions-Policy denies camera, microphone, geolocation, FLoC, Topics", () => {
+    // `interest-cohort=()` covers the legacy FLoC API (Chrome ≤111);
+    // `browsing-topics=()` covers the Topics API (Chrome 115+). Both
+    // are sent so that no Chromium version logs an "Unrecognized
+    // feature" warning for the deprecated name — and so that the
+    // newer one is explicitly opted out of.
     expect(PERMISSIONS_POLICY_VALUE).toBe(
-      "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+      "camera=(), microphone=(), geolocation=(), interest-cohort=(), browsing-topics=()"
     );
   });
 
@@ -124,25 +129,46 @@ describe("buildCspHeader", () => {
     expect(scriptSrc).toContain("'unsafe-eval'");
   });
 
-  it("adds 'unsafe-inline' to style-src in development (dev overlay, font-styles)", () => {
+  it("drops the nonce from style-src in development (dev overlay, font-styles)", () => {
     // The Next.js dev overlay, the client-side re-injection of
     // next/font styles (font-styles.tsx), and React 19's hydration
     // recovery all inject inline <style> tags after the initial
     // server-rendered HTML is in the DOM. Those client-side
     // injections never see the server-rendered nonce, so without
-    // 'unsafe-inline' in dev the browser blocks every overlay /
+    // a relaxation in dev the browser blocks every overlay /
     // font / error boundary and the dev experience is unusable.
-    // Production keeps the strict, nonce-only policy.
+    //
+    // Per CSP3, when a nonce is present in a directive the browser
+    // IGNORES any 'unsafe-inline' in the same directive, so
+    // `style-src 'self' 'nonce-…' 'unsafe-inline'` would still
+    // block the dev overlay's un-nonced injections. The only
+    // mechanism that works in dev is to drop the nonce and use
+    // 'unsafe-inline' alone. That is what the dev policy does.
+    // Production keeps the strict, nonce-only directive.
     const prod = buildCspHeader(NONCE, false);
     const dev = buildCspHeader(NONCE, true);
-    expect(dev).toContain("'unsafe-inline'");
-    expect(prod).not.toContain("'unsafe-inline'");
-    // It must land in style-src, not anywhere else.
-    const styleSrc = dev
+    // Dev style-src has 'unsafe-inline' and NO nonce.
+    const devStyleSrc = dev
       .split(";")
       .find((s) => s.trim().startsWith("style-src"));
-    expect(styleSrc).toBeDefined();
-    expect(styleSrc).toContain("'unsafe-inline'");
+    expect(devStyleSrc).toBeDefined();
+    expect(devStyleSrc).toContain("'unsafe-inline'");
+    expect(devStyleSrc).not.toMatch(/'nonce-/);
+    // Prod style-src has the nonce and NO 'unsafe-inline'.
+    const prodStyleSrc = prod
+      .split(";")
+      .find((s) => s.trim().startsWith("style-src"));
+    expect(prodStyleSrc).toBeDefined();
+    expect(prodStyleSrc).toContain(`'nonce-${NONCE}'`);
+    expect(prodStyleSrc).not.toContain("'unsafe-inline'");
+    // The dev-only relaxation is scoped to style-src; script-src
+    // must keep the nonce in both modes.
+    const devScriptSrc = dev
+      .split(";")
+      .find((s) => s.trim().startsWith("script-src"));
+    expect(devScriptSrc).toBeDefined();
+    expect(devScriptSrc).toContain(`'nonce-${NONCE}'`);
+    expect(devScriptSrc).not.toContain("'unsafe-inline'");
   });
 
   it("uses different nonces for different requests", () => {
@@ -228,10 +254,20 @@ describe("applySecurityHeaders", () => {
   });
 
   it("does produce 'unsafe-inline' in style-src in development output (dev overlay)", async () => {
+    // The dev overlay's client-side style injections cannot carry
+    // the per-request nonce, and per CSP3 a nonce + 'unsafe-inline'
+    // in the same directive does NOT relax the policy. So in dev
+    // we drop the nonce from style-src and use 'unsafe-inline'
+    // alone. See `DEV_STYLE_SRC_VALUE` in security.config.ts.
     const res = await newResponse();
     applySecurityHeaders(res, "n", true);
     const csp = res.headers.get("Content-Security-Policy") ?? "";
-    expect(csp).toContain("'unsafe-inline'");
+    const styleSrc = csp
+      .split(";")
+      .find((s) => s.trim().startsWith("style-src"));
+    expect(styleSrc).toBeDefined();
+    expect(styleSrc).toContain("'unsafe-inline'");
+    expect(styleSrc).not.toMatch(/'nonce-/);
   });
 
   it("returns the same NextResponse for chaining", async () => {

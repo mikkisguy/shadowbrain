@@ -52,13 +52,22 @@ export const REFERRER_POLICY_VALUE = "strict-origin-when-cross-origin" as const;
 
 /** `Permissions-Policy` — opt every powerful browser feature out by
  *  default. The app does not need camera, microphone, geolocation,
- *  or FLoC/Topics. The empty allow-list `()` is the
- *  deny-everything form. */
+ *  or the FLoC / Topics interest-tracking APIs. The empty
+ *  allow-list `()` is the deny-everything form.
+ *
+ *  `interest-cohort=()` covers the legacy FLoC API (Chrome 87–111);
+ *  `browsing-topics=()` covers its successor, the Topics API
+ *  (Chrome 115+). Both are sent so that no Chromium version logs
+ *  an "Unrecognized feature" warning for the deprecated name.
+ *  The browser ignores any directive it does not recognize, so
+ *  the legacy `interest-cohort=()` is harmless on newer Chromium
+ *  and the newer `browsing-topics=()` is harmless on older. */
 export const PERMISSIONS_POLICY_VALUE: string = [
   "camera=()",
   "microphone=()",
   "geolocation=()",
   "interest-cohort=()",
+  "browsing-topics=()",
 ].join(", ");
 
 /** Static security headers — everything except CSP. CSP is built
@@ -105,34 +114,49 @@ const CSP_DIRECTIVE_TEMPLATES: readonly string[] = [
 
 /** Dev-only relaxation for `script-src` (webpack / Next.js HMR —
  *  `'unsafe-eval'` is required by the RSC client and the HMR
- *  runtime). It is **never** included in the production policy. */
+ *  runtime). It is **never** included in the production policy.
+ *  Note: `'unsafe-eval'` is *not* ignored when a nonce is present
+ *  in `script-src` (unlike `'unsafe-inline'` in `style-src` — see
+ *  `DEV_STYLE_SRC_VALUE`), so the two can coexist. */
 const DEV_SCRIPT_SRC_RELAXATION = " 'unsafe-eval'";
 
-/** Dev-only relaxation for `style-src` (`'unsafe-inline'`). The
- *  Next.js dev overlay (`devtool-style-inject.js`), the dev-time
- *  re-injection of `next/font` styles (`font-styles.tsx`), and
- *  React 19's hydration-mismatch recovery all inject inline
- *  `<style>` tags **client-side** after the initial server-rendered
- *  HTML is in the DOM. Those client-side injections never see the
- *  server-rendered nonce, so without `'unsafe-inline'` in dev the
- *  browser blocks every overlay font / error boundary / HMR
- *  indicator. (In production, the framework's server-rendered
- *  inline `<style>` tags are nonce-attached automatically, so the
- *  relaxation is not needed.) */
-const DEV_STYLE_SRC_RELAXATION = " 'unsafe-inline'";
+/** Dev-only replacement for `style-src`. The Next.js dev overlay
+ *  (`devtool-style-inject.js`), the dev-time re-injection of
+ *  `next/font` styles (`font-styles.tsx`), and React 19's
+ *  hydration-mismatch recovery all inject inline `<style>` tags
+ *  **client-side** after the initial server-rendered HTML is in
+ *  the DOM. Those client-side injections never see the
+ *  server-rendered nonce, so they would be blocked by a strict
+ *  nonce-only `style-src`.
+ *
+ *  Per CSP3, when a `'nonce-...'` source is present in a directive,
+ *  the browser **ignores** any `'unsafe-inline'` source in the
+ *  same directive. So `style-src 'self' 'nonce-…' 'unsafe-inline'`
+ *  would still block the dev overlay's un-nonced injections. The
+ *  only mechanism that allows them in dev is to **drop the nonce
+ *  and use `'unsafe-inline'` alone**. That is what this dev value
+ *  does. Production keeps the strict nonce-only directive (see
+ *  `CSP_DIRECTIVE_TEMPLATES`). */
+const DEV_STYLE_SRC_VALUE = "style-src 'self' 'unsafe-inline'";
 
 /** Build the full `Content-Security-Policy` header value for a
  *  given nonce. The nonce is interpolated into `script-src` and
  *  `style-src`; everywhere else, the policy is static.
  *
  *  In production, the policy has no `unsafe-inline` and no
- *  `unsafe-eval`. In development, both relaxations are added:
- *  `'unsafe-eval'` in `script-src` (HMR / RSC payload decoding)
- *  and `'unsafe-inline'` in `style-src` (Next.js dev overlay,
- *  client-side font-style re-injection, React error boundaries).
- *  Without them the dev experience is unusable and there is no
- *  security gain in production. Both relaxations are explicit and
- *  discoverable in this one function. */
+ *  `unsafe-eval` — the framework's server-rendered inline
+ *  `<style>` tags are nonce-attached automatically, so the strict
+ *  nonce-only `style-src` is enough.
+ *
+ *  In development, `'unsafe-eval'` is added to `script-src` for
+ *  the RSC client and HMR runtime, and the **nonce is dropped
+ *  from `style-src`** in favor of `'unsafe-inline'`. The
+ *  relaxation is needed because Next.js's dev overlay, the
+ *  client-side re-injection of `next/font` styles, and React's
+ *  hydration-mismatch recovery all inject inline `<style>` tags
+ *  client-side after the page has loaded, and those injections
+ *  cannot carry a per-request nonce. (The relaxation is scoped
+ *  to `style-src`; `script-src` keeps the nonce.) */
 export function buildCspHeader(nonce: string, isDev: boolean): string {
   if (!nonce) {
     throw new Error("buildCspHeader: nonce is required");
@@ -143,8 +167,13 @@ export function buildCspHeader(nonce: string, isDev: boolean): string {
       return isDev ? base + DEV_SCRIPT_SRC_RELAXATION : base;
     }
     if (d.startsWith("style-src ")) {
-      const base = d.replace("${nonce}", nonce);
-      return isDev ? base + DEV_STYLE_SRC_RELAXATION : base;
+      // CSP3 quirk: a nonce + 'unsafe-inline' in the same
+      // directive does NOT relax inline styles — the browser
+      // ignores 'unsafe-inline' when a nonce is present. So in
+      // dev we replace the directive entirely; in prod we keep
+      // the nonce-only directive for defense in depth.
+      if (isDev) return DEV_STYLE_SRC_VALUE;
+      return d.replace("${nonce}", nonce);
     }
     if (d.includes("${nonce}")) {
       return d.replace("${nonce}", nonce);
