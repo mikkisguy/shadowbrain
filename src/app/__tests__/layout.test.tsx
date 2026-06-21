@@ -46,6 +46,26 @@ vi.mock("@/lib/env", () => ({
   }),
 }));
 
+// The layout mounts `<CommandPalette />`, which calls
+// `useRouter()` from `next/navigation`. The app-router
+// context is not available during `renderToStaticMarkup`
+// in a unit test, so we mock the navigation hooks with
+// inert stubs. The palette's own integration tests
+// (in `src/components/command-palette`) exercise the
+// real navigation behaviour.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: () => undefined,
+    replace: () => undefined,
+    back: () => undefined,
+    forward: () => undefined,
+    refresh: () => undefined,
+    prefetch: () => undefined,
+  }),
+  usePathname: () => "/",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 import RootLayout from "@/app/layout";
 import { signSessionValue } from "@/lib/auth/session";
 

@@ -107,8 +107,8 @@ export default function Home() {
             build · {new Date().toISOString().slice(0, 10)} · 0a0a0a
           </p>
           <p className="text-muted-foreground font-sans text-xs">
-            Coming soon — global command palette (<kbd>Ctrl K</kbd>), browse,
-            chat, graph, tags, settings.
+            Press <kbd className="font-mono">Ctrl K</kbd> to open the command
+            palette — jump to any page or search your second brain.
           </p>
         </footer>
       </section>
