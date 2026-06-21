@@ -5,14 +5,11 @@
 // favicon metadata. Stores the result in `content_items.metadata`.
 //
 // Designed to be called from POST /api/items when `type === "bookmark"`.
-// The full SSRF allowlist + DNS rebinding protection lives in this module
-// for now. When issue #60 lands (shared `validateFetchUrl` helper used by
-// both #17 and #44), this module should switch to calling that helper
-// instead — the contract is the same: reject private / loopback /
-// link-local / metadata IP targets at every hop.
+// SSRF protection (allowlist + DNS rebinding defense) is provided by
+// `src/lib/ssrf.ts` — this module consumes it for HTML-specific concerns
+// (content-type check, entity decoding).
 
-import { lookup } from "node:dns/promises";
-import { isIPv4, isIPv6, LookupFunction } from "node:net";
+import type { LookupFunction } from "node:net";
 import {
   request as httpRequest,
   RequestOptions as HttpRequestOptions,
@@ -22,26 +19,24 @@ import {
   RequestOptions as HttpsRequestOptions,
 } from "node:https";
 import { Readable } from "node:stream";
-import { log } from "./logger";
+import { SSRF_POLICY } from "./security.config";
+import {
+  validateFetchUrl,
+  // Re-export for backward compatibility with existing test imports
+  isPrivateOrLoopbackIp as ssrfIsPrivateOrLoopbackIp,
+  type HostRecord as SsrfHostRecord,
+} from "./ssrf";
 
-/** Default request timeout in milliseconds. Bounds the whole request. */
-const DEFAULT_TIMEOUT_MS = 5_000;
-
-/** Default DNS resolution timeout in milliseconds. */
-const DEFAULT_DNS_TIMEOUT_MS = 3_000;
-
-/** Default response body cap in bytes. Reading more aborts the request. */
-const DEFAULT_MAX_BYTES = 1_048_576; // 1 MiB
+/** Policy values from security.config.ts */
+const {
+  defaultTimeoutMs: DEFAULT_TIMEOUT_MS,
+  defaultDnsTimeoutMs: DEFAULT_DNS_TIMEOUT_MS,
+  defaultMaxBytes: DEFAULT_MAX_BYTES,
+  maxRedirectHops: MAX_REDIRECT_HOPS,
+} = SSRF_POLICY;
 
 /** User-Agent sent to upstream. Identifies the fetcher for site operators. */
 const USER_AGENT = "ShadowBrain/1.0 (+bookmark-metadata)";
-
-/**
- * Max redirect hops to follow. Each hop is re-validated against the SSRF
- * allowlist. The outer loop in `safeFetchHtml` runs `MAX_REDIRECT_HOPS + 1`
- * times (the original request plus the redirects).
- */
-const MAX_REDIRECT_HOPS = 3;
 
 export interface FetchOptions {
   /** Override the underlying http(s) request (used in tests). */
@@ -56,7 +51,7 @@ export interface FetchOptions {
     opts: { timeoutMs: number; lookup: LookupFunction }
   ) => Promise<UpstreamResponse>;
   /** Override DNS resolution (used in tests). */
-  resolve?: (hostname: string) => Promise<HostRecord[]>;
+  resolve?: (hostname: string) => Promise<SsrfHostRecord[]>;
   /** Request timeout in ms. */
   timeoutMs?: number;
   /** DNS resolution timeout in ms. */
@@ -65,10 +60,8 @@ export interface FetchOptions {
   maxBytes?: number;
 }
 
-export interface HostRecord {
-  ip: string;
-  family: number;
-}
+// Re-export HostRecord for backward compatibility with test imports
+export type { HostRecord as HostRecord } from "./ssrf";
 
 export interface BookmarkMetadata {
   /** The URL we resolved and fetched. */
@@ -148,82 +141,8 @@ function stripTrailingPunctuation(url: string): string {
 
 // ---------- IP / SSRF checks ----------
 
-/**
- * Normalize an IP string before range-checking. Handles three cases
- * that the raw input may arrive in:
- *  1. URL hostnames: `https://[::1]/` → `[::1]` (brackets included).
- *  2. IPv4-mapped IPv6 in dotted form: `::ffff:8.8.8.8` (returned by
- *     `dns.lookup` on most Linux/macOS systems when an IPv4 connection
- *     is established from a dual-stack socket).
- *  3. IPv4-mapped IPv6 in hex form: `::ffff:808:808` (produced by the
- *     WHATWG URL parser when given `https://[::ffff:8.8.8.8]/`).
- *
- * The normalizer extracts the embedded IPv4 where possible, falling
- * back to the literal IPv6 form. The IPv4 is then range-checked by
- * `isPrivateIpv4`; the IPv6 by `isPrivateIpv6`.
- */
-function normalizeIp(ip: string): string {
-  let lower = ip.toLowerCase();
-  // Strip brackets that the URL parser leaves on IPv6 hosts.
-  if (lower.startsWith("[") && lower.endsWith("]")) {
-    lower = lower.slice(1, -1);
-  }
-  // IPv4-mapped IPv6, dotted form: ::ffff:a.b.c.d
-  const dotted = lower.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
-  if (dotted) return dotted[1]!;
-  // IPv4-mapped IPv6, hex form (URL-parser output): ::ffff:HHHH:HHHH
-  const hex = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-  if (hex) {
-    const hi = parseInt(hex[1]!, 16);
-    const lo = parseInt(hex[2]!, 16);
-    if (
-      !Number.isNaN(hi) &&
-      !Number.isNaN(lo) &&
-      hi <= 0xffff &&
-      lo <= 0xffff
-    ) {
-      return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
-    }
-  }
-  return lower;
-}
-
-/**
- * Return true when the IP is in a private / loopback / link-local range
- * that should never be reached from a public-internet bookmark fetcher.
- * Covers IPv4 and IPv6. Anything that doesn't parse as a valid IP is
- * treated as unsafe (the conservative default).
- */
-export function isPrivateOrLoopbackIp(ip: string): boolean {
-  const normalized = normalizeIp(ip);
-  if (isIPv4(normalized)) return isPrivateIpv4(normalized);
-  if (isIPv6(normalized)) return isPrivateIpv6(normalized);
-  return true; // unknown format
-}
-
-function isPrivateIpv4(ip: string): boolean {
-  const parts = ip.split(".").map(Number);
-  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return true;
-  const [a, b] = parts as [number, number, number, number];
-  if (a === 10) return true; // 10.0.0.0/8
-  if (a === 127) return true; // 127.0.0.0/8 (loopback)
-  if (a === 169 && b === 254) return true; // 169.254.0.0/16 (link-local, includes cloud metadata 169.254.169.254)
-  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
-  if (a === 192 && b === 168) return true; // 192.168.0.0/16
-  if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 (CGNAT)
-  if (a === 0) return true; // 0.0.0.0/8
-  if (a >= 224) return true; // 224.0.0.0/4 (multicast) + 240/4 (reserved) + 255.255.255.255
-  return false;
-}
-
-function isPrivateIpv6(ip: string): boolean {
-  if (ip === "::1") return true; // loopback
-  if (ip === "::") return true; // unspecified
-  if (ip.startsWith("fc") || ip.startsWith("fd")) return true; // fc00::/7 (ULA)
-  if (ip.startsWith("fe80:")) return true; // fe80::/10 (link-local)
-  if (ip.startsWith("ff")) return true; // ff00::/8 (multicast)
-  return false;
-}
+// Re-export for backward compatibility with existing test imports
+export const isPrivateOrLoopbackIp = ssrfIsPrivateOrLoopbackIp;
 
 // ---------- SSRF-safe fetch ----------
 
@@ -248,31 +167,39 @@ export async function safeFetchHtml(
   options: FetchOptions = {}
 ): Promise<string> {
   const fetchImpl = options.fetchImpl ?? defaultFetchImpl;
-  const resolve = options.resolve ?? defaultResolve;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const dnsTimeoutMs = options.dnsTimeoutMs ?? DEFAULT_DNS_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
 
-  const resolveBounded: (hostname: string) => Promise<HostRecord[]> = (h) =>
-    resolveWithTimeout(h, resolve, dnsTimeoutMs);
-
-  let currentUrl = normaliseUrl(url);
+  let currentUrl: URL;
+  if (typeof url === "string") {
+    try {
+      currentUrl = new URL(url);
+    } catch {
+      throw new FetchError("invalid URL");
+    }
+  } else {
+    currentUrl = new URL(url.toString());
+  }
 
   for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
-    // 1. Pre-validate the host (blocks IP literals and bad DNS).
-    const safeLookup = await buildSafeLookup(
-      currentUrl.hostname,
-      resolveBounded,
-      dnsTimeoutMs
-    );
+    // 1. Validate the URL and get a safeLookup callback.
+    const validationResult = await validateFetchUrl(currentUrl, {
+      resolve: options.resolve,
+      dnsTimeoutMs,
+    });
 
-    // 2. Make the request. The custom `lookup` callback re-validates
-    //    the IP at connect time, closing the DNS rebinding window.
+    if (!validationResult.ok) {
+      throw new FetchError(validationResult.reason);
+    }
+
+    // 2. Make the request. The safeLookup callback re-validates the IP
+    //    at connect time, closing the DNS rebinding window.
     let res: UpstreamResponse;
     try {
       res = await fetchImpl(currentUrl, {
         timeoutMs,
-        lookup: safeLookup,
+        lookup: validationResult.safeLookup,
       });
     } catch (err) {
       if (err instanceof FetchError) throw err;
@@ -301,10 +228,10 @@ export async function safeFetchHtml(
         res.body.destroy();
         throw new FetchError("invalid redirect target");
       }
-      if (next.protocol !== "http:" && next.protocol !== "https:") {
-        res.body.destroy();
-        throw new FetchError(`disallowed redirect scheme: ${next.protocol}`);
-      }
+      // The scheme check is done by `validateFetchUrl` on the next
+      // loop iteration. Adding a separate check here would either be
+      // dead code or echo the user-supplied scheme in the error
+      // message, both of which the security baseline rejects.
       res.body.destroy();
       currentUrl = next;
       continue;
@@ -417,162 +344,6 @@ function performRequest(
     });
     req.end();
   });
-}
-
-async function defaultResolve(hostname: string): Promise<HostRecord[]> {
-  // `lookup` with `all: true` returns every address, not just the
-  // first — we must check every one. A hostname with both a public and
-  // a private record is still unsafe. Map to our `HostRecord` shape
-  // (the dns module uses `address`; the rest of the code uses `ip`).
-  const records = await lookup(hostname, { all: true });
-  return records.map((r: { address: string; family: number }) => ({
-    ip: r.address,
-    family: r.family,
-  }));
-}
-
-/**
- * Wrap a resolve call with a timeout. `node:dns` does not accept an
- * AbortSignal, so we race against a `setTimeout`. The resolve is not
- * actually cancelled (libuv has no portable cancel hook), but the
- * caller bails out — keeping the response time bounded.
- */
-function resolveWithTimeout(
-  hostname: string,
-  resolve: (hostname: string) => Promise<HostRecord[]>,
-  timeoutMs: number
-): Promise<HostRecord[]> {
-  return new Promise((resolveP, rejectP) => {
-    let done = false;
-    const timer = setTimeout(() => {
-      if (done) return;
-      done = true;
-      rejectP(new FetchError("DNS timeout"));
-    }, timeoutMs);
-    resolve(hostname).then(
-      (recs) => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        resolveP(recs);
-      },
-      (err: unknown) => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        rejectP(err);
-      }
-    );
-  });
-}
-
-/**
- * Build a `lookup` callback for the request. The callback:
- *  1. Re-resolves the hostname (closing the DNS rebinding window —
- *     the IP seen here may differ from the IP we saw during pre-
- *     validation).
- *  2. Verifies every resolved IP is public.
- *  3. Calls back with the first safe IP.
- *
- * If the URL is an IP literal, the IP is validated directly without
- * DNS resolution (no rebinding possible when there's no DNS).
- */
-async function buildSafeLookup(
-  hostname: string,
-  resolve: (hostname: string) => Promise<HostRecord[]>,
-  dnsTimeoutMs: number
-): Promise<NonNullable<HttpRequestOptions["lookup"]>> {
-  // The URL parser leaves brackets on IPv6 hosts. Strip them so the
-  // `isIPv4`/`isIPv6` checks below see the bare address.
-  const bareHostname =
-    hostname.startsWith("[") && hostname.endsWith("]")
-      ? hostname.slice(1, -1)
-      : hostname;
-
-  if (isIPv4(bareHostname) || isIPv6(bareHostname)) {
-    if (isPrivateOrLoopbackIp(bareHostname)) {
-      // The specific IP stays out of the message: client-facing errors
-      // are generic per the security baseline (§Error Handling). The
-      // server-side log below records the exact value for debugging.
-      log("warn", "blocked private IP literal", {
-        event: "ssrf.block",
-        ip: bareHostname,
-      });
-      throw new FetchError("blocked IP");
-    }
-    const family = isIPv6(bareHostname) ? 6 : 4;
-    return (_h, _opts, cb) => {
-      cb(null, bareHostname, family);
-    };
-  }
-
-  // Pre-resolve so a clearly-bad hostname fails fast (better error
-  // message than waiting for the connect-time callback).
-  const records = await resolveWithTimeout(hostname, resolve, dnsTimeoutMs);
-  if (records.length === 0) {
-    log("warn", "DNS resolution returned no records", {
-      event: "ssrf.dns.empty",
-      hostname,
-    });
-    throw new FetchError("DNS resolution failed");
-  }
-  for (const r of records) {
-    if (isPrivateOrLoopbackIp(r.ip)) {
-      log("warn", "blocked private DNS record", {
-        event: "ssrf.block",
-        hostname,
-        ip: r.ip,
-      });
-      throw new FetchError("blocked IP");
-    }
-  }
-
-  // Return a callback that re-validates at connect time, closing the
-  // DNS rebinding window. We always prefer IPv4 results regardless of
-  // the caller's family preference — IPv4 is universally reachable and
-  // avoids the rare case where the remote has a misconfigured AAAA.
-  return (lookupHostname, _opts, cb) => {
-    resolveWithTimeout(lookupHostname, resolve, dnsTimeoutMs)
-      .then((recs) => {
-        if (recs.length === 0) {
-          log("warn", "connect-time DNS returned no records", {
-            event: "ssrf.dns.empty",
-            hostname: lookupHostname,
-          });
-          cb(new Error("DNS resolution failed"), "", 0);
-          return;
-        }
-        for (const r of recs) {
-          if (isPrivateOrLoopbackIp(r.ip)) {
-            log("warn", "blocked DNS rebinding to private IP", {
-              event: "ssrf.rebind.block",
-              hostname: lookupHostname,
-              ip: r.ip,
-            });
-            cb(new Error("blocked IP"), "", 0);
-            return;
-          }
-        }
-        const v4 = recs.find((r) => r.family === 4);
-        const chosen = v4 ?? recs[0]!;
-        cb(null, chosen.ip, chosen.family);
-      })
-      .catch((err: unknown) => {
-        cb(err instanceof Error ? err : new Error(String(err)), "", 0);
-      });
-  };
-}
-
-function normaliseUrl(url: string | URL): URL {
-  const parsed =
-    typeof url === "string" ? new URL(url) : new URL(url.toString());
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new FetchError(`disallowed scheme: ${parsed.protocol}`);
-  }
-  if (!parsed.hostname) {
-    throw new FetchError("missing hostname");
-  }
-  return parsed;
 }
 
 function isHtmlResponse(contentType: string | string[] | undefined): boolean {

@@ -221,6 +221,17 @@ Test helper: `authedRequest(url, init)` in `src/db/test-utils.ts` signs a sessio
 - Use `Promise.all()` for parallel independent operations
 - Avoid N+1 queries — batch where possible
 
+### SSRF Protection
+
+- All URL-fetch endpoints (bookmark auto-fetch, image capture) MUST use
+  `validateFetchUrl` from `src/lib/ssrf.ts` before making any HTTP request.
+- The validator blocks private / loopback / link-local IP ranges, rejects
+  non-http(s) schemes, and returns a `safeLookup` callback that re-validates
+  the IP at connect time to prevent DNS rebinding.
+- See the App Security Baseline design spec
+  (docs/superpowers/specs/2026-06-19-app-security-baseline-design.md §7)
+  for the full policy.
+
 ## Frontend Guidelines
 
 - Use shadcn/ui components (built on Tailwind CSS)
