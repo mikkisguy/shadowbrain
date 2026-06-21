@@ -51,23 +51,25 @@ export const X_CONTENT_TYPE_OPTIONS_VALUE = "nosniff" as const;
 export const REFERRER_POLICY_VALUE = "strict-origin-when-cross-origin" as const;
 
 /** `Permissions-Policy` — opt every powerful browser feature out by
- *  default. The app does not need camera, microphone, geolocation,
- *  or the FLoC / Topics interest-tracking APIs. The empty
- *  allow-list `()` is the deny-everything form.
+ *  default. The app does not need camera, microphone, or
+ *  geolocation. The empty allow-list `()` is the deny-everything
+ *  form.
  *
- *  `interest-cohort=()` covers the legacy FLoC API (Chrome 87–111);
- *  `browsing-topics=()` covers its successor, the Topics API
- *  (Chrome 115+). Both are sent so that no Chromium version logs
- *  an "Unrecognized feature" warning for the deprecated name.
- *  The browser ignores any directive it does not recognize, so
- *  the legacy `interest-cohort=()` is harmless on newer Chromium
- *  and the newer `browsing-topics=()` is harmless on older. */
+ *  Note: the design spec listed `interest-cohort=()` (the FLoC
+ *  opt-out) and we briefly also added `browsing-topics=()` (the
+ *  Topics opt-out), but Chrome has since dropped **both** APIs
+ *  and modern Chromium logs
+ *  `Error with Permissions-Policy header: Unrecognized feature`
+ *  for either directive. Sending directives the browser does not
+ *  recognize is pure noise — the browser silently ignores them,
+ *  and the console is spammed. We therefore ship only the
+ *  directives the browser actually understands today. If FLoC /
+ *  Topics (or any successor) returns, it can be added back at
+ *  that time. */
 export const PERMISSIONS_POLICY_VALUE: string = [
   "camera=()",
   "microphone=()",
   "geolocation=()",
-  "interest-cohort=()",
-  "browsing-topics=()",
 ].join(", ");
 
 /** Static security headers — everything except CSP. CSP is built

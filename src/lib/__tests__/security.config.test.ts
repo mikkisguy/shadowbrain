@@ -39,14 +39,15 @@ describe("static security header values", () => {
     expect(REFERRER_POLICY_VALUE).toBe("strict-origin-when-cross-origin");
   });
 
-  it("Permissions-Policy denies camera, microphone, geolocation, FLoC, Topics", () => {
-    // `interest-cohort=()` covers the legacy FLoC API (Chrome ≤111);
-    // `browsing-topics=()` covers the Topics API (Chrome 115+). Both
-    // are sent so that no Chromium version logs an "Unrecognized
-    // feature" warning for the deprecated name — and so that the
-    // newer one is explicitly opted out of.
+  it("Permissions-Policy denies camera, microphone, geolocation", () => {
+    // Note: the design spec previously listed `interest-cohort=()`
+    // (FLoC opt-out). Chrome has since removed FLoC and Topics, and
+    // modern Chromium logs an "Unrecognized feature" warning for
+    // either. We therefore ship only directives the browser
+    // actually understands today. See the comment on
+    // `PERMISSIONS_POLICY_VALUE` in security.config.ts.
     expect(PERMISSIONS_POLICY_VALUE).toBe(
-      "camera=(), microphone=(), geolocation=(), interest-cohort=(), browsing-topics=()"
+      "camera=(), microphone=(), geolocation=()"
     );
   });
 

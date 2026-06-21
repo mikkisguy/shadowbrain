@@ -257,8 +257,7 @@ describe("proxy — security response headers", () => {
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Permissions-Policy":
-      "camera=(), microphone=(), geolocation=(), interest-cohort=(), browsing-topics=()",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
   };
 
   /** Assert that `res` carries every expected security header
