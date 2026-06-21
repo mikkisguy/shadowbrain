@@ -24,8 +24,13 @@ export default defineConfig({
       ADMIN_PASSWORD_HASH:
         "$2b$10$.8miRowqAy0BGbtsRGODdOy/QJ11HdyOHLjLCK8AoPf.X.32x1U76",
     },
-    setupFiles: [],
+    setupFiles: ["src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
+    // Per-file environment override: client-component tests opt
+    // into jsdom with a `// @vitest-environment jsdom` directive
+    // at the top of the file. The default stays "node" so the
+    // existing pure server / unit tests don't pay the jsdom
+    // bootstrap cost.
     exclude: ["node_modules", "dist", ".next"],
   },
 });

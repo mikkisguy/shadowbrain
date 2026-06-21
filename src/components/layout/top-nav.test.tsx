@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { TopNav } from "@/components/layout/top-nav";
+import { CommandPaletteProvider } from "@/components/command-palette";
 
 /**
  * Smoke test for the top-nav layout shell.
@@ -17,9 +18,20 @@ import { TopNav } from "@/components/layout/top-nav";
  * lives in `src/app/layout.tsx`. So this test only covers the
  * "rendered" shape; a layout-level test would assert that
  * `<TopNav />` is not emitted on unauthenticated pages.
+ *
+ * `TopNav` includes the palette trigger, which now consumes
+ * `useCommandPalette` — so the test renders the nav inside
+ * the same `CommandPaletteProvider` the root layout uses.
+ * Server-side rendering of the provider is safe: the global
+ * `keydown` listener only attaches in `useEffect`, which
+ * does not run during `renderToStaticMarkup`.
  */
 describe("TopNav", () => {
-  const html = renderToStaticMarkup(<TopNav />);
+  const html = renderToStaticMarkup(
+    <CommandPaletteProvider>
+      <TopNav />
+    </CommandPaletteProvider>
+  );
 
   it("renders a header element with a hairline bottom border", () => {
     expect(html).toMatch(/<header[^>]*data-testid="top-nav"/);

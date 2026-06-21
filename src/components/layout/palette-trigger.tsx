@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import { Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useCommandPalette } from "@/components/command-palette";
 
 /**
  * Centered palette trigger.
@@ -13,18 +14,20 @@ import { cn } from "@/lib/utils";
  * placeholder and platform-appropriate keyboard-shortcut hint
  * (⌘K on macOS, Ctrl K on Windows/Linux).
  *
- * On mobile: collapses to a magnifying-glass icon button in the same
- * position.
+ * On mobile: collapses to a magnifying-glass icon button in the
+ * same position. There is no keyboard shortcut on mobile.
  *
- * The command palette itself is implemented in #88 — this trigger
- * is intentionally a stub for now. It carries `data-palette-trigger`
- * so the palette component can attach a click handler later (either
- * by replacing the handler directly, or by event delegation on the
- * data attribute), and stays a focusable button for keyboard
- * navigation regardless.
+ * The component lives inside the `CommandPaletteProvider` tree
+ * (mounted in the root layout) and reads the open state via the
+ * `useCommandPalette` hook. The actual dialog is rendered by a
+ * sibling `<CommandPalette />` so the same provider is the single
+ * source of truth for the keyboard shortcut too.
  */
 export function PaletteTrigger() {
+  const { setOpen } = useCommandPalette();
   const shortcut = usePlatformShortcut();
+
+  const open = () => setOpen(true);
 
   return (
     <>
@@ -33,8 +36,8 @@ export function PaletteTrigger() {
         type="button"
         data-palette-trigger
         data-testid="palette-trigger-desktop"
-        onClick={openPalette}
-        aria-label={`Open command palette (coming soon) — ${shortcut}`}
+        onClick={open}
+        aria-label={`Open command palette — ${shortcut}`}
         className={cn(
           "border-border bg-surface-elevated hidden h-8 w-full max-w-sm items-center gap-2 rounded-sm border",
           "text-muted-foreground px-3 text-left text-sm outline-none",
@@ -62,8 +65,8 @@ export function PaletteTrigger() {
         type="button"
         data-palette-trigger
         data-testid="palette-trigger-mobile"
-        onClick={openPalette}
-        aria-label="Open command palette (coming soon)"
+        onClick={open}
+        aria-label="Open command palette"
         className={cn(
           "border-border bg-surface-elevated inline-flex size-8 items-center justify-center rounded-sm border",
           "text-muted-foreground transition-colors outline-none",
@@ -98,19 +101,4 @@ function usePlatformShortcut(): string {
 function getClientShortcut(): string {
   if (typeof navigator === "undefined") return "Ctrl K";
   return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent) ? "⌘K" : "Ctrl K";
-}
-
-/**
- * Stub: the actual command palette is implemented in #88. Until
- * that lands the trigger is intentionally a no-op so we ship the
- * layout shell without a half-built palette. We log to the browser
- * console in dev to make the stub discoverable; in production the
- * log is suppressed to avoid leaving a dead message in the console.
- */
-function openPalette(): void {
-  if (process.env.NODE_ENV === "development") {
-    console.info(
-      "[ShadowBrain] Command palette is not yet implemented. See #88."
-    );
-  }
 }
