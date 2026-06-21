@@ -10,12 +10,11 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { CornerDownLeft, Search as SearchIcon } from "lucide-react";
+import { Command as CommandPrimitive } from "cmdk";
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
 import {
-  Command as CommandRoot,
-  CommandInput,
   CommandItem as CommandItemRow,
   CommandList,
   CommandGroup,
@@ -239,7 +238,7 @@ function PaletteBody() {
   );
 
   return (
-    <CommandRoot
+    <CommandPrimitive
       label="Command palette"
       shouldFilter={false}
       className="flex size-full flex-col overflow-hidden bg-transparent"
@@ -252,7 +251,16 @@ function PaletteBody() {
           aria-hidden="true"
           className="text-muted-foreground size-4 shrink-0"
         />
-        <CommandInput
+        {/*
+          Use cmdk's `Command.Input` directly (not the shadcn
+          `CommandInput` wrapper) so the input fills the row
+          edge-to-edge. The shadcn wrapper adds an extra
+          `p-1` div and renders its own SearchIcon, which
+          squeezed the placeholder until the text
+          truncated. The footer below already documents
+          the Esc shortcut, so no inline hint is needed.
+        */}
+        <CommandPrimitive.Input
           ref={inputRef}
           data-testid="command-palette-input"
           placeholder="Search ShadowBrain or jump to a page…"
@@ -261,12 +269,6 @@ function PaletteBody() {
           onKeyDown={handleInputKeyDown}
           className="placeholder:text-muted-foreground h-12 w-full border-0 bg-transparent text-sm outline-none"
         />
-        <kbd
-          aria-hidden="true"
-          className="text-muted-foreground hidden font-mono text-[10px] md:inline-flex"
-        >
-          Esc
-        </kbd>
       </div>
       <CommandList
         data-testid="command-palette-list"
@@ -297,7 +299,7 @@ function PaletteBody() {
           ShadowBrain palette
         </span>
       </div>
-    </CommandRoot>
+    </CommandPrimitive>
   );
 }
 

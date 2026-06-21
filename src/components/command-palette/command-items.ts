@@ -77,7 +77,7 @@ export const pages: PageCommandItem[] = [
   page({
     id: "page.graph",
     label: "Graph",
-    description: "Visual knowledge graph (placeholder)",
+    description: "Visual knowledge graph",
     href: "/graph",
     keywords: ["graph", "visual", "network"],
   }),
