@@ -9,6 +9,7 @@ import {
 import { signSessionValue } from "@/lib/auth/session";
 import { __resetAllRateLimiters } from "@/lib/rate-limit";
 import {
+  FORBIDDEN_CORS_HEADERS,
   RATE_LIMIT_API_MAX,
   RATE_LIMIT_DEFAULT_MAX,
   RATE_LIMIT_LOGIN_MAX,
@@ -700,5 +701,148 @@ describe("proxy — rate limiting", () => {
       headers: { "Content-Type": "application/json" },
     });
     expect((await proxy(blocked as never)).status).toBe(429);
+  });
+});
+
+/**
+ * CORS posture — the proxy must never set an `Access-Control-*`
+ * response header on any code path. The app is same-origin (see
+ * `CORS_POLICY` in `src/lib/security.config.ts`); the presence
+ * of any CORS header on a 200, 401, 403, 302, 429, or exempt
+ * response is a regression.
+ *
+ * The CSRF origin check (covered by the `proxy` and
+ * `proxy — security response headers` describes above) is what
+ * *rejects* cross-origin requests; this describe is what
+ * *asserts the absence of CORS response headers*. The two
+ * together express the App Security Baseline design spec §6:
+ * same-origin only, no CORS.
+ */
+describe("proxy — CORS posture", () => {
+  beforeEach(() => {
+    // The rate limiters are module-singletons; reset them
+    // between tests so the 429 test in this describe cannot
+    // bleed into other tests in the suite.
+    __resetAllRateLimiters();
+  });
+
+  /** The full set of CORS response headers that must NEVER
+   *  appear on any proxy response. Imported from the security
+   *  config so a future change to the policy (adding a new
+   *  header, etc.) is automatically reflected here — a
+   *  duplicated local copy would create a silent blind spot
+   *  when the policy is widened. The `toEqual` assertion below
+   *  pins the exact list and is the reviewer-attention
+   *  tripwire: if a future commit adds a header to
+   *  `FORBIDDEN_CORS_HEADERS`, this assertion will fail and the
+   *  reviewer will see the policy contract change in the diff. */
+  function assertNoCorsHeaders(res: { headers: Headers }) {
+    for (const name of FORBIDDEN_CORS_HEADERS) {
+      expect(
+        res.headers.get(name),
+        `proxy must not set ${name} (same-origin only)`
+      ).toBeNull();
+    }
+  }
+
+  it("the imported FORBIDDEN_CORS_HEADERS matches the expected CORS list", () => {
+    // Tripwire: a future commit that adds (or removes) a header
+    // from the config's forbidden list will fail this test, so
+    // the reviewer sees the policy contract change in the diff
+    // and can judge whether the change is intentional. Mirrors
+    // the unit test in `security.config.test.ts`.
+    expect(FORBIDDEN_CORS_HEADERS).toEqual([
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Credentials",
+      "Access-Control-Allow-Methods",
+      "Access-Control-Allow-Headers",
+      "Access-Control-Expose-Headers",
+      "Access-Control-Max-Age",
+      "Access-Control-Request-Headers",
+      "Access-Control-Request-Method",
+    ]);
+  });
+
+  it("200 (authenticated) sets no CORS response headers", async () => {
+    const req = await authedRequest("http://localhost/api/items");
+    const res = await proxy(req as never);
+    expect(res.status).toBe(200);
+    assertNoCorsHeaders(res);
+  });
+
+  it("401 (unauthenticated API) sets no CORS response headers", async () => {
+    const req = new FakeNextRequest({
+      url: "http://localhost/api/items",
+      headers: { Accept: "application/json" },
+    });
+    const res = await proxy(req as never);
+    expect(res.status).toBe(401);
+    assertNoCorsHeaders(res);
+  });
+
+  it("403 (CSRF cross-origin) sets no CORS response headers", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://attacker.example",
+      },
+    });
+    const res = await proxy(req as never);
+    expect(res.status).toBe(403);
+    assertNoCorsHeaders(res);
+  });
+
+  it("302 (unauthenticated browser nav) sets no CORS response headers", async () => {
+    const req = new FakeNextRequest({
+      url: "http://localhost/items/123",
+      headers: { Accept: "text/html" },
+    });
+    const res = await proxy(req as never);
+    expect(res.status).toBe(302);
+    assertNoCorsHeaders(res);
+  });
+
+  it("429 (rate-limited) sets no CORS response headers", async () => {
+    const ip = "10.0.0.99";
+    for (let i = 0; i < RATE_LIMIT_API_MAX; i++) {
+      await proxy(
+        new FakeNextRequest({
+          url: "http://localhost/api/items",
+          headers: { "X-Forwarded-For": ip, Accept: "application/json" },
+        }) as never
+      );
+    }
+    const res = await proxy(
+      new FakeNextRequest({
+        url: "http://localhost/api/items",
+        headers: { "X-Forwarded-For": ip, Accept: "application/json" },
+      }) as never
+    );
+    expect(res.status).toBe(429);
+    assertNoCorsHeaders(res);
+  });
+
+  it("exempt route (/login) sets no CORS response headers", async () => {
+    const req = new FakeNextRequest({ url: "http://localhost/login" });
+    const res = await proxy(req as never);
+    expect(res.status).toBe(200);
+    assertNoCorsHeaders(res);
+  });
+
+  it("exempt API route (/api/auth/login) sets no CORS response headers", async () => {
+    // Symmetric coverage: the exempt path is exercised for both
+    // a page (GET /login) and an API (POST /api/auth/login) so
+    // a future change to the exempt branch in the proxy cannot
+    // quietly start setting CORS headers on one but not the
+    // other.
+    const req = new FakeNextRequest({
+      url: "http://localhost/api/auth/login",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const res = await proxy(req as never);
+    expect(res.status).toBe(200);
+    assertNoCorsHeaders(res);
   });
 });
