@@ -24,7 +24,7 @@ export default defineConfig({
       ADMIN_PASSWORD_HASH:
         "$2b$10$.8miRowqAy0BGbtsRGODdOy/QJ11HdyOHLjLCK8AoPf.X.32x1U76",
     },
-    setupFiles: [],
+    setupFiles: ["src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     exclude: ["node_modules", "dist", ".next"],
   },

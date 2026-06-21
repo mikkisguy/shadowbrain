@@ -1,6 +1,6 @@
 {
   "name": "shadowbrain",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -38,6 +38,7 @@
     "entry": [
       "src/app/**/*.{ts,tsx,css}",
       "src/components/ui/button.tsx",
+      "src/components/ui/input.tsx",
       "src/lib/auth/**/*.{ts,tsx}",
       "src/**/__tests__/**/*.{ts,tsx}",
       "src/**/*.test.{ts,tsx}",
@@ -72,6 +73,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.17",
@@ -80,6 +84,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.6",
     "husky": "^9.1.7",
+    "jsdom": "^29.1.1",
     "knip": "^6.17.1",
     "lint-staged": "^17.0.0",
     "prettier": "^3.8.4",
