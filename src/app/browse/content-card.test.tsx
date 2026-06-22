@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import {
   ContentCard,
+  formatAbsoluteTime,
   formatRelativeTime,
   metadataSummary,
   previewText,
@@ -95,6 +97,27 @@ describe("ContentCard", () => {
     const time = screen.getByRole("time");
     expect(time.textContent).toMatch(/ago|minute/);
     expect(time).toHaveAttribute("datetime");
+  });
+
+  it("does not carry a native title tooltip — the custom tooltip owns it", () => {
+    // The timestamp used to set `title={created_at}` (a slow,
+    // unstyled native tooltip with the raw ISO string). Now the
+    // Base UI tooltip shows the formatted absolute time instead.
+    render(<ContentCard item={baseItem} />);
+    expect(screen.getByRole("time")).not.toHaveAttribute("title");
+  });
+
+  it("reveals the absolute time in a tooltip on hover", async () => {
+    const user = userEvent.setup();
+    const item: BrowseItem = {
+      ...baseItem,
+      created_at: "2026-06-21T12:00:00.000Z",
+    };
+    render(<ContentCard item={item} />);
+    await user.hover(screen.getByRole("time"));
+    // The popup is portalled to <body>; `screen` covers the whole
+    // document, so the absolute phrase is findable once open.
+    expect(await screen.findByText(/2026/)).toBeInTheDocument();
   });
 
   it("does not render the image frame when image_url is null", () => {
@@ -240,6 +263,21 @@ describe("formatRelativeTime", () => {
     expect(formatRelativeTime("2026-06-21T13:00:00.000Z", now)).toMatch(
       /in 1 hour/
     );
+  });
+});
+
+describe("formatAbsoluteTime", () => {
+  it("formats an ISO timestamp as a medium date + short time", () => {
+    // Locale "en", UTC input. The exact hour depends on the
+    // runtime timezone, so we assert on the stable date + the
+    // four-digit year rather than the full string.
+    const out = formatAbsoluteTime("2026-06-21T12:00:00.000Z");
+    expect(out).toMatch(/Jun 21, 2026/);
+    expect(out).toMatch(/2026/);
+    expect(out).toMatch(/(:\d{2}|AM|PM)/);
+  });
+  it("returns the input unchanged when the timestamp is unparseable", () => {
+    expect(formatAbsoluteTime("not-a-date")).toBe("not-a-date");
   });
 });
 

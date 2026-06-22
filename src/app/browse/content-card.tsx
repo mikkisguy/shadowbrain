@@ -32,6 +32,11 @@
 import { useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { BrowseItem } from "./types";
 
 export interface ContentCardProps {
@@ -85,6 +90,14 @@ const TYPE_LABEL: Record<string, string> = {
 
 const RELATIVE = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
+/** Shared absolute formatter for the timestamp tooltip. `medium`
+ *  date + `short` time reads as "Jun 22, 2026, 9:55 PM" — precise
+ *  enough to disambiguate, compact enough for a one-line tip. */
+const ABSOLUTE = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 /** Format a created_at timestamp as a short relative phrase
  *  ("just now", "12m ago", "3h ago", "2d ago", or the absolute
  *  date for anything older than a month). Falls back to the raw
@@ -115,6 +128,18 @@ export function formatRelativeTime(
   if (absMs < month) return RELATIVE.format(Math.round(diffMs / week), "week");
   if (absMs < year) return RELATIVE.format(Math.round(diffMs / month), "month");
   return RELATIVE.format(Math.round(diffMs / year), "year");
+}
+
+/** Format a created_at timestamp as an absolute, human-readable
+ *  date+time ("Jun 22, 2026, 9:55 PM"). Surfaced via the
+ *  timestamp's hover/focus tooltip so the exact time is one hover
+ *  away from the relative phrase. Falls back to the raw ISO string
+ *  when the input is unparseable. */
+export function formatAbsoluteTime(iso: string): string {
+  const then = new Date(iso);
+  const thenMs = then.getTime();
+  if (Number.isNaN(thenMs)) return iso;
+  return ABSOLUTE.format(then);
 }
 
 /** Truncate a string to `max` characters at a word boundary
@@ -170,6 +195,10 @@ export function ContentCard({
     () => formatRelativeTime(item.created_at),
     [item.created_at]
   );
+  const absolute = useMemo(
+    () => formatAbsoluteTime(item.created_at),
+    [item.created_at]
+  );
   const summary = metadataSummary(item.type, item.metadata);
   // When the image 404s, show a text placeholder instead of the
   // browser's default broken-image glyph. The file may genuinely
@@ -185,7 +214,7 @@ export function ContentCard({
       data-has-image={item.image_url ? "true" : "false"}
       data-variant={variant}
       className={cn(
-        "border-border bg-surface-elevated relative flex flex-col overflow-hidden rounded-sm border",
+        "border-border bg-surface-elevated relative flex min-w-0 flex-col overflow-hidden rounded-sm border",
         "hover:border-border-strong transition-colors"
       )}
     >
@@ -248,22 +277,28 @@ export function ContentCard({
               {typeLabel}
             </span>
           )}
-          <time
-            dateTime={item.created_at}
-            title={item.created_at}
-            className="text-muted-foreground font-mono text-[0.7rem]"
-          >
-            {relative}
-          </time>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <time
+                  dateTime={item.created_at}
+                  className="text-muted-foreground hover:text-foreground cursor-help font-mono text-[0.7rem] transition-colors"
+                />
+              }
+            >
+              {relative}
+            </TooltipTrigger>
+            <TooltipContent side="top">{absolute}</TooltipContent>
+          </Tooltip>
         </header>
 
         {item.title ? (
-          <h3 className="text-foreground font-serif text-lg leading-snug font-semibold tracking-[-0.01em]">
+          <h3 className="text-foreground font-serif text-lg leading-snug font-semibold tracking-[-0.01em] break-words">
             {item.title}
           </h3>
         ) : null}
 
-        <p className="text-muted-foreground line-clamp-3 font-sans text-sm leading-relaxed">
+        <p className="text-muted-foreground line-clamp-3 font-sans text-sm leading-relaxed break-words">
           {previewText(item.content)}
         </p>
 
