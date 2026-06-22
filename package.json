@@ -1,6 +1,6 @@
 {
   "name": "shadowbrain",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -14,6 +14,7 @@
     "test:db:reset": "node scripts/test-db-reset.js",
     "test:db:cleanup": "node scripts/test-db-cleanup.js",
     "import:markdown": "node --env-file=.env --import tsx scripts/import-markdown.ts",
+    "sync:docs": "node --env-file=.env --import tsx scripts/sync-docs.ts",
     "migrate:journal-shadows": "node --env-file=.env --import tsx scripts/migrate-journal-shadows.ts",
     "hash:password": "tsx scripts/hash-password.ts",
     "test": "vitest",
