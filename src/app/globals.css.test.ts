@@ -54,17 +54,18 @@ describe("design system — globals.css tokens", () => {
     expect(css).toMatch(/--info:\s*#3d6bff/i);
   });
 
-  it("declares all nine type-color tokens", () => {
+  it("declares all ten type-color tokens", () => {
     const expected: Array<[string, string]> = [
       ["--type-note", "#22c55e"],
       ["--type-bookmark", "#f59e0b"],
       ["--type-journal", "#7c5cfc"],
       ["--type-question", "#14b8a6"],
       ["--type-project", "#ec4899"],
-      ["--type-person", "#3b82f6"],
+      ["--type-person", "#0ea5e9"],
       ["--type-event", "#f97316"],
-      ["--type-dream", "#a855f7"],
+      ["--type-dream", "#d946ef"],
       ["--type-raw", "#6b7280"],
+      ["--type-image", "#84cc16"],
     ];
     for (const [token, value] of expected) {
       expect(css, `${token} = ${value}`).toMatch(
