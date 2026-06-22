@@ -74,7 +74,6 @@ The full technical reference (commands, code style, security scanning, agent ski
 - [Deployment](docs/deployment.md) — Production env, Docker, nginx, monitoring
 - [AI Processing](docs/ai-processing.md) — Embedding pipeline, nightly job architecture
 - [Troubleshooting](docs/troubleshooting.md) — Common errors, debugging rate-limit/CSRF/SSRF
-- [API Reference](docs/api/openapi.yaml) — OpenAPI 3.1 spec
 - [API Endpoints](docs/api/endpoints/) — Per-endpoint detail pages
 - [Vision & Design Principles](docs/vision.md)
 - [Architecture](docs/architecture.md)
