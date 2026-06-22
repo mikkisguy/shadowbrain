@@ -9,6 +9,8 @@ import { requireAuthenticated } from "@/lib/auth/guard";
 // a client bug, so we reject unknown values with 400 rather than
 // silently storing them. `references` is the default — it matches the
 // 6 verb forms called out in the acceptance criteria.
+// Additional content-pairing link types (issue #103): `involves`,
+// `bookmarked_for`, and `happened_during` link specific content types.
 const LINK_TYPES = [
   "references",
   "contradicts",
@@ -16,6 +18,9 @@ const LINK_TYPES = [
   "answers",
   "depends-on",
   "related-to",
+  "involves",
+  "bookmarked_for",
+  "happened_during",
 ] as const;
 
 const createSchema = z.object({

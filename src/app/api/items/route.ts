@@ -13,16 +13,80 @@ import { requireAuthenticated } from "@/lib/auth/guard";
 
 const visibilityFlag = z.coerce.number().int().min(0).max(1).optional();
 
-const createSchema = z.object({
-  type: z.string(),
-  content: z.string().min(1),
-  title: z.string().nullable().optional(),
-  source: z.string().optional(),
-  source_url: z.string().url().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  is_private: visibilityFlag,
-  is_hidden: visibilityFlag,
-});
+/**
+ * Per-type `metadata` shape validation (issue #103). The documented
+ * fields are optional — metadata as a whole is optional — but when a
+ * field is present it must have the correct type, otherwise the
+ * request fails with `VALIDATION_ERROR` / 400. `.passthrough()` keeps
+ * unknown keys so future fields don't break older validators.
+ *
+ * Types without an entry here (note, journal, bookmark, question,
+ * raw_text, image) keep the free-form record validation from the base
+ * schema.
+ */
+const PERSON_METADATA = z
+  .object({
+    email: z.string().optional(),
+    github: z.string().optional(),
+    role: z.string().optional(),
+  })
+  .passthrough();
+
+const PROJECT_METADATA = z
+  .object({
+    status: z.string().optional(),
+    repo: z.string().optional(),
+    started: z.string().optional(),
+  })
+  .passthrough();
+
+const EVENT_METADATA = z
+  .object({
+    event_date: z.string().optional(),
+    duration: z.union([z.string(), z.number()]).nullable().optional(),
+  })
+  .passthrough();
+
+const DREAM_METADATA = z
+  .object({
+    mood: z.string().optional(),
+    lucidity: z.number().optional(),
+  })
+  .passthrough();
+
+const TYPE_METADATA_SCHEMAS: Record<string, z.ZodTypeAny> = {
+  person: PERSON_METADATA,
+  project: PROJECT_METADATA,
+  event: EVENT_METADATA,
+  dream: DREAM_METADATA,
+};
+
+const createSchema = z
+  .object({
+    type: z.string(),
+    content: z.string().min(1),
+    title: z.string().nullable().optional(),
+    source: z.string().optional(),
+    source_url: z.string().url().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    is_private: visibilityFlag,
+    is_hidden: visibilityFlag,
+  })
+  .superRefine((data, ctx) => {
+    if (!data.metadata) return;
+    const schema = TYPE_METADATA_SCHEMAS[data.type];
+    if (!schema) return;
+    const result = schema.safeParse(data.metadata);
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        ctx.addIssue({
+          code: "custom",
+          message: issue.message,
+          path: ["metadata", ...issue.path],
+        });
+      }
+    }
+  });
 
 export async function POST(request: Request) {
   // Defense in depth: the proxy already enforces auth, but the route

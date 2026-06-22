@@ -111,6 +111,9 @@ describe("/api/links", () => {
       "answers",
       "depends-on",
       "related-to",
+      "involves",
+      "bookmarked_for",
+      "happened_during",
     ];
     const db = getDb();
     for (const t of types) {
@@ -121,7 +124,7 @@ describe("/api/links", () => {
       const json = await res.json();
       expect(json.link_type).toBe(t);
     }
-    // Sanity: each pair wrote two rows, so 12 link rows total.
+    // Sanity: each pair wrote two rows, so 18 link rows total.
     const linkCount = (
       db.prepare("SELECT COUNT(*) as c FROM content_links").get() as {
         c: number;
@@ -247,6 +250,32 @@ describe("/api/links", () => {
     });
     expect(refs.status).toBe(201);
     expect(contra.status).toBe(201);
+  });
+
+  it("creates a link with type 'involves' (content-pairing)", async () => {
+    const a = makeContentItem();
+    const b = makeContentItem();
+    const res = await postLink({
+      source_id: a,
+      target_id: b,
+      link_type: "involves",
+    });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.link_type).toBe("involves");
+  });
+
+  it("creates a link with type 'happened_during' (content-pairing)", async () => {
+    const a = makeContentItem();
+    const b = makeContentItem();
+    const res = await postLink({
+      source_id: a,
+      target_id: b,
+      link_type: "happened_during",
+    });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.link_type).toBe("happened_during");
   });
 
   it("returns 400 for invalid JSON body", async () => {
