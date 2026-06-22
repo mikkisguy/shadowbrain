@@ -1,6 +1,6 @@
 {
   "name": "shadowbrain",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -37,6 +37,8 @@
     "$schema": "https://unpkg.com/knip@6/schema.json",
     "entry": [
       "src/app/**/*.{ts,tsx,css}",
+      "src/components/ui/button.tsx",
+      "src/components/ui/input.tsx",
       "src/components/ui/**/*.{ts,tsx}",
       "src/components/command-palette/command-palette-root.tsx",
       "src/lib/auth/**/*.{ts,tsx}",

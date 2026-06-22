@@ -397,3 +397,148 @@ describe("/api/items bookmark auto-fetch", () => {
     expect(json.metadata).toBeNull();
   });
 });
+
+describe("/api/items per-type metadata validation", () => {
+  beforeEach(() => {
+    cleanupTestDb();
+    createTestDb().close();
+    mockFetcher.mockReset();
+    // Default to a graceful no-op so tests don't hit the network.
+    mockFetcher.mockResolvedValue({
+      ok: false,
+      reason: "no url in content",
+      metadata: { url: "", fetched_at: new Date().toISOString() },
+    });
+  });
+
+  afterEach(() => {
+    cleanupTestDb();
+  });
+
+  it("creates a person with valid metadata", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "person",
+        content: "Sarah",
+        metadata: { email: "sarah@example.com", role: "DevOps lead" },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.type).toBe("person");
+  });
+
+  it("creates a person with no metadata (metadata is optional)", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "person",
+        content: "Sarah",
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.type).toBe("person");
+  });
+
+  it("rejects a person with wrong-typed metadata field (400 VALIDATION_ERROR)", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "person",
+        content: "Sarah",
+        metadata: { role: 123 },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("creates a dream with valid metadata", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "dream",
+        content: "flying",
+        metadata: { mood: "surreal", lucidity: 3 },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.type).toBe("dream");
+  });
+
+  it("rejects a dream with non-numeric lucidity (400)", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "dream",
+        content: "flying",
+        metadata: { lucidity: "high" },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("creates an event with null duration", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "event",
+        content: "deploy",
+        metadata: { event_date: "2026-04-12", duration: null },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.type).toBe("event");
+  });
+
+  it("allows unknown metadata keys (passthrough)", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "project",
+        content: "BranchForge",
+        metadata: { status: "active", future_field: "x" },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.type).toBe("project");
+  });
+
+  it("free-form metadata still allowed for untyped content (note)", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "note",
+        content: "hi",
+        metadata: { anything: 1 },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.type).toBe("note");
+  });
+});

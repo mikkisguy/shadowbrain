@@ -5,7 +5,7 @@
 
 # ShadowBrain
 
-[![Version](https://img.shields.io/badge/version-0.6.0-yellow)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.8.0-yellow)](CHANGELOG.md)
 
 </div>
 
@@ -67,6 +67,14 @@ The full technical reference (commands, code style, security scanning, agent ski
 
 ## Documentation
 
+- [Getting Started](docs/getting-started.md) — Prerequisites, install, config, first run
+- [Codebase Guide](docs/codebase.md) — Directory structure, entry points, patterns
+- [Database](docs/database.md) — Migrations, query helpers, seeding, backup
+- [Testing](docs/testing.md) — Test patterns, helpers, running suites
+- [Deployment](docs/deployment.md) — Production env, Docker, nginx, monitoring
+- [AI Processing](docs/ai-processing.md) — Embedding pipeline, nightly job architecture
+- [Troubleshooting](docs/troubleshooting.md) — Common errors, debugging rate-limit/CSRF/SSRF
+- [API Endpoints](docs/api/endpoints/) — Per-endpoint detail pages
 - [Vision & Design Principles](docs/vision.md)
 - [Architecture](docs/architecture.md)
 - [Database Schema](docs/schema.md)
@@ -81,6 +89,7 @@ The full technical reference (commands, code style, security scanning, agent ski
 - [Web UI Core](docs/superpowers/specs/2026-05-07-web-ui-core-design.md)
 - [Chat Interface](docs/superpowers/specs/2026-06-19-chat-interface-design.md)
 - [App Security Baseline](docs/superpowers/specs/2026-06-19-app-security-baseline-design.md)
+- [Design System](docs/superpowers/specs/2026-06-20-design-system-design.md)
 
 ---
 

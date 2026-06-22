@@ -1,0 +1,262 @@
+// @vitest-environment jsdom
+
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import {
+  ContentCard,
+  formatRelativeTime,
+  metadataSummary,
+  previewText,
+} from "./content-card";
+import type { BrowseItem } from "./types";
+
+/**
+ * Content-card tests.
+ *
+ * The card is purely presentational — its tests cover:
+ *   - the type badge uses the correct colour token
+ *   - the title renders when present
+ *   - the content preview is line-clamped and word-bounded
+ *   - the timestamp is rendered as a relative phrase
+ *   - the tag strip lists up to four tags
+ *
+ * The relative-time helper is a pure function so we can pin the
+ * exact output for known intervals without a clock dependency.
+ */
+
+const baseItem: BrowseItem = {
+  id: "id-1",
+  type: "note",
+  title: "Docker networking basics",
+  content: "Bridge networks are the default. Each container joins…",
+  image_url: null,
+  source: "manual",
+  source_url: null,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+};
+
+describe("ContentCard", () => {
+  it("renders the type label and a coloured dot in the default (larger-dot) variant", () => {
+    render(<ContentCard item={baseItem} />);
+    const card = screen.getByTestId("content-card");
+    expect(card).toHaveAttribute("data-item-type", "note");
+    expect(card).toHaveTextContent(/note/i);
+    // The dot carries the `bg-type-note` token. The
+    // `larger-dot` variant uses `size-2.5` so the dot is
+    // slightly chunkier than the original 1.5-px dot.
+    const dot = card.querySelector("span.bg-type-note");
+    expect(dot).not.toBeNull();
+    expect(dot?.className).toMatch(/size-2\.5/);
+    expect(dot?.className).toMatch(/rounded-full/);
+  });
+
+  it("renders the title in a serif heading", () => {
+    render(<ContentCard item={baseItem} />);
+    const title = screen.getByRole("heading", { level: 3 });
+    expect(title).toHaveTextContent("Docker networking basics");
+    expect(title.className).toMatch(/font-serif/);
+  });
+
+  it("renders the content preview as a line-clamped paragraph", () => {
+    render(<ContentCard item={baseItem} />);
+    const preview = screen.getByText(/Bridge networks/);
+    expect(preview.tagName).toBe("P");
+    expect(preview.className).toMatch(/line-clamp-3/);
+  });
+
+  it("omits the heading when the item has no title", () => {
+    const untitled: BrowseItem = { ...baseItem, title: null };
+    render(<ContentCard item={untitled} />);
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+  });
+
+  it("renders the tag strip with up to four tags", () => {
+    render(
+      <ContentCard
+        item={baseItem}
+        tags={["docker", "networking", "infra", "linux", "core"]}
+      />
+    );
+    const tagList = screen.getByRole("list", { name: /tags/i });
+    expect(tagList.children).toHaveLength(4);
+    expect(tagList).toHaveTextContent("#docker");
+    // The fifth tag is dropped — the strip is capped at 4.
+    expect(tagList).not.toHaveTextContent("#core");
+  });
+
+  it("renders a relative timestamp", () => {
+    const item: BrowseItem = {
+      ...baseItem,
+      created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    };
+    render(<ContentCard item={item} />);
+    const time = screen.getByRole("time");
+    expect(time.textContent).toMatch(/ago|minute/);
+    expect(time).toHaveAttribute("datetime");
+  });
+
+  it("does not render the image frame when image_url is null", () => {
+    render(<ContentCard item={baseItem} />);
+    const card = screen.getByTestId("content-card");
+    expect(card).toHaveAttribute("data-has-image", "false");
+    expect(screen.queryByTestId("content-card-image")).not.toBeInTheDocument();
+  });
+
+  it("renders the image at the top when image_url is set", () => {
+    const withImage: BrowseItem = {
+      ...baseItem,
+      image_url: "/api/images/notes/docker.png",
+    };
+    render(<ContentCard item={withImage} />);
+    const card = screen.getByTestId("content-card");
+    expect(card).toHaveAttribute("data-has-image", "true");
+    const img = screen.getByTestId("content-card-image");
+    expect(img).toHaveAttribute("src", "/api/images/notes/docker.png");
+    // The image frame is the first child of the article, before
+    // the content body. We assert it comes before the type badge.
+    const firstChildTag = card.firstElementChild?.tagName;
+    expect(firstChildTag).toBe("DIV");
+  });
+
+  it("the card has natural height — not forced to fill a grid row", () => {
+    render(<ContentCard item={baseItem} />);
+    const card = screen.getByTestId("content-card");
+    expect(card.className).not.toMatch(/\bh-full\b/);
+  });
+
+  it("the body grows to fill the card and pushes the tag strip to the bottom", () => {
+    const baseWithTags: BrowseItem = { ...baseItem };
+    const { container } = render(
+      <ContentCard item={baseWithTags} tags={["docker"]} />
+    );
+    // The body div is `flex-1`; the tag <ul> is `mt-auto`. These
+    // are the two properties that make a card's content distribute
+    // vertically — the tag strip always ends at the card's
+    // natural bottom.
+    const body = container.querySelector("article > .flex-1");
+    expect(body).not.toBeNull();
+    const tagList = screen.getByRole("list", { name: /tags/i });
+    expect(tagList.className).toMatch(/mt-auto/);
+  });
+
+  it("the 'pill' variant replaces the dot + text with a filled coloured chip", () => {
+    render(<ContentCard item={baseItem} variant="pill" />);
+    const pill = screen.getByTestId("content-card-pill");
+    expect(pill).toHaveTextContent(/note/i);
+    // The pill background uses the type token; the foreground is
+    // the surface colour for contrast.
+    expect(pill.className).toMatch(/bg-type-note/);
+    expect(pill.className).toMatch(/text-background/);
+    // No standalone dot is rendered in the pill variant — the
+    // chip itself is the indicator.
+    const card = screen.getByTestId("content-card");
+    expect(card.querySelector("span.bg-type-note.rounded-full")).toBeNull();
+  });
+
+  it("the 'larger-dot' variant uses the chunkier 2.5-px dot (not the pill)", () => {
+    render(<ContentCard item={baseItem} variant="larger-dot" />);
+    const card = screen.getByTestId("content-card");
+    // Dot uses `size-2.5` and stays rounded.
+    const dot = card.querySelector("span.bg-type-note");
+    expect(dot?.className).toMatch(/size-2\.5/);
+    expect(dot?.className).toMatch(/rounded-full/);
+    // No pill in this variant.
+    expect(card.querySelector("[data-testid='content-card-pill']")).toBeNull();
+  });
+
+  it("renders a metadata summary for a person's role", () => {
+    const person: BrowseItem = {
+      ...baseItem,
+      type: "person",
+      metadata: { role: "DevOps lead", email: "sarah@example.com" },
+    };
+    render(<ContentCard item={person} />);
+    const summary = screen.getByTestId("content-card-metadata-summary");
+    expect(summary).toHaveTextContent("DevOps lead");
+  });
+
+  it("omits the metadata summary when there is nothing to show", () => {
+    render(<ContentCard item={baseItem} />);
+    expect(
+      screen.queryByTestId("content-card-metadata-summary")
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("metadataSummary", () => {
+  it("returns the role for a person", () => {
+    expect(metadataSummary("person", { role: "DevOps lead" })).toBe(
+      "DevOps lead"
+    );
+  });
+  it("returns the status for a project", () => {
+    expect(metadataSummary("project", { status: "active" })).toBe("active");
+  });
+  it("returns the event_date for an event", () => {
+    expect(metadataSummary("event", { event_date: "2026-04-12" })).toBe(
+      "2026-04-12"
+    );
+  });
+  it("returns the mood for a dream", () => {
+    expect(metadataSummary("dream", { mood: "surreal" })).toBe("surreal");
+  });
+  it("ignores blank / whitespace-only values", () => {
+    expect(metadataSummary("person", { role: "   " })).toBeNull();
+  });
+  it("returns null when metadata is absent", () => {
+    expect(metadataSummary("person", null)).toBeNull();
+    expect(metadataSummary("person", undefined)).toBeNull();
+  });
+  it("returns null for types without a summary field", () => {
+    expect(metadataSummary("note", { anything: 1 })).toBeNull();
+  });
+});
+
+describe("formatRelativeTime", () => {
+  const now = new Date("2026-06-21T12:00:00.000Z");
+  it('returns "just now" for < 1 minute', () => {
+    expect(formatRelativeTime("2026-06-21T11:59:30.000Z", now)).toBe(
+      "just now"
+    );
+  });
+  it("returns a minute phrase for < 1 hour", () => {
+    expect(formatRelativeTime("2026-06-21T11:45:00.000Z", now)).toMatch(
+      /15 minutes ago/
+    );
+  });
+  it("returns an hour phrase for < 1 day", () => {
+    expect(formatRelativeTime("2026-06-21T08:00:00.000Z", now)).toMatch(
+      /4 hours ago/
+    );
+  });
+  it("returns a day phrase for < 1 week", () => {
+    expect(formatRelativeTime("2026-06-19T12:00:00.000Z", now)).toMatch(
+      /2 days ago/
+    );
+  });
+  it("returns a future phrase in the right tense", () => {
+    expect(formatRelativeTime("2026-06-21T13:00:00.000Z", now)).toMatch(
+      /in 1 hour/
+    );
+  });
+});
+
+describe("previewText", () => {
+  it("returns the input unchanged when shorter than the limit", () => {
+    expect(previewText("hello", 10)).toBe("hello");
+  });
+  it("appends an ellipsis when truncated", () => {
+    const text = "the quick brown fox jumps over the lazy dog";
+    const out = previewText(text, 20);
+    expect(out.length).toBeLessThanOrEqual(21);
+    expect(out.endsWith("…")).toBe(true);
+  });
+  it("truncates at a word boundary when one is in range", () => {
+    const text = "alpha beta gamma delta epsilon";
+    const out = previewText(text, 14);
+    // Cuts at the space after "beta" (5 chars + space = 6).
+    expect(out).toMatch(/^alpha beta…?$/);
+  });
+});

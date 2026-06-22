@@ -91,6 +91,11 @@ describe("typeBadgeClasses", () => {
     }
   });
 
+  it("maps legacy raw_text/image type names to their colour tokens", () => {
+    expect(typeBadgeClasses("raw_text")).toBe("bg-type-raw");
+    expect(typeBadgeClasses("image")).toBe("bg-type-image");
+  });
+
   it("falls back to the raw token for unknown types", () => {
     // A future content type that isn't in the colour
     // vocabulary should not blow up — the badge still

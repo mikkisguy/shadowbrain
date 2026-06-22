@@ -245,9 +245,9 @@ export default {
   --type-journal: #7c5cfc;
   --type-question: #14b8a6;
   --type-project: #ec4899;
-  --type-person: #3b82f6;
+  --type-person: #0ea5e9;
   --type-event: #f97316;
-  --type-dream: #a855f7;
+  --type-dream: #d946ef;
   --type-raw: #6b7280;
 }
 ```
