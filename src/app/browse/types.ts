@@ -35,6 +35,10 @@ export interface BrowseItem {
   image_url: string | null;
   source: string;
   source_url: string | null;
+  /** Parsed `content_items.metadata` JSON, or null when the item has
+   *  no type-specific metadata. Optional so legacy fixtures without it
+   *  still type-check; the card treats undefined as null. */
+  metadata?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -46,17 +50,23 @@ export interface BrowseResponse {
   limit: number;
 }
 
-/** The five tabs the issue spec calls out, plus the sentinel "All"
- *  for the un-filtered view. The Browse page is a *foundation* —
- *  the design spec lists six tabs (adding "Raw"); this issue lands
- *  the five the user sees in the spec's mockup, and the sixth can
- *  be added in a follow-up. */
+/** All content type tabs for the Browse page, plus the sentinel "All"
+ *  for the un-filtered view. This list covers all content types in the
+ *  system: the original four (note, journal, bookmark, question), the
+ *  six new rich types (person, project, event, dream, raw_text, image),
+ *  and the catch-all "all" tab. */
 export const BROWSE_TYPE_TABS = [
   "all",
   "note",
   "journal",
   "bookmark",
   "question",
+  "person",
+  "project",
+  "event",
+  "dream",
+  "raw_text",
+  "image",
 ] as const;
 export type BrowseTypeTab = (typeof BROWSE_TYPE_TABS)[number];
 
@@ -83,6 +93,12 @@ export const TYPE_TAB_VALUE: Record<BrowseTypeTab, string> = {
   journal: "journal",
   bookmark: "bookmark",
   question: "question",
+  person: "person",
+  project: "project",
+  event: "event",
+  dream: "dream",
+  raw_text: "raw_text",
+  image: "image",
 };
 
 /** Display label and accent colour (the design-system type token)
@@ -101,6 +117,12 @@ export const TYPE_TAB_META: Record<BrowseTypeTab, TypeTabMeta> = {
   journal: { label: "Journal", dotClass: "bg-type-journal" },
   bookmark: { label: "Bookmarks", dotClass: "bg-type-bookmark" },
   question: { label: "Questions", dotClass: "bg-type-question" },
+  person: { label: "People", dotClass: "bg-type-person" },
+  project: { label: "Projects", dotClass: "bg-type-project" },
+  event: { label: "Events", dotClass: "bg-type-event" },
+  dream: { label: "Dreams", dotClass: "bg-type-dream" },
+  raw_text: { label: "Raw", dotClass: "bg-type-raw" },
+  image: { label: "Images", dotClass: "bg-type-image" },
 };
 
 /** Filters that travel through the URL. Each field is a string so

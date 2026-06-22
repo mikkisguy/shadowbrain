@@ -3,7 +3,12 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { ContentCard, formatRelativeTime, previewText } from "./content-card";
+import {
+  ContentCard,
+  formatRelativeTime,
+  metadataSummary,
+  previewText,
+} from "./content-card";
 import type { BrowseItem } from "./types";
 
 /**
@@ -159,6 +164,53 @@ describe("ContentCard", () => {
     expect(dot?.className).toMatch(/rounded-full/);
     // No pill in this variant.
     expect(card.querySelector("[data-testid='content-card-pill']")).toBeNull();
+  });
+
+  it("renders a metadata summary for a person's role", () => {
+    const person: BrowseItem = {
+      ...baseItem,
+      type: "person",
+      metadata: { role: "DevOps lead", email: "sarah@example.com" },
+    };
+    render(<ContentCard item={person} />);
+    const summary = screen.getByTestId("content-card-metadata-summary");
+    expect(summary).toHaveTextContent("DevOps lead");
+  });
+
+  it("omits the metadata summary when there is nothing to show", () => {
+    render(<ContentCard item={baseItem} />);
+    expect(
+      screen.queryByTestId("content-card-metadata-summary")
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("metadataSummary", () => {
+  it("returns the role for a person", () => {
+    expect(metadataSummary("person", { role: "DevOps lead" })).toBe(
+      "DevOps lead"
+    );
+  });
+  it("returns the status for a project", () => {
+    expect(metadataSummary("project", { status: "active" })).toBe("active");
+  });
+  it("returns the event_date for an event", () => {
+    expect(metadataSummary("event", { event_date: "2026-04-12" })).toBe(
+      "2026-04-12"
+    );
+  });
+  it("returns the mood for a dream", () => {
+    expect(metadataSummary("dream", { mood: "surreal" })).toBe("surreal");
+  });
+  it("ignores blank / whitespace-only values", () => {
+    expect(metadataSummary("person", { role: "   " })).toBeNull();
+  });
+  it("returns null when metadata is absent", () => {
+    expect(metadataSummary("person", null)).toBeNull();
+    expect(metadataSummary("person", undefined)).toBeNull();
+  });
+  it("returns null for types without a summary field", () => {
+    expect(metadataSummary("note", { anything: 1 })).toBeNull();
   });
 });
 

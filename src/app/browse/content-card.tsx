@@ -65,6 +65,8 @@ const TYPE_DOT_CLASS: Record<string, string> = {
   event: "bg-type-event",
   dream: "bg-type-dream",
   raw: "bg-type-raw",
+  raw_text: "bg-type-raw",
+  image: "bg-type-image",
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -77,6 +79,8 @@ const TYPE_LABEL: Record<string, string> = {
   event: "Event",
   dream: "Dream",
   raw: "Raw",
+  raw_text: "Raw",
+  image: "Image",
 };
 
 const RELATIVE = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
@@ -125,6 +129,36 @@ export function previewText(content: string, max: number = 180): string {
   return `${slice.slice(0, cut).trimEnd()}…`;
 }
 
+/** A short one-line summary of an item's type-specific metadata, for
+ *  the feed card. Returns null when there is nothing meaningful to
+ *  show (no metadata, or a type without a summary field). */
+export function metadataSummary(
+  type: string,
+  metadata: Record<string, unknown> | null | undefined
+): string | null {
+  if (!metadata) return null;
+  switch (type) {
+    case "person": {
+      const role = metadata.role;
+      return typeof role === "string" && role.trim() ? role : null;
+    }
+    case "project": {
+      const status = metadata.status;
+      return typeof status === "string" && status.trim() ? status : null;
+    }
+    case "event": {
+      const d = metadata.event_date;
+      return typeof d === "string" && d.trim() ? d : null;
+    }
+    case "dream": {
+      const mood = metadata.mood;
+      return typeof mood === "string" && mood.trim() ? mood : null;
+    }
+    default:
+      return null;
+  }
+}
+
 export function ContentCard({
   item,
   tags = [],
@@ -136,6 +170,7 @@ export function ContentCard({
     () => formatRelativeTime(item.created_at),
     [item.created_at]
   );
+  const summary = metadataSummary(item.type, item.metadata);
   // When the image 404s, show a text placeholder instead of the
   // browser's default broken-image glyph. The file may genuinely
   // not exist (the image capture pipeline hasn't created it yet),
@@ -231,6 +266,15 @@ export function ContentCard({
         <p className="text-muted-foreground line-clamp-3 font-sans text-sm leading-relaxed">
           {previewText(item.content)}
         </p>
+
+        {summary ? (
+          <p
+            data-testid="content-card-metadata-summary"
+            className="text-muted-foreground font-mono text-[0.7rem] tracking-wide"
+          >
+            {summary}
+          </p>
+        ) : null}
 
         {tags.length > 0 ? (
           <ul

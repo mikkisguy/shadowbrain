@@ -75,6 +75,10 @@ export function renderSnippet(snippet: string | null): React.ReactNode {
  */
 export function typeBadgeClasses(type: string): string {
   switch (type) {
+    case "raw_text":
+      return "bg-type-raw";
+    case "image":
+      return "bg-type-image";
     case "note":
       return "bg-type-note";
     case "bookmark":

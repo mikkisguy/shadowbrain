@@ -102,6 +102,21 @@ function toImageUrl(imagePath: string | null | undefined): string | null {
   return `/api/images/${trimmed}`;
 }
 
+/** Parse the `metadata` JSON string the API returns into an object.
+ *  Returns null for missing/empty/unparseable metadata so the card
+ *  can treat it uniformly. */
+function parseMetadata(raw: unknown): Record<string, unknown> | null {
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The search endpoint carries a `rank` and a `snippet` per row;
  *  the items endpoint does not. Both are valid for the Browse feed,
  *  but the type only declares the shared columns. This normaliser
@@ -117,6 +132,7 @@ function normaliseItem(row: Record<string, unknown>): BrowseItem {
     image_url: toImageUrl((row.image_path as string | null) ?? null),
     source: String(row.source ?? "manual"),
     source_url: (row.source_url as string | null) ?? null,
+    metadata: parseMetadata(row.metadata),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
