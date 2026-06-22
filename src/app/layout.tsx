@@ -6,6 +6,7 @@ import { SkipToContent } from "@/components/layout/skip-to-content";
 import { TopNav } from "@/components/layout/top-nav";
 import { Footer } from "@/components/layout/footer";
 import { CommandPaletteRoot } from "@/components/command-palette/command-palette-root";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { getEnv } from "@/lib/env";
 import { isSessionCookieValid } from "@/lib/auth/session";
 
@@ -85,23 +86,32 @@ export default async function RootLayout({
           on closed state and never hits the API.
         */}
         <CommandPaletteRoot>
-          <SkipToContent />
           {/*
-            Hide the top nav AND the footer on unauthenticated pages
-            (currently just /login). An unauthenticated visitor does
-            not need the navigation chrome — the login page is a
-            focused authentication surface, and the brand mark +
-            form inside the page is enough to communicate "you are
-            in the right place". Showing the nav would also advertise
-            authenticated-only actions (the command palette) to an
-            unauthenticated visitor. The footer is hidden for the
-            same reason: the mono-font build marker is internal
-            chrome, and a sign-in screen should not carry internal
-            product framing.
+            App-wide tooltip timing. 300 ms is snappy enough to feel
+            immediate but still avoids popping on a quick pointer
+            sweep, and it unlocks Base UI's grouping so adjacent
+            tooltips (e.g. across feed cards) open instantly once
+            the first one has.
           */}
-          {isAuthenticated ? <TopNav /> : null}
-          <div className="flex flex-1 flex-col">{children}</div>
-          {isAuthenticated ? <Footer /> : null}
+          <TooltipProvider delay={300}>
+            <SkipToContent />
+            {/*
+              Hide the top nav AND the footer on unauthenticated pages
+              (currently just /login). An unauthenticated visitor does
+              not need the navigation chrome — the login page is a
+              focused authentication surface, and the brand mark +
+              form inside the page is enough to communicate "you are
+              in the right place". Showing the nav would also advertise
+              authenticated-only actions (the command palette) to an
+              unauthenticated visitor. The footer is hidden for the
+              same reason: the mono-font build marker is internal
+              chrome, and a sign-in screen should not carry internal
+              product framing.
+            */}
+            {isAuthenticated ? <TopNav /> : null}
+            <div className="flex flex-1 flex-col">{children}</div>
+            {isAuthenticated ? <Footer /> : null}
+          </TooltipProvider>
         </CommandPaletteRoot>
       </body>
     </html>

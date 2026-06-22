@@ -18,9 +18,18 @@
  *   - `grid` (default) — items are split round-robin into N
  *     columns (N derived from the container width). Each column
  *     is an independent flex column so cards sit with their
- *     natural height and pack vertically. Ordering is left-to-
- *     right (item 0 → column 0, item 1 → column 1, …), which
- *     keeps the chronological timestamp order intact.
+ *     natural height and pack vertically — cards keep varying
+ *     heights and stack flush, like a Pinterest wall. Ordering is
+ *     left-to-right (item 0 → column 0, item 1 → column 1, …),
+ *     which keeps the chronological timestamp order intact.
+ *
+ *     Each column carries `min-w-0`. Without it, a flex item's
+ *     default `min-width: auto` resolves to its widest card's
+ *     min-content (a long unbreakable token or a wide image), so
+ *     one column would balloon to ~40% while the others shrank —
+ *     the "messed-up columns" bug. `min-w-0` lets `flex-1` hold
+ *     every column at an equal 1/N share; the card itself breaks
+ *     long tokens with `break-words`, so nothing overflows.
  *   - `list` — single-column wide row.
  */
 
@@ -166,7 +175,9 @@ export function ContentFeed({
         className="flex gap-3"
       >
         {skelCols.map((bucket, ci) => (
-          <div key={ci} className="flex flex-1 flex-col gap-3">
+          // `min-w-0` keeps the skeleton columns at an equal 1/N
+          // width, matching the success-state masonry below.
+          <div key={ci} className="flex min-w-0 flex-1 flex-col gap-3">
             {bucket.map((i) => (
               <div
                 key={i}
@@ -228,7 +239,7 @@ export function ContentFeed({
           className="flex gap-3"
         >
           {masonryColumns.map((col, ci) => (
-            <div key={ci} className="flex flex-1 flex-col gap-3">
+            <div key={ci} className="flex min-w-0 flex-1 flex-col gap-3">
               {col.map((item) => (
                 <ContentCard key={item.id} item={item} variant={cardVariant} />
               ))}
