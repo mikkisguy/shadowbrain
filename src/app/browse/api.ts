@@ -117,12 +117,22 @@ function parseMetadata(raw: unknown): Record<string, unknown> | null {
   }
 }
 
+/** Coerce the raw `tags` field (attached by the list / search routes)
+ *  into a `string[]`. The routes always attach an array, but the
+ *  normaliser is defensive: a missing or malformed field collapses
+ *  to `[]` so a legacy / hand-crafted response can't break the feed. */
+function coerceTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((t) => String(t)).filter((t) => t.length > 0);
+}
+
 /** The search endpoint carries a `rank` and a `snippet` per row;
  *  the items endpoint does not. Both are valid for the Browse feed,
  *  but the type only declares the shared columns. This normaliser
  *  maps a raw DB row to the canonical `BrowseItem` shape — it
- *  prefixes the `image_path` with `/api/images/` and drops any
- *  search-only fields (`rank`, `snippet`). */
+ *  prefixes the `image_path` with `/api/images/`, picks up the
+ *  batched `tags`, and drops any search-only fields (`rank`,
+ *  `snippet`). */
 function normaliseItem(row: Record<string, unknown>): BrowseItem {
   return {
     id: String(row.id),
@@ -133,6 +143,7 @@ function normaliseItem(row: Record<string, unknown>): BrowseItem {
     source: String(row.source ?? "manual"),
     source_url: (row.source_url as string | null) ?? null,
     metadata: parseMetadata(row.metadata),
+    tags: coerceTags(row.tags),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };

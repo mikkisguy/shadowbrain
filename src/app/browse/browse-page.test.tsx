@@ -201,6 +201,7 @@ describe("BrowsePage", () => {
         image_url: null,
         source: "manual",
         source_url: null,
+        tags: [],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },
@@ -237,6 +238,7 @@ describe("BrowsePage", () => {
         image_url: null,
         source: "manual",
         source_url: null,
+        tags: [],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },
@@ -246,5 +248,28 @@ describe("BrowsePage", () => {
     render(<BrowsePage />);
     await user.click(screen.getByTestId("feed-load-more-button"));
     expect(loadMore).toHaveBeenCalledOnce();
+  });
+
+  it("clicking a card's tag pill calls setFilters with the tag", async () => {
+    const user = userEvent.setup();
+    hookValues.items = [
+      {
+        id: "1",
+        type: "note",
+        title: "Note",
+        content: "Hello",
+        image_url: null,
+        source: "manual",
+        source_url: null,
+        tags: ["docker", "infra"],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+    render(<BrowsePage />);
+    await user.click(
+      screen.getByRole("button", { name: /filter by tag docker/i })
+    );
+    expect(setFilters).toHaveBeenCalledWith({ tag: "docker" });
   });
 });

@@ -164,6 +164,63 @@ describe("fetchBrowseItems", () => {
     expect(result.items[0].image_url).toBeNull();
   });
 
+  it("normalises the attached tags into BrowseItem.tags", async () => {
+    nextResponse = () =>
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "1",
+              type: "note",
+              title: null,
+              content: "x",
+              image_path: null,
+              source: "manual",
+              source_url: null,
+              tags: ["docker", "infra"],
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 20,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+
+    const result = await fetchBrowseItems({});
+    expect(result.items[0].tags).toEqual(["docker", "infra"]);
+  });
+
+  it("defaults tags to [] when the row omits the field", async () => {
+    nextResponse = () =>
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "1",
+              type: "note",
+              title: null,
+              content: "x",
+              image_path: null,
+              source: "manual",
+              source_url: null,
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 20,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+
+    const result = await fetchBrowseItems({});
+    expect(result.items[0].tags).toEqual([]);
+  });
+
   it("routes to /api/search when q is set", async () => {
     nextResponse = () =>
       new Response(

@@ -2,7 +2,7 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   ContentCard,
@@ -35,6 +35,7 @@ const baseItem: BrowseItem = {
   image_url: null,
   source: "manual",
   source_url: null,
+  tags: [],
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 };
@@ -86,6 +87,57 @@ describe("ContentCard", () => {
     expect(tagList).toHaveTextContent("#docker");
     // The fifth tag is dropped — the strip is capped at 4.
     expect(tagList).not.toHaveTextContent("#core");
+  });
+
+  it("renders tags from item.tags when no tags prop is passed", () => {
+    const item: BrowseItem = { ...baseItem, tags: ["docker", "infra"] };
+    render(<ContentCard item={item} />);
+    const tagList = screen.getByRole("list", { name: /tags/i });
+    expect(tagList).toHaveTextContent("#docker");
+    expect(tagList).toHaveTextContent("#infra");
+  });
+
+  it("calls onTagClick when a tag pill is clicked", async () => {
+    const user = userEvent.setup();
+    const onTagClick = vi.fn();
+    render(
+      <ContentCard
+        item={baseItem}
+        tags={["docker", "infra"]}
+        onTagClick={onTagClick}
+      />
+    );
+    await user.click(
+      screen.getByRole("button", { name: /filter by tag docker/i })
+    );
+    expect(onTagClick).toHaveBeenCalledWith("docker");
+    expect(onTagClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the tag pills as the first tags in the list", () => {
+    // Sanity: the tag buttons carry the `content-card-tag` test id
+    // and the visible `#name` text, so the feed / e2e layer can
+    // target them without coupling to class names.
+    render(<ContentCard item={baseItem} tags={["docker"]} />);
+    const tag = screen.getByTestId("content-card-tag");
+    expect(tag.tagName).toBe("BUTTON");
+    expect(tag).toHaveTextContent("#docker");
+  });
+
+  it("renders a stretched link that navigates to /item/[id]", () => {
+    render(<ContentCard item={baseItem} />);
+    const link = screen.getByRole("link", {
+      name: /open docker networking basics/i,
+    });
+    expect(link).toHaveAttribute("href", "/item/id-1");
+  });
+
+  it("the card link still appears for untitled items", () => {
+    const untitled: BrowseItem = { ...baseItem, title: null };
+    render(<ContentCard item={untitled} />);
+    // Falls back to the type label in the aria-label.
+    const link = screen.getByRole("link", { name: /open note/i });
+    expect(link).toHaveAttribute("href", "/item/id-1");
   });
 
   it("renders a relative timestamp", () => {

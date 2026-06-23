@@ -11,8 +11,11 @@
  * - The full file content (frontmatter included) is stored as the body so
  *   docs are browsable verbatim from the web UI / chat.
  * - `metadata` carries `{ "file_path": "docs/<rel>" }` for reference.
- * - Every doc is tagged `#project:shadowbrain`, `#docs`, and a
+ * - Every doc is tagged `project:shadowbrain`, `docs`, and a
  *   category tag derived from its path (see {@link categoryTagForRelPath}).
+ *   Tag names are stored without a leading `#`; the web UI renders the
+ *   `#` prefix (so a stored `docs` tag displays as `#docs`) and the tag
+ *   filter matches on the bare name.
  *
  * Re-runs are idempotent. Files removed from disk are pruned from the
  * database so the doc set tracks the repository exactly for files under
@@ -36,10 +39,10 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const DOCS_SYNC_SOURCE = "docs-sync";
 
 /** Tag applied to every doc — groups all ShadowBrain content. */
-const PROJECT_TAG = "#project:shadowbrain";
+const PROJECT_TAG = "project:shadowbrain";
 
 /** Tag applied to every doc — marks it as documentation. */
-const DOCS_TAG = "#docs";
+const DOCS_TAG = "docs";
 
 export interface DocsSyncOptions {
   /**
@@ -112,19 +115,19 @@ function filenameTitleFromRelPath(relPath: string): string {
  * root.
  *
  * - A file in a subdirectory takes the top-level directory as its
- *   category: `api/endpoints/auth.md` → `#docs:api`.
+ *   category: `api/endpoints/auth.md` → `docs:api`.
  * - A file at the root takes its filename stem: `getting-started.md` →
- *   `#docs:getting-started`.
+ *   `docs:getting-started`.
  *
  * The relative path uses forward slashes regardless of platform.
  */
 export function categoryTagForRelPath(relPath: string): string {
   const parts = relPath.split("/");
   if (parts.length > 1) {
-    return `#docs:${parts[0]}`;
+    return `docs:${parts[0]}`;
   }
   const stem = parts[0].replace(/\.[^.]+$/, "");
-  return `#docs:${stem}`;
+  return `docs:${stem}`;
 }
 
 /**

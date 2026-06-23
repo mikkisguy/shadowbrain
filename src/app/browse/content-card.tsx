@@ -4,12 +4,23 @@
  * Feed card for a single content item.
  *
  * The card is a presentational component — it does not own any
- * state and does not route the user anywhere (the item detail
- * page does not exist yet, so a click target would be a dead
- * link). The spec calls for type-coloured badges, a serif
- * title, a sans preview line-clamped to ~3 lines, a tag strip,
- * and a relative timestamp. All of those are derived from the
- * props; the parent (the feed) passes them in.
+ * state. Two interactions are wired through callbacks / links:
+ *   - **Click anywhere on the card** → navigate to the item's
+ *     detail page (`/item/[id]`). Implemented with a "stretched
+ *     link": an `<Link>` positioned over the whole card whose
+ *     `::after`-style overlay is the click target. The body is
+ *     `pointer-events-none` so clicks fall through to the link,
+ *     while the tag pills and the timestamp tooltip re-enable
+ *     pointer events (`pointer-events-auto`) so they stay
+ *     interactive above the overlay.
+ *   - **Click a tag pill** → `onTagClick(tag)`, which the feed
+ *     wires to `setFilters({ tag })` so the feed narrows to that
+ *     tag and the URL picks up `?tag=…`.
+ *
+ * The spec calls for type-coloured badges, a serif title, a sans
+ * preview line-clamped to ~3 lines, a tag strip, and a relative
+ * timestamp. All of those are derived from the props; the parent
+ * (the feed) passes them in.
  *
  * When `image_url` is set, the card renders an `<img>` at the
  * top — fixed 16:9 aspect, `object-fit: cover`, full card
@@ -29,6 +40,7 @@
  * coupling to the visual classes.
  */
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -43,8 +55,14 @@ export interface ContentCardProps {
   item: BrowseItem;
   /** Optional tags pre-resolved by the feed (saves a per-card
    *  request). When omitted the card renders the tag strip
-   *  without entries. */
+   *  from `item.tags`. */
   tags?: string[];
+  /**
+   * Called when the user clicks a tag pill. The feed wires this to
+   * `setFilters({ tag })` so a click narrows the feed to that tag
+   * (and the URL picks up `?tag=…`). Omitted in isolated card tests.
+   */
+  onTagClick?: (tag: string) => void;
   /**
    * Visual treatment for the type indicator. Two options, both
    * live in the card header (no chrome on the card body):
@@ -186,11 +204,15 @@ export function metadataSummary(
 
 export function ContentCard({
   item,
-  tags = [],
+  tags,
+  onTagClick,
   variant = "larger-dot",
 }: ContentCardProps) {
   const dotClass = TYPE_DOT_CLASS[item.type] ?? "bg-type-raw";
   const typeLabel = TYPE_LABEL[item.type] ?? item.type;
+  // Prefer an explicit `tags` prop (the feed may pre-resolve them);
+  // fall back to the tags attached to the item by the API.
+  const tagsList = tags ?? item.tags;
   const relative = useMemo(
     () => formatRelativeTime(item.created_at),
     [item.created_at]
@@ -214,12 +236,12 @@ export function ContentCard({
       data-has-image={item.image_url ? "true" : "false"}
       data-variant={variant}
       className={cn(
-        "border-border bg-surface-elevated relative flex min-w-0 flex-col overflow-hidden rounded-sm border",
-        "hover:border-border-strong transition-colors"
+        "group border-border bg-surface-elevated relative flex min-w-0 flex-col overflow-hidden rounded-sm border",
+        "group-hover:border-border-strong transition-colors"
       )}
     >
       {item.image_url && !imageError ? (
-        <div className="border-border bg-surface-muted relative aspect-video w-full overflow-hidden border-b">
+        <div className="border-border bg-surface-muted pointer-events-none relative aspect-video w-full overflow-hidden border-b">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={item.image_url}
@@ -238,7 +260,7 @@ export function ContentCard({
           the same grid, rather than showing a browser broken-icon. */}
       {item.image_url && imageError ? (
         <div
-          className="border-border bg-surface-muted flex aspect-video w-full items-center justify-center border-b"
+          className="border-border bg-surface-muted pointer-events-none flex aspect-video w-full items-center justify-center border-b"
           data-testid="content-card-image-error"
         >
           <p className="text-muted-foreground font-sans text-xs">
@@ -247,7 +269,12 @@ export function ContentCard({
         </div>
       ) : null}
 
-      <div className="flex flex-1 flex-col gap-3 p-4">
+      {/* `pointer-events-none` on the body so a click anywhere on the
+          card falls through to the stretched link below. Interactive
+          children (tag pills, the timestamp tooltip) re-enable pointer
+          events with `pointer-events-auto` + `relative z-20` so they
+          stay usable above the link overlay. */}
+      <div className="pointer-events-none relative z-20 flex flex-1 flex-col gap-3 p-4">
         <header className="flex items-center justify-between gap-3">
           {variant === "pill" ? (
             // Filled coloured chip — replaces both the dot and
@@ -282,7 +309,7 @@ export function ContentCard({
               render={
                 <time
                   dateTime={item.created_at}
-                  className="text-muted-foreground hover:text-foreground cursor-help font-mono text-[0.7rem] transition-colors"
+                  className="text-muted-foreground hover:text-foreground pointer-events-auto relative z-20 cursor-help font-mono text-[0.7rem] transition-colors"
                 />
               }
             >
@@ -311,22 +338,43 @@ export function ContentCard({
           </p>
         ) : null}
 
-        {tags.length > 0 ? (
+        {tagsList.length > 0 ? (
           <ul
             aria-label="Tags"
             className="mt-auto flex flex-wrap items-center gap-1.5 pt-2"
           >
-            {tags.slice(0, 4).map((tag) => (
-              <li
-                key={tag}
-                className="border-border bg-background text-muted-foreground rounded-sm border px-1.5 py-0.5 font-mono text-[0.65rem] tracking-wide"
-              >
-                #{tag}
+            {tagsList.slice(0, 4).map((tag) => (
+              <li key={tag}>
+                <button
+                  type="button"
+                  data-testid="content-card-tag"
+                  onClick={() => onTagClick?.(tag)}
+                  aria-label={`Filter by tag ${tag}`}
+                  className={cn(
+                    "border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong pointer-events-auto relative z-20 rounded-sm border px-1.5 py-0.5 font-mono text-[0.65rem] tracking-wide transition-colors",
+                    "focus-visible:ring-ring focus-visible:rounded-sm focus-visible:ring-2 focus-visible:outline-none"
+                  )}
+                >
+                  #{tag}
+                </button>
               </li>
             ))}
           </ul>
         ) : null}
       </div>
+
+      {/* Stretched link: covers the whole card so a click anywhere
+          navigates to the item's detail page. Sits beneath the body
+          (body is z-20 with pointer-events-none), so clicks pass
+          through to this link except on the tag pills and the
+          timestamp (which re-enable pointer events above it). */}
+      <Link
+        href={`/item/${item.id}`}
+        className="focus-visible:ring-ring absolute inset-0 z-10 rounded-sm focus-visible:ring-2 focus-visible:outline-none"
+        aria-label={`Open ${item.title ?? typeLabel}`}
+      >
+        <span className="sr-only">Open item</span>
+      </Link>
     </article>
   );
 }
