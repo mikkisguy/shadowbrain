@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getDb, contentItems, auditLogs } from "@/db/index";
+import { getDb, contentItems, contentTags, auditLogs } from "@/db/index";
 import {
   parsePagination,
   errorResponse,
@@ -245,6 +245,18 @@ export async function GET(request: Request) {
       includePrivate,
     });
 
+    // Attach each item's tag names via a single batched query so the
+    // Browse card can render (and click) tags without an N+1. The
+    // card only needs names; full tag rows live on `/api/items/[id]`.
+    const tagMap = contentTags.findNamesByContentIds(
+      db,
+      result.items.map((i) => i.id)
+    );
+    const itemsWithTags = result.items.map((i) => ({
+      ...i,
+      tags: tagMap[i.id] ?? [],
+    }));
+
     log("info", "content_items listed", {
       event: "content_item.list",
       count: result.items.length,
@@ -253,7 +265,7 @@ export async function GET(request: Request) {
     });
 
     return Response.json({
-      items: result.items,
+      items: itemsWithTags,
       total: result.total,
       page,
       limit,

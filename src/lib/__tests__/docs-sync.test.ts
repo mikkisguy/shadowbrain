@@ -37,19 +37,19 @@ describe("generateDocsId", () => {
 describe("categoryTagForRelPath", () => {
   it("uses the filename stem for a top-level file", () => {
     expect(categoryTagForRelPath("getting-started.md")).toBe(
-      "#docs:getting-started"
+      "docs:getting-started"
     );
   });
 
   it("uses the top-level directory for a nested file", () => {
-    expect(categoryTagForRelPath("api/endpoints/auth.md")).toBe("#docs:api");
-    expect(categoryTagForRelPath("agents/domain.md")).toBe("#docs:agents");
+    expect(categoryTagForRelPath("api/endpoints/auth.md")).toBe("docs:api");
+    expect(categoryTagForRelPath("agents/domain.md")).toBe("docs:agents");
   });
 
   it("handles deeply nested files by the first path segment", () => {
     expect(
       categoryTagForRelPath("superpowers/specs/2026-06-19-design.md")
-    ).toBe("#docs:superpowers");
+    ).toBe("docs:superpowers");
   });
 });
 
@@ -136,16 +136,16 @@ describe("syncDocsDirectory", () => {
         .map((t) => t.name)
         .sort();
       expect(gsTags).toEqual([
-        "#docs",
-        "#docs:getting-started",
-        "#project:shadowbrain",
+        "docs",
+        "docs:getting-started",
+        "project:shadowbrain",
       ]);
 
       const apiTags = contentTags
         .findByContent(db, apiId)
         .map((t) => t.name)
         .sort();
-      expect(apiTags).toEqual(["#docs", "#docs:api", "#project:shadowbrain"]);
+      expect(apiTags).toEqual(["docs", "docs:api", "project:shadowbrain"]);
     } finally {
       db.close();
     }
@@ -220,11 +220,7 @@ describe("syncDocsDirectory", () => {
         .sort();
       // Assert identity, not just count — a regression that restored the
       // wrong tags would pass a length-only check.
-      expect(restored).toEqual([
-        "#docs",
-        "#docs:alpha",
-        "#project:shadowbrain",
-      ]);
+      expect(restored).toEqual(["docs", "docs:alpha", "project:shadowbrain"]);
     } finally {
       db.close();
     }

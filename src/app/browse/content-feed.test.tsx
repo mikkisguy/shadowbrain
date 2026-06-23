@@ -29,6 +29,7 @@ const item: BrowseItem = {
   image_url: null,
   source: "manual",
   source_url: null,
+  tags: [],
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 };
@@ -231,5 +232,41 @@ describe("ContentFeed", () => {
     );
     await user.click(screen.getByTestId("feed-load-more-button"));
     expect(onLoadMore).toHaveBeenCalledOnce();
+  });
+
+  it("threads onTagClick through to each card's tag pill", async () => {
+    const onTagClick = vi.fn();
+    const user = userEvent.setup();
+    const taggedItem: BrowseItem = { ...item, tags: ["docker"] };
+    render(
+      <ContentFeed
+        items={[taggedItem]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+        onTagClick={onTagClick}
+      />
+    );
+    await user.click(
+      screen.getByRole("button", { name: /filter by tag docker/i })
+    );
+    expect(onTagClick).toHaveBeenCalledWith("docker");
+  });
+
+  it("renders a card link to /item/[id] for each item", () => {
+    render(
+      <ContentFeed
+        items={[item]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+      />
+    );
+    const link = screen.getByRole("link", { name: /open note/i });
+    expect(link).toHaveAttribute("href", "/item/1");
   });
 });

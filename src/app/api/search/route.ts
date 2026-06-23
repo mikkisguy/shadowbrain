@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getDb, search } from "@/db/index";
+import { getDb, search, contentTags } from "@/db/index";
 import {
   parsePagination,
   errorResponse,
@@ -67,6 +67,18 @@ export async function GET(request: Request) {
       includePrivate,
     });
 
+    // Attach each result's tag names (batched, no N+1) so the card
+    // renders clickable tags in search results too — the tag-click
+    // affordance works the same in list and search mode.
+    const tagMap = contentTags.findNamesByContentIds(
+      db,
+      results.map((r) => r.id)
+    );
+    const resultsWithTags = results.map((r) => ({
+      ...r,
+      tags: tagMap[r.id] ?? [],
+    }));
+
     log("info", "search executed", {
       event: "search.query",
       queryLength: parsed.data.q.length,
@@ -78,7 +90,7 @@ export async function GET(request: Request) {
 
     return Response.json({
       query: parsed.data.q,
-      results,
+      results: resultsWithTags,
       total,
       page,
       limit,

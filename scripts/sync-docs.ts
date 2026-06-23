@@ -3,8 +3,9 @@
  *
  * Reads the `docs/` directory at the project root and upserts every
  * `.md` file as a `content_item` with `type='note'` and
- * `source='docs-sync'`, tagged `#project:shadowbrain`, `#docs`, and a
- * path-derived category tag. Files removed from disk are pruned from the
+ * `source='docs-sync'`, tagged `project:shadowbrain`, `docs`, and a
+ * path-derived category tag (names stored without `#`; the UI renders the
+ * `#` prefix). Files removed from disk are pruned from the
  * database. Re-running is safe and idempotent.
  *
  * Usage:

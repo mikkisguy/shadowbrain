@@ -56,6 +56,10 @@ export interface ContentFeedProps {
    *  bumped to 2.5 px; `"pill"` turns the header into a filled
    *  coloured chip. */
   cardVariant?: "pill" | "larger-dot";
+  /** Called when a card's tag pill is clicked. The page wires this
+   *  to `setFilters({ tag })` so a click narrows the feed and the
+   *  URL picks up `?tag=…`. */
+  onTagClick?: (tag: string) => void;
 }
 
 const SKELETON_CARD_COUNT = 6;
@@ -91,6 +95,7 @@ export function ContentFeed({
   hasMore,
   onLoadMore,
   cardVariant = "larger-dot",
+  onTagClick,
 }: ContentFeedProps) {
   // ---- Column-count derivation for the masonry grid -----------
   // We watch the container width (via ResizeObserver) and derive
@@ -241,7 +246,13 @@ export function ContentFeed({
           {masonryColumns.map((col, ci) => (
             <div key={ci} className="flex min-w-0 flex-1 flex-col gap-3">
               {col.map((item) => (
-                <ContentCard key={item.id} item={item} variant={cardVariant} />
+                <ContentCard
+                  key={item.id}
+                  item={item}
+                  tags={item.tags}
+                  variant={cardVariant}
+                  onTagClick={onTagClick}
+                />
               ))}
             </div>
           ))}
@@ -291,7 +302,12 @@ export function ContentFeed({
       >
         {items.map((item) => (
           <li key={item.id}>
-            <ContentCard item={item} variant={cardVariant} />
+            <ContentCard
+              item={item}
+              tags={item.tags}
+              variant={cardVariant}
+              onTagClick={onTagClick}
+            />
           </li>
         ))}
       </ul>

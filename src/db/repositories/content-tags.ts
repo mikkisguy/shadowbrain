@@ -29,4 +29,36 @@ export const contentTags = {
     `);
     return stmt.all(contentId) as Tag[];
   },
+
+  /** Batched tag-name lookup for a set of content ids — a single
+   *  query that returns a `Record<contentId, tagName[]>`. Used by
+   *  the list / search endpoints to attach each item's tag names
+   *  to its row without an N+1 (one query per item). Items with no
+   *  tags are absent from the map; callers default them to `[]`.
+   *
+   *  Names are ordered alphabetically (`tags.name`) so the card's
+   *  tag strip is deterministic across requests. */
+  findNamesByContentIds: (
+    db: Database.Database,
+    contentIds: readonly string[]
+  ): Record<string, string[]> => {
+    if (contentIds.length === 0) return {};
+    const placeholders = contentIds.map(() => "?").join(", ");
+    const stmt = db.prepare(`
+      SELECT ct.content_id AS contentId, t.name AS name
+      FROM content_tags ct
+      JOIN tags t ON t.id = ct.tag_id
+      WHERE ct.content_id IN (${placeholders})
+      ORDER BY t.name
+    `);
+    const rows = stmt.all(...contentIds) as Array<{
+      contentId: string;
+      name: string;
+    }>;
+    const map: Record<string, string[]> = {};
+    for (const row of rows) {
+      (map[row.contentId] ??= []).push(row.name);
+    }
+    return map;
+  },
 };

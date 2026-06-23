@@ -158,6 +158,12 @@ export function BrowsePage() {
         hasMore={hasMore}
         onLoadMore={loadMore}
         cardVariant={cardVariant}
+        // Clicking a card's tag pill narrows the feed to that tag.
+        // `setFilters({ tag })` updates the URL (`?tag=…`) and resets
+        // to page 1, exactly like picking the tag from the advanced
+        // filters panel. The card's own navigation (click-anywhere →
+        // /item/[id]) is handled inside the card via a stretched link.
+        onTagClick={(tag) => setFilters({ tag })}
       />
     </main>
   );

@@ -20,8 +20,9 @@
 
 /** Subset of `content_items` columns the Browse feed renders. Both
  *  endpoints return the same shape (id, type, title, content, …),
- *  so a single type covers both. Tags are looked up separately when
- *  the card renders; the API does not include them. */
+ *  so a single type covers both. `tags` is the item's tag names,
+ *  attached server-side by a batched lookup in the list / search
+ *  routes so the card can render and click tags without an N+1. */
 export interface BrowseItem {
   id: string;
   type: string;
@@ -39,6 +40,10 @@ export interface BrowseItem {
    *  no type-specific metadata. Optional so legacy fixtures without it
    *  still type-check; the card treats undefined as null. */
   metadata?: Record<string, unknown> | null;
+  /** Tag names attached to the item, ordered alphabetically. Empty
+   *  when the item has no tags. Surfaced by the list / search API
+   *  routes via a batched `content_tags` lookup. */
+  tags: string[];
   created_at: string;
   updated_at: string;
 }
