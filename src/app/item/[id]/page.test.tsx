@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ItemDetailPage from "./page";
@@ -10,6 +11,13 @@ const mocks = vi.hoisted(() => ({
   getDb: vi.fn(() => ({})),
 }));
 
+const router = vi.hoisted(() => ({
+  back: vi.fn(),
+  push: vi.fn(),
+  replace: vi.fn(),
+  refresh: vi.fn(),
+}));
+
 vi.mock("@/db/index", () => ({
   getDb: mocks.getDb,
   contentItems: {
@@ -17,18 +25,30 @@ vi.mock("@/db/index", () => ({
   },
 }));
 
+// BackButton (a client component on the page) calls `useRouter`.
+// Shared spies so click-behaviour tests can assert back()/push().
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  usePathname: () => "/item/1",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 afterEach(() => {
   mocks.findWithRelations.mockReset();
   mocks.getDb.mockClear();
+  router.back.mockReset();
+  router.push.mockReset();
+  router.replace.mockReset();
+  router.refresh.mockReset();
 });
 
-function mockItem(type: string, metadata: string | null) {
+function mockItem(type: string, metadata: string | null, content = "content") {
   mocks.findWithRelations.mockReturnValue({
     item: {
       id: "1",
       type,
       title: `${type} item`,
-      content: "content",
+      content,
       image_path: null,
       source: "manual",
       source_url: null,
@@ -118,5 +138,119 @@ describe("ItemDetailPage metadata rendering (issue #103)", () => {
 
     expect(screen.getByText("Mood")).toBeInTheDocument();
     expect(screen.queryByText("Lucidity")).not.toBeInTheDocument();
+  });
+});
+
+describe("ItemDetailPage foundation (issue #25)", () => {
+  it("renders a colored type badge with the type label", async () => {
+    mockItem("note", null);
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    const badge = screen.getByTestId("item-type-badge");
+    expect(badge).toHaveTextContent("Note");
+    // The badge background is the note type token (--type-note → green).
+    expect(badge.className).toContain("bg-type-note");
+  });
+
+  it("falls back to the raw token for an unknown type", async () => {
+    mockItem("not-a-real-type", null);
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    const badge = screen.getByTestId("item-type-badge");
+    // Unknown types keep the raw label and the raw (neutral) token.
+    expect(badge).toHaveTextContent("not-a-real-type");
+    expect(badge.className).toContain("bg-type-raw");
+  });
+
+  it("renders a visible back button", async () => {
+    mockItem("note", null);
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    expect(screen.getByTestId("item-back-button")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /back/i })).toBeInTheDocument();
+  });
+
+  it("navigates back via browser history when history exists", async () => {
+    const user = userEvent.setup();
+    // `history.length > 1` means there is a page to go back to.
+    const lengthSpy = vi
+      .spyOn(window.history, "length", "get")
+      .mockReturnValue(2);
+    mockItem("note", null);
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    await user.click(screen.getByTestId("item-back-button"));
+
+    expect(router.back).toHaveBeenCalledOnce();
+    expect(router.push).not.toHaveBeenCalled();
+    lengthSpy.mockRestore();
+  });
+
+  it("falls back to Browse when there is no browser history", async () => {
+    const user = userEvent.setup();
+    // A fresh tab / direct deep link has no history to return to.
+    const lengthSpy = vi
+      .spyOn(window.history, "length", "get")
+      .mockReturnValue(1);
+    mockItem("note", null);
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    await user.click(screen.getByTestId("item-back-button"));
+
+    expect(router.push).toHaveBeenCalledWith("/");
+    expect(router.back).not.toHaveBeenCalled();
+    lengthSpy.mockRestore();
+  });
+
+  it("renders markdown content (headings, inline code, lists)", async () => {
+    mockItem(
+      "note",
+      null,
+      "# Docker networking\n\nBridge is the **default**. Use `docker network ls`.\n\n- bridge\n- host"
+    );
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    // Markdown h1 renders as a heading inside the content area.
+    expect(screen.getByText("Docker networking")).toBeInTheDocument();
+    // Inline code renders as a <code> element.
+    expect(screen.getByText("docker network ls").tagName).toBe("CODE");
+    // Bold text is present.
+    expect(screen.getByText("default")).toBeInTheDocument();
+    // List items render.
+    expect(screen.getByText("bridge")).toBeInTheDocument();
+    expect(screen.getByText("host")).toBeInTheDocument();
+  });
+
+  it("renders fenced code blocks", async () => {
+    mockItem("note", null, "```js\nconst x = 1;\nconsole.log(x);\n```");
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    expect(screen.getByText(/const x = 1/)).toBeInTheDocument();
+    expect(document.querySelector("pre")).not.toBeNull();
+  });
+
+  it("opens external links in a new tab with safe rel", async () => {
+    mockItem("bookmark", null, "Read [the docs](https://example.com/docs).");
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    const link = screen.getByRole("link", { name: "the docs" });
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(link).toHaveAttribute("href", "https://example.com/docs");
+  });
+
+  it("keeps relative links in-tab (no target=_blank)", async () => {
+    mockItem("note", null, "See [section](#section).");
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    const link = screen.getByRole("link", { name: "section" });
+    expect(link).not.toHaveAttribute("target");
   });
 });
