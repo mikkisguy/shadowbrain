@@ -224,6 +224,19 @@
     color: var(--foreground-inverted);
   }
 
+  /* Search-result match highlight. The FTS5 snippet wraps matched
+   * terms in `<mark>`; we tint them with the brand-primary accent so
+   * they read against the muted-foreground preview text without
+   * resorting to the browser's default (jarring) yellow. 2px radius
+   * + no shadow matches the rest of the design system. */
+  mark {
+    background-color: var(--primary-muted);
+    color: var(--foreground);
+    border-radius: var(--radius);
+    padding: 0 0.125rem;
+    font-weight: 500;
+  }
+
   /* Respect the user's motion preference. The spec's 150ms ease-out
    * is the default; users who have asked the OS to reduce motion
    * get instant transitions and no animations. */

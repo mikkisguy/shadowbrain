@@ -1,70 +1,33 @@
+import { parseSnippet } from "@/lib/snippet";
+
 /**
  * Render a FTS5 snippet as React nodes.
  *
- * The snippet returned by `/api/search` is an HTML fragment
- * where matched terms are wrapped in `<mark>...</mark>`. The
- * surrounding text is raw user-imported content (from
- * `content_items.content`) and may contain `<`, `&`, quotes,
- * etc. — the FTS5 `snippet()` function does *not* HTML-escape
- * its input.
- *
- * The naive `dangerouslySetInnerHTML` is therefore unsafe:
- * an attacker who could land `<script>` in a note would get
- * it executed in the palette. We avoid that by parsing the
- * snippet ourselves: split on the literal `<mark>` /
- * `</mark>` tokens and render alternating text / mark runs as
- * React nodes, letting React handle the escaping.
- *
- * The function is intentionally small and dependency-free; it
- * is the only HTML-interpolation site in the command palette.
+ * The snippet returned by `/api/search` wraps matched terms in
+ * `<mark>…</mark>`; the surrounding text is raw user content from
+ * `content_items.content` and is **not** HTML-escaped by FTS5's
+ * `snippet()`. Parsing + rendering is delegated to the shared
+ * `parseSnippet` (src/lib/snippet.ts), which splits the snippet into
+ * plain / highlight segments that are rendered as React text children
+ * — so React escapes any markup and there is no
+ * `dangerouslySetInnerHTML` in the path. See that module for the full
+ * XSS rationale and the unterminated-`<mark>` handling.
  */
 export function renderSnippet(snippet: string | null): React.ReactNode {
   if (!snippet) return null;
 
-  const parts: React.ReactNode[] = [];
-  const tokens = ["<mark>", "</mark>"];
-  let cursor = 0;
-  let partIdx = 0;
-  let inMark = false;
-
-  while (cursor < snippet.length) {
-    const nextToken = tokens[inMark ? 1 : 0];
-    const nextIdx = snippet.indexOf(nextToken, cursor);
-    if (nextIdx === -1) {
-      // No more markers; the rest is plain text. React will
-      // escape the string at render time.
-      parts.push(<span key={`t-${partIdx++}`}>{snippet.slice(cursor)}</span>);
-      break;
-    }
-    if (nextIdx > cursor) {
-      parts.push(
-        <span key={`t-${partIdx++}`}>{snippet.slice(cursor, nextIdx)}</span>
-      );
-    }
-    cursor = nextIdx + nextToken.length;
-    inMark = !inMark;
-    if (inMark) {
-      // Consume the text run *inside* the mark element. We
-      // re-enter the loop on the next iteration and look for
-      // the closing token, rendering the captured text as a
-      // single <mark> child.
-      const closeIdx = snippet.indexOf("</mark>", cursor);
-      if (closeIdx === -1) {
-        // Unterminated <mark> — treat the rest as plain text
-        // to avoid swallowing content.
-        parts.push(<span key={`t-${partIdx++}`}>{snippet.slice(cursor)}</span>);
-        cursor = snippet.length;
-        break;
-      }
-      parts.push(
-        <mark key={`m-${partIdx++}`}>{snippet.slice(cursor, closeIdx)}</mark>
-      );
-      cursor = closeIdx + "</mark>".length;
-      inMark = false;
-    }
-  }
-
-  return <>{parts}</>;
+  const parts = parseSnippet(snippet);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.highlight ? (
+          <mark key={`m-${i}`}>{part.text}</mark>
+        ) : (
+          <span key={`t-${i}`}>{part.text}</span>
+        )
+      )}
+    </>
+  );
 }
 
 /**

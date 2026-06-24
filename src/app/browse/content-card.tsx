@@ -44,6 +44,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { parseSnippet } from "@/lib/snippet";
 import {
   Tooltip,
   TooltipContent,
@@ -222,6 +223,10 @@ export function ContentCard({
     [item.created_at]
   );
   const summary = metadataSummary(item.type, item.metadata);
+  // Parse the FTS5 snippet (search results only) into highlighted
+  // segments. `null` when there is no snippet (the regular list view)
+  // so the card falls back to the plain content preview.
+  const snippetParts = item.snippet ? parseSnippet(item.snippet) : null;
   // When the image 404s, show a text placeholder instead of the
   // browser's default broken-image glyph. The file may genuinely
   // not exist (the image capture pipeline hasn't created it yet),
@@ -325,9 +330,28 @@ export function ContentCard({
           </h3>
         ) : null}
 
-        <p className="text-muted-foreground line-clamp-3 font-sans text-sm leading-relaxed break-words">
-          {previewText(item.content)}
-        </p>
+        {snippetParts ? (
+          // Search result: render the FTS5 snippet with `<mark>`
+          // highlighting the matched terms. Segments are React text
+          // children (auto-escaped), so markup in the source content
+          // is neutralised — see `parseSnippet`.
+          <p
+            data-testid="content-card-snippet"
+            className="text-muted-foreground line-clamp-3 font-sans text-sm leading-relaxed break-words"
+          >
+            {snippetParts.map((part, i) =>
+              part.highlight ? (
+                <mark key={i}>{part.text}</mark>
+              ) : (
+                <span key={i}>{part.text}</span>
+              )
+            )}
+          </p>
+        ) : (
+          <p className="text-muted-foreground line-clamp-3 font-sans text-sm leading-relaxed break-words">
+            {previewText(item.content)}
+          </p>
+        )}
 
         {summary ? (
           <p

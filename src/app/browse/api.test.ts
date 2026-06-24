@@ -252,13 +252,43 @@ describe("fetchBrowseItems", () => {
     const call = calls[0];
     expect(call.url).toMatch(/^\/api\/search\?/);
     expect(call.url).toMatch(/q=docker/);
-    // The search-only fields (rank, snippet) must not leak into the
-    // Browse response shape.
+    // `rank` (BM25 score) is search-only and must not leak into the
+    // Browse response shape, but `snippet` is preserved so the card
+    // can render highlighted matches (issue #24).
     expect(result.items).toHaveLength(1);
     const item = result.items[0];
     expect(item).not.toHaveProperty("rank");
-    expect(item).not.toHaveProperty("snippet");
+    expect(item.snippet).toBe("docker <mark>networking</mark>");
     expect(item.id).toBe("x");
+  });
+
+  it("preserves the snippet as null when the search row omits it", async () => {
+    nextResponse = () =>
+      new Response(
+        JSON.stringify({
+          query: "docker",
+          results: [
+            {
+              id: "x",
+              type: "note",
+              title: null,
+              content: "docker networking",
+              source: "manual",
+              source_url: null,
+              created_at: "2026-06-21T00:00:00.000Z",
+              updated_at: "2026-06-21T00:00:00.000Z",
+              rank: 1.23,
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 20,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+
+    const result = await fetchBrowseItems({ q: "docker" });
+    expect(result.items[0].snippet).toBeNull();
   });
 
   it("drops empty filter values from the query string", async () => {
