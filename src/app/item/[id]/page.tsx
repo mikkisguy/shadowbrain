@@ -63,12 +63,131 @@ const TYPE_LABEL: Record<string, string> = {
 const ABSOLUTE = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
   timeStyle: "short",
+  timeZone: "UTC",
 });
 
 function formatAbsolute(iso: string): string {
   const ms = new Date(iso).getTime();
   if (Number.isNaN(ms)) return iso;
   return ABSOLUTE.format(new Date(iso));
+}
+
+type MetadataField = {
+  label: string;
+  value: string;
+};
+
+/** Render a type-specific metadata section for the item detail page
+ *  (issue #103). Returns null when the item has no metadata or the
+ *  type doesn't have structured fields to display. */
+function renderMetadataSection(
+  type: string,
+  metadata: string | null
+): React.ReactNode {
+  if (!metadata) return null;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(metadata);
+  } catch {
+    return null;
+  }
+  if (Object.keys(parsed).length === 0) return null;
+
+  const fields: MetadataField[] = [];
+
+  switch (type) {
+    case "person": {
+      const email = parsed.email;
+      if (typeof email === "string" && email.trim()) {
+        fields.push({ label: "Email", value: email.trim() });
+      }
+      const phoneNumber = parsed.phone_number;
+      if (typeof phoneNumber === "string" && phoneNumber.trim()) {
+        fields.push({ label: "Phone", value: phoneNumber.trim() });
+      }
+      const socialLinks = parsed.social_links;
+      if (Array.isArray(socialLinks) && socialLinks.length > 0) {
+        fields.push({
+          label: "Social links",
+          value: socialLinks.join(", "),
+        });
+      }
+      const role = parsed.role;
+      if (typeof role === "string" && role.trim()) {
+        fields.push({ label: "Role", value: role.trim() });
+      }
+      break;
+    }
+    case "project": {
+      const status = parsed.status;
+      if (typeof status === "string" && status.trim()) {
+        fields.push({ label: "Status", value: status.trim() });
+      }
+      const repo = parsed.repo;
+      if (typeof repo === "string" && repo.trim()) {
+        fields.push({ label: "Repository", value: repo.trim() });
+      }
+      const started = parsed.started;
+      if (typeof started === "string" && started.trim()) {
+        fields.push({ label: "Started", value: formatAbsolute(started) });
+      }
+      const goalEndDate = parsed.goal_end_date;
+      if (typeof goalEndDate === "string" && goalEndDate.trim()) {
+        fields.push({
+          label: "Goal end date",
+          value: formatAbsolute(goalEndDate),
+        });
+      }
+      break;
+    }
+    case "event": {
+      const startDate = parsed.start_date;
+      if (typeof startDate === "string" && startDate.trim()) {
+        fields.push({ label: "Start", value: formatAbsolute(startDate) });
+      }
+      const endDate = parsed.end_date;
+      if (typeof endDate === "string" && endDate.trim()) {
+        fields.push({ label: "End", value: formatAbsolute(endDate) });
+      }
+      const duration = parsed.duration;
+      if (duration !== null && duration !== undefined) {
+        fields.push({ label: "Duration", value: String(duration) });
+      }
+      break;
+    }
+    case "dream": {
+      const mood = parsed.mood;
+      if (typeof mood === "string" && mood.trim()) {
+        fields.push({ label: "Mood", value: mood.trim() });
+      }
+      break;
+    }
+    default:
+      return null;
+  }
+
+  if (fields.length === 0) return null;
+
+  return (
+    <section
+      className="border-border bg-surface-elevated flex flex-col gap-3 rounded-sm border p-4"
+      aria-label="Metadata"
+    >
+      <h3 className="text-muted-foreground font-mono text-xs font-medium tracking-wide uppercase">
+        Metadata
+      </h3>
+      <dl className="text-sm">
+        {fields.map((f) => (
+          <div key={f.label} className="flex gap-4 py-0.5">
+            <dt className="text-muted-foreground min-w-[5rem] font-medium">
+              {f.label}
+            </dt>
+            <dd className="text-foreground break-words">{f.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
 }
 
 export default async function ItemDetailPage({
@@ -154,6 +273,9 @@ export default async function ItemDetailPage({
           ))}
         </ul>
       ) : null}
+
+      {/* Type-specific metadata display (issue #103) */}
+      {renderMetadataSection(item.type, item.metadata)}
 
       {item.source_url ? (
         <p className="font-sans text-sm">

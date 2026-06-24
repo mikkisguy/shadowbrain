@@ -190,8 +190,8 @@ export function metadataSummary(
       return typeof status === "string" && status.trim() ? status : null;
     }
     case "event": {
-      const d = metadata.event_date;
-      return typeof d === "string" && d.trim() ? d : null;
+      const start = metadata.start_date;
+      return typeof start === "string" && start.trim() ? start : null;
     }
     case "dream": {
       const mood = metadata.mood;
