@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { contentLinks } from "./content-links";
 import { contentTags } from "./content-tags";
+import { splitTags } from "@/lib/tags";
 
 /**
  * Two-level visibility flags.
@@ -300,14 +301,20 @@ export const contentItems = {
       params.push(options.endDate);
     }
 
-    let join = "";
+    // Tag filter uses a correlated EXISTS subquery instead of a JOIN
+    // so that (a) multiple comma-separated tags match with OR
+    // (any-of) semantics without producing duplicate rows, and
+    // (b) the COUNT(*) stays correct. `tags.name` is COLLATE NOCASE
+    // so matching is case-insensitive.
     if (options.tag) {
-      join = `
-        JOIN content_tags ct ON ct.content_id = ci.id
-        JOIN tags t ON t.id = ct.tag_id
-      `;
-      where.push("t.name = ?");
-      params.push(options.tag);
+      const tagNames = splitTags(options.tag);
+      if (tagNames.length > 0) {
+        const placeholders = tagNames.map(() => "?").join(",");
+        where.push(
+          `EXISTS (SELECT 1 FROM content_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.content_id = ci.id AND t.name IN (${placeholders}))`
+        );
+        params.push(...tagNames);
+      }
     }
 
     const whereSql = `WHERE ${where.join(" AND ")}`;
@@ -315,7 +322,6 @@ export const contentItems = {
     const countStmt = db.prepare(`
       SELECT COUNT(*) as count
       FROM content_items ci
-      ${join}
       ${whereSql}
     `);
     const total = (countStmt.get(...params) as { count: number }).count;
@@ -323,7 +329,6 @@ export const contentItems = {
     const itemsStmt = db.prepare(`
       SELECT ci.*
       FROM content_items ci
-      ${join}
       ${whereSql}
       ORDER BY ci.created_at DESC
       LIMIT ? OFFSET ?

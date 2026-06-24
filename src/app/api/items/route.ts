@@ -24,10 +24,17 @@ const visibilityFlag = z.coerce.number().int().min(0).max(1).optional();
  * raw_text, image) keep the free-form record validation from the base
  * schema.
  */
+const isoDateTime = z
+  .string()
+  .refine((value) => !Number.isNaN(Date.parse(value)), {
+    message: "Invalid datetime",
+  });
+
 const PERSON_METADATA = z
   .object({
     email: z.string().optional(),
-    github: z.string().optional(),
+    social_links: z.array(z.string().url()).optional(),
+    phone_number: z.string().optional(),
     role: z.string().optional(),
   })
   .passthrough();
@@ -36,13 +43,15 @@ const PROJECT_METADATA = z
   .object({
     status: z.string().optional(),
     repo: z.string().optional(),
-    started: z.string().optional(),
+    started: isoDateTime.optional(),
+    goal_end_date: isoDateTime.optional(),
   })
   .passthrough();
 
 const EVENT_METADATA = z
   .object({
-    event_date: z.string().optional(),
+    start_date: isoDateTime.optional(),
+    end_date: isoDateTime.optional(),
     duration: z.union([z.string(), z.number()]).nullable().optional(),
   })
   .passthrough();
@@ -50,7 +59,6 @@ const EVENT_METADATA = z
 const DREAM_METADATA = z
   .object({
     mood: z.string().optional(),
-    lucidity: z.number().optional(),
   })
   .passthrough();
 

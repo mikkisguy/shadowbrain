@@ -17,7 +17,7 @@ const searchSchema = z.object({
     .min(1, "Query cannot be empty")
     .max(256, "Query is too long"),
   type: z.string().trim().min(1).max(64).optional(),
-  tag: z.string().trim().min(1).max(64).optional(),
+  tag: z.string().trim().min(1).max(256).optional(),
 });
 
 export async function GET(request: Request) {

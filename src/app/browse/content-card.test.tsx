@@ -269,10 +269,10 @@ describe("metadataSummary", () => {
   it("returns the status for a project", () => {
     expect(metadataSummary("project", { status: "active" })).toBe("active");
   });
-  it("returns the event_date for an event", () => {
-    expect(metadataSummary("event", { event_date: "2026-04-12" })).toBe(
-      "2026-04-12"
-    );
+  it("returns the start_date for an event", () => {
+    expect(
+      metadataSummary("event", { start_date: "2026-04-12T09:30:00Z" })
+    ).toBe("2026-04-12T09:30:00Z");
   });
   it("returns the mood for a dream", () => {
     expect(metadataSummary("dream", { mood: "surreal" })).toBe("surreal");

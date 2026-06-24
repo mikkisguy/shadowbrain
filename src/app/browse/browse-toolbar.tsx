@@ -31,6 +31,11 @@ import { AdvancedFilters } from "./advanced-filters";
 import { TypeTabs, apiValueForTab } from "./type-tabs";
 import { type BrowseFilters, type BrowseTypeTab, coerceTypeTab } from "./types";
 
+/** `sessionStorage` key for the advanced-filters panel open/closed
+ *  state. Per issue #23, the panel's collapsed/expanded state persists
+ *  across reloads within the same browser session. */
+const ADVANCED_OPEN_KEY = "browse.advancedOpen";
+
 export interface BrowseToolbarProps {
   filters: BrowseFilters;
   /** True while the search input's debounce timer is still
@@ -66,7 +71,23 @@ export function BrowseToolbar({
   }, [filters.q]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // The advanced-filters panel open/closed state is UI-only (it does
+  // not travel in the URL) but persists across reloads via
+  // `sessionStorage` so a refresh lands on the same view the user
+  // left.
+  const [advancedOpen, setAdvancedOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem(ADVANCED_OPEN_KEY) === "true";
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(ADVANCED_OPEN_KEY, String(advancedOpen));
+    } catch {
+      // sessionStorage may be unavailable (private mode, disabled) — the
+      // panel still works, it just won't persist.
+    }
+  }, [advancedOpen]);
 
   // The "Advanced" button is the only persistent visible cue
   // that secondary filters are available. We also reflect a
@@ -157,15 +178,28 @@ export function BrowseToolbar({
         </Button>
       </div>
 
-      {advancedOpen ? (
-        <div id="advanced-filters-panel">
+      {/* The panel is always mounted so the grid-rows animation can
+          transition smoothly on both expand and collapse. When
+          collapsed `inert` keeps the contents out of the tab order
+          and the a11y tree, and the 0fr row clips it from view. */}
+      <div
+        id="advanced-filters-panel"
+        className={cn(
+          "grid transition-all duration-200 ease-out",
+          advancedOpen
+            ? "grid-rows-[1fr] opacity-100"
+            : "grid-rows-[0fr] opacity-0"
+        )}
+        inert={!advancedOpen}
+      >
+        <div className="overflow-hidden">
           <AdvancedFilters
             filters={filters}
             onPatch={onFiltersChange}
             onClear={onClear}
           />
         </div>
-      ) : null}
+      </div>
     </section>
   );
 }

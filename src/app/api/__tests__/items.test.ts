@@ -422,7 +422,12 @@ describe("/api/items per-type metadata validation", () => {
       body: JSON.stringify({
         type: "person",
         content: "Sarah",
-        metadata: { email: "sarah@example.com", role: "DevOps lead" },
+        metadata: {
+          email: "sarah@example.com",
+          social_links: ["https://github.com/sarah"],
+          phone_number: "+1 555 0100",
+          role: "DevOps lead",
+        },
       }),
     });
     const res = await POST(req);
@@ -453,7 +458,7 @@ describe("/api/items per-type metadata validation", () => {
       body: JSON.stringify({
         type: "person",
         content: "Sarah",
-        metadata: { role: 123 },
+        metadata: { social_links: ["not-a-url"] },
       }),
     });
     const res = await POST(req);
@@ -469,7 +474,7 @@ describe("/api/items per-type metadata validation", () => {
       body: JSON.stringify({
         type: "dream",
         content: "flying",
-        metadata: { mood: "surreal", lucidity: 3 },
+        metadata: { mood: "surreal" },
       }),
     });
     const res = await POST(req);
@@ -478,14 +483,14 @@ describe("/api/items per-type metadata validation", () => {
     expect(json.type).toBe("dream");
   });
 
-  it("rejects a dream with non-numeric lucidity (400)", async () => {
+  it("rejects a dream with invalid mood type", async () => {
     const req = await authedRequest("http://localhost/api/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type: "dream",
         content: "flying",
-        metadata: { lucidity: "high" },
+        metadata: { mood: 123 },
       }),
     });
     const res = await POST(req);
@@ -501,7 +506,11 @@ describe("/api/items per-type metadata validation", () => {
       body: JSON.stringify({
         type: "event",
         content: "deploy",
-        metadata: { event_date: "2026-04-12", duration: null },
+        metadata: {
+          start_date: "2026-04-12T09:30:00.000Z",
+          end_date: "2026-04-12T11:15:00.000Z",
+          duration: null,
+        },
       }),
     });
     const res = await POST(req);
@@ -517,7 +526,12 @@ describe("/api/items per-type metadata validation", () => {
       body: JSON.stringify({
         type: "project",
         content: "BranchForge",
-        metadata: { status: "active", future_field: "x" },
+        metadata: {
+          status: "active",
+          started: "2026-01-01T09:00:00.000Z",
+          goal_end_date: "2026-12-31T18:00:00.000Z",
+          future_field: "x",
+        },
       }),
     });
     const res = await POST(req);
