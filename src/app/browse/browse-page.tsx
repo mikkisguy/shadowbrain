@@ -158,6 +158,11 @@ export function BrowsePage() {
         hasMore={hasMore}
         onLoadMore={loadMore}
         cardVariant={cardVariant}
+        // Issue #24: while a search query is active, the feed shows
+        // search results as a finite set — the scroll-triggered
+        // auto-load is suspended (a manual "Load more" still
+        // paginates). Clearing `q` re-enables infinite scroll.
+        infiniteScroll={!filters.q}
         // Clicking a card's tag pill narrows the feed to that tag.
         // `setFilters({ tag })` updates the URL (`?tag=…`) and resets
         // to page 1, exactly like picking the tag from the advanced

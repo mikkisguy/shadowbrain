@@ -43,13 +43,13 @@ content).
 
 ## Cool accents (brand)
 
-| Token              | Hex                        | CSS variable           | Usage                                                       |
-| ------------------ | -------------------------- | ---------------------- | ----------------------------------------------------------- |
-| Primary            | `#3D6BFF`                  | `--primary`            | Dominant brand. Primary actions, focus, links, selected nav |
-| Primary foreground | `#E4DCC8`                  | `--primary-foreground` | Text on primary                                             |
-| Primary muted      | `rgba(61, 111, 255, 0.15)` | `--primary-muted`      | Subtle primary backgrounds                                  |
-| Accent cyan        | `#4FCFFF`                  | `--accent-cyan`        | Live/active indicators, type badge border                   |
-| Accent violet      | `#7B6AFF`                  | `--accent-violet`      | Tag pills, secondary affordances                            |
+| Token              | Hex                        | CSS variable           | Usage                                                |
+| ------------------ | -------------------------- | ---------------------- | ---------------------------------------------------- |
+| Primary            | `#3D6BFF`                  | `--primary`            | Dominant brand. Primary actions, links, selected nav |
+| Primary foreground | `#E4DCC8`                  | `--primary-foreground` | Text on primary                                      |
+| Primary muted      | `rgba(61, 111, 255, 0.15)` | `--primary-muted`      | Subtle primary backgrounds                           |
+| Accent cyan        | `#4FCFFF`                  | `--accent-cyan`        | Live/active indicators, type badge border            |
+| Accent violet      | `#7B6AFF`                  | `--accent-violet`      | Tag pills, secondary affordances                     |
 
 `--primary` is the anchor — most prominent. `--accent-cyan` and
 `--accent-violet` are supporting, used sparingly.
@@ -109,7 +109,7 @@ accent on detail view. See the design system spec for the full rule.
 | Spacing base       | 4px (Tailwind default)                                                   |
 | Type dots          | 6px filled circle (1.5px inset from badge edge)                          |
 | Detail edge accent | 2px solid, 16px left padding                                             |
-| Focus outline      | 1px solid `--primary`, 2px offset                                        |
+| Focus outline      | 1px solid `--foreground`, 2px offset                                     |
 | Transition timing  | 150ms ease-out, color/opacity only                                       |
 
 ---

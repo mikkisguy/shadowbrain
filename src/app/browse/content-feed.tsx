@@ -60,6 +60,12 @@ export interface ContentFeedProps {
    *  to `setFilters({ tag })` so a click narrows the feed and the
    *  URL picks up `?tag=…`. */
   onTagClick?: (tag: string) => void;
+  /** Whether the scroll-triggered auto-load (the IntersectionObserver
+   *  on the sentinel) is active. Disabled during an active search so
+   *  results appear as a finite set "replacing infinite scroll" (issue
+   *  #24); a manual "Load more" button still paginates if `hasMore`.
+   *  Defaults to `true` (the normal browse feed). */
+  infiniteScroll?: boolean;
 }
 
 const SKELETON_CARD_COUNT = 6;
@@ -96,6 +102,7 @@ export function ContentFeed({
   onLoadMore,
   cardVariant = "larger-dot",
   onTagClick,
+  infiniteScroll = true,
 }: ContentFeedProps) {
   // ---- Column-count derivation for the masonry grid -----------
   // We watch the container width (via ResizeObserver) and derive
@@ -125,8 +132,14 @@ export function ContentFeed({
   }, [items, view, gridColumnCount]);
 
   // ---- Infinite-scroll sentinel -------------------------------
+  // Disabled during an active search (`infiniteScroll === false`):
+  // the observer is not attached, so scrolling to the bottom does
+  // not auto-fetch the next page. A manual "Load more" button below
+  // still paginates, so search results are never cut off — only the
+  // scroll-triggered auto-load (the "infinite scroll") is suspended.
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
+    if (!infiniteScroll) return;
     const node = sentinelRef.current;
     if (!node) return;
     if (typeof IntersectionObserver === "undefined") return;
@@ -140,7 +153,7 @@ export function ContentFeed({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [onLoadMore]);
+  }, [onLoadMore, infiniteScroll]);
 
   if (status === "error") {
     return (

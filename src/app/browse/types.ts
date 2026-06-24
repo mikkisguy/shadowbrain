@@ -44,6 +44,17 @@ export interface BrowseItem {
    *  when the item has no tags. Surfaced by the list / search API
    *  routes via a batched `content_tags` lookup. */
   tags: string[];
+  /** FTS5-generated snippet from `/api/search`, with matched terms
+   *  wrapped in `<mark>…</mark>` and `…` as the ellipsis. Present
+   *  only for search results; `null` / `undefined` for the regular
+   *  `/api/items` list. The card renders this in place of the
+   *  plain content preview so the match is visually highlighted.
+   *  The snippet is parsed into plain / highlight segments by
+   *  `parseSnippet` (src/lib/snippet.ts) and rendered as React text
+   *  children, which auto-escape any markup the source content
+   *  contained — there is no `dangerouslySetInnerHTML` anywhere in
+   *  the path. */
+  snippet?: string | null;
   created_at: string;
   updated_at: string;
 }

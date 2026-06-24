@@ -70,8 +70,9 @@ function endpointFor(filters: BrowseFilters): {
     return {
       url: "/api/search",
       // The search endpoint returns `results` (with a `rank` and a
-      // FTS5 `snippet`); we strip those to the canonical BrowseItem
-      // shape so the feed component never has to branch.
+      // FTS5 `snippet`); we keep the `snippet` (the card renders it
+      // with highlighted matches) but drop `rank` to the canonical
+      // BrowseItem shape so the feed component never branches on it.
       mapResults: (body) =>
         Array.isArray(body.results)
           ? (body.results as Record<string, unknown>[]).map(stripSearchOnly)
@@ -127,12 +128,12 @@ function coerceTags(raw: unknown): string[] {
 }
 
 /** The search endpoint carries a `rank` and a `snippet` per row;
- *  the items endpoint does not. Both are valid for the Browse feed,
- *  but the type only declares the shared columns. This normaliser
- *  maps a raw DB row to the canonical `BrowseItem` shape — it
- *  prefixes the `image_path` with `/api/images/`, picks up the
- *  batched `tags`, and drops any search-only fields (`rank`,
- *  `snippet`). */
+ *  the items endpoint does not. This normaliser maps a raw DB row to
+ *  the canonical `BrowseItem` shape — it prefixes the `image_path`
+ *  with `/api/images/`, picks up the batched `tags`, and omits the
+ *  search-only fields. `stripSearchOnly` layers the `snippet` back on
+ *  for search results (it renders as highlighted matches in the card);
+ *  `rank` (BM25 score) is never surfaced to the client. */
 function normaliseItem(row: Record<string, unknown>): BrowseItem {
   return {
     id: String(row.id),
@@ -149,11 +150,18 @@ function normaliseItem(row: Record<string, unknown>): BrowseItem {
   };
 }
 
-/** The search endpoint returns `results` (with a `rank` and a
- *  FTS5 `snippet`); we strip those to the canonical BrowseItem
- *  shape so the feed component never has to branch. */
+/** The search endpoint carries a `rank` (BM25 score) and a `snippet`
+ *  (FTS5 highlight) per row. We keep the `snippet` — the card renders
+ *  it with highlighted matches — but drop `rank` so the canonical
+ *  `BrowseItem` shape stays free of search-only scoring metadata. */
 function stripSearchOnly(row: Record<string, unknown>): BrowseItem {
-  return normaliseItem(row);
+  return { ...normaliseItem(row), snippet: asStringOrNull(row.snippet) };
+}
+
+/** Coerce an unknown value to `string | null` for snippet passthrough.
+ *  Defensive: a missing / non-string `snippet` collapses to `null`. */
+function asStringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
 }
 
 export async function fetchBrowseItems(

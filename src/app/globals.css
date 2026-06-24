@@ -79,7 +79,11 @@
   --color-accent-foreground: var(--foreground);
   --color-destructive: var(--error);
   --color-input: var(--border-strong);
-  --color-ring: var(--primary);
+  /* Focus indicators use the cream foreground, not the blue primary.
+   * Blue stays reserved for brand/primary actions/links; a neutral
+   * cream ring reads as "attention" without colour-clashing and
+   * matches the ::selection treatment. See docs/design-tokens.md. */
+  --color-ring: var(--foreground);
 
   /* --- Typography --- */
   --font-sans: var(--font-sans);
@@ -222,6 +226,29 @@
   ::selection {
     background-color: var(--surface-inverted);
     color: var(--foreground-inverted);
+  }
+
+  /* Search-result match highlight. The FTS5 snippet wraps matched
+   * terms in `<mark>`; we tint them with the brand-primary accent so
+   * they read against the muted-foreground preview text without
+   * resorting to the browser's default (jarring) yellow. 2px radius
+   * + no shadow matches the rest of the design system. */
+  mark {
+    background-color: var(--primary-muted);
+    color: var(--foreground);
+    border-radius: var(--radius);
+    padding: 0 0.125rem;
+    font-weight: 500;
+  }
+
+  /* Suppress the native clear button on `<input type="search">`.
+   * Every search field in the app renders its own styled clear
+   * affordance (see browse-toolbar), so Chrome/Safari's default
+   * `::-webkit-search-cancel-button` would render a second "X". */
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
   }
 
   /* Respect the user's motion preference. The spec's 150ms ease-out

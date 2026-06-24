@@ -258,6 +258,53 @@ describe("ContentCard", () => {
       screen.queryByTestId("content-card-metadata-summary")
     ).not.toBeInTheDocument();
   });
+
+  it("renders the FTS5 snippet with <mark> highlighting matched terms", () => {
+    const item: BrowseItem = {
+      ...baseItem,
+      snippet: "…bridge <mark>networks</mark> are the default…",
+    };
+    render(<ContentCard item={item} />);
+    const snippet = screen.getByTestId("content-card-snippet");
+    const mark = snippet.querySelector("mark");
+    expect(mark).not.toBeNull();
+    expect(mark).toHaveTextContent("networks");
+  });
+
+  it("keeps the line-clamped styling on the snippet paragraph", () => {
+    const item: BrowseItem = { ...baseItem, snippet: "a <mark>b</mark> c" };
+    render(<ContentCard item={item} />);
+    expect(screen.getByTestId("content-card-snippet").className).toMatch(
+      /line-clamp-3/
+    );
+  });
+
+  it("falls back to the plain content preview when there is no snippet", () => {
+    render(<ContentCard item={baseItem} />);
+    // No snippet test id, and the plain preview text is shown.
+    expect(
+      screen.queryByTestId("content-card-snippet")
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/Bridge networks/)).toBeInTheDocument();
+  });
+
+  it("treats markup inside the snippet as inert text (XSS-safe)", () => {
+    // FTS5's snippet() does not escape source content, so a note
+    // containing a <script> tag would surface in the snippet. We
+    // render segments as React text children, which escape markup —
+    // so no executable element is ever created.
+    const item: BrowseItem = {
+      ...baseItem,
+      snippet: "…<mark>docker</mark><script>alert(1)</script>…",
+    };
+    const { container } = render(<ContentCard item={item} />);
+    expect(container.querySelector("script")).toBeNull();
+    // The matched term still highlights.
+    const mark = screen
+      .getByTestId("content-card-snippet")
+      .querySelector("mark");
+    expect(mark).toHaveTextContent("docker");
+  });
 });
 
 describe("metadataSummary", () => {

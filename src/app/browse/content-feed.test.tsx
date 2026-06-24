@@ -234,6 +234,98 @@ describe("ContentFeed", () => {
     expect(onLoadMore).toHaveBeenCalledOnce();
   });
 
+  it("attaches the scroll observer by default (infinite scroll on)", () => {
+    const observeSpy = vi.spyOn(IntersectionObserver.prototype, "observe");
+    render(
+      <ContentFeed
+        items={[item]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+        hasMore
+      />
+    );
+    expect(observeSpy).toHaveBeenCalled();
+  });
+
+  it("does not attach the scroll observer during an active search (infiniteScroll off)", () => {
+    // Issue #24: while searching, the feed shows results as a finite
+    // set — the IntersectionObserver sentinel must not auto-load.
+    const observeSpy = vi.spyOn(IntersectionObserver.prototype, "observe");
+    render(
+      <ContentFeed
+        items={[item]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+        hasMore
+        infiniteScroll={false}
+      />
+    );
+    expect(observeSpy).not.toHaveBeenCalled();
+    // The sentinel element is still rendered (it doubles as a layout
+    // spacer), but it has no observer attached.
+    expect(screen.getByTestId("feed-sentinel")).toBeInTheDocument();
+  });
+
+  it("detaches the observer when infiniteScroll flips from on to off (typing a query)", () => {
+    // The real user flow: browse (infinite scroll on) → type a query
+    // (infinite scroll off). The effect cleanup must disconnect the
+    // observer so scrolling no longer auto-loads mid-search.
+    const disconnectSpy = vi.spyOn(
+      IntersectionObserver.prototype,
+      "disconnect"
+    );
+    const { rerender } = render(
+      <ContentFeed
+        items={[item]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+        hasMore
+        infiniteScroll
+      />
+    );
+    expect(disconnectSpy).not.toHaveBeenCalled();
+    rerender(
+      <ContentFeed
+        items={[item]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+        hasMore
+        infiniteScroll={false}
+      />
+    );
+    expect(disconnectSpy).toHaveBeenCalled();
+  });
+
+  it("still shows the manual Load more button during search when hasMore", () => {
+    // Infinite scroll is off, but manual pagination stays available so
+    // search results are never cut off.
+    render(
+      <ContentFeed
+        items={[item]}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+        hasMore
+        infiniteScroll={false}
+      />
+    );
+    expect(screen.getByTestId("feed-load-more-button")).toBeInTheDocument();
+  });
+
   it("threads onTagClick through to each card's tag pill", async () => {
     const onTagClick = vi.fn();
     const user = userEvent.setup();
