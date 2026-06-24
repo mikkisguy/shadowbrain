@@ -201,6 +201,23 @@ describe("useBrowseState", () => {
     expect(last.scroll).toBe(false);
   });
 
+  it("skips the URL write and page reset when a patch changes nothing", async () => {
+    searchParamsStore.value = new URLSearchParams({ type: "note" });
+    const { result } = renderHook(() => useBrowseState(), {
+      wrapper: StoreSubscriber,
+    });
+    await waitFor(() => {
+      expect(result.current.status).toBe("success");
+    });
+    const fetchesBefore = fetchSpy.callCount;
+    act(() => {
+      // Same value already in the URL → no-op guard bails out.
+      result.current.setFilters({ type: "note" });
+    });
+    expect(replaceCalls).toHaveLength(0);
+    expect(fetchSpy.callCount).toBe(fetchesBefore);
+  });
+
   it("drops empty / whitespace filter values from the URL", () => {
     searchParamsStore.value = new URLSearchParams({
       type: "note",

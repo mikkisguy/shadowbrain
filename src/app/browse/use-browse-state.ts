@@ -95,6 +95,23 @@ const FILTER_KEYS = [
   "endDate",
 ] as const;
 
+/** Shallow equality for two filter sets. Values are strings or
+ *  undefined, so normalising `undefined` to `""` lets a direct
+ *  string comparison cover every key. Used by `setFilters` to bail
+ *  out when a patch does not actually change anything — e.g. clicking
+ *  a date preset that is already applied, or blurring a date input
+ *  without editing it. Without this guard a no-op patch would still
+ *  reset the page and re-fetch. */
+function filtersEqual(a: BrowseFilters, b: BrowseFilters): boolean {
+  const keys = new Set<string>([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    const av = a[key as keyof BrowseFilters] ?? "";
+    const bv = b[key as keyof BrowseFilters] ?? "";
+    if (av !== bv) return false;
+  }
+  return true;
+}
+
 /** Parse a `URLSearchParams` value into a `BrowseFilters`. Empty
  *  strings collapse to `undefined` so the API helper can drop them. */
 function readFiltersFromParams(params: URLSearchParams): BrowseFilters {
@@ -382,7 +399,11 @@ export function useBrowseState(): UseBrowseStateResult {
         else cleaned[key] = undefined;
       }
       const merged: BrowseFilters = { ...filters, ...cleaned };
-      // Any non-search filter change resets the page.
+      // No-op guard: if the patch produces no actual change, skip the
+      // page reset and URL write so the feed does not refetch on a
+      // no-op (e.g. re-clicking an already-applied date preset, or
+      // blurring a date input you never edited).
+      if (filtersEqual(merged, filters)) return;
       const resetPage = Object.keys(patch).some((k) => k !== "q");
       if (resetPage) {
         setPage(1);

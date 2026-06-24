@@ -480,6 +480,49 @@ describe("search.queryWithFilters", () => {
     db.close();
   });
 
+  it("filters by multiple tags with OR semantics and no duplicates", () => {
+    const db = createTestDb();
+    const now = "2024-01-01T00:00:00.000Z";
+
+    // Three notes all contain "alpha" so the FTS query matches all.
+    const insert = db.prepare(
+      `INSERT INTO content_items (id, type, title, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+    insert.run("a", "note", "a", "alpha content", "web", now, now);
+    insert.run("b", "note", "b", "alpha content", "web", now, now);
+    insert.run("c", "note", "c", "alpha content", "web", now, now);
+
+    const insertTag = db.prepare(
+      `INSERT INTO tags (id, name, created_at) VALUES (?, ?, ?)`
+    );
+    const link = db.prepare(
+      `INSERT INTO content_tags (content_id, tag_id, created_at) VALUES (?, ?, ?)`
+    );
+    insertTag.run("t1", "docker", now);
+    insertTag.run("t2", "kubernetes", now);
+    link.run("a", "t1", now); // a → docker
+    link.run("b", "t2", now); // b → kubernetes
+    link.run("c", "t1", now); // c → docker + kubernetes (both selected)
+    link.run("c", "t2", now);
+    // "c" is untagged-result in the FTS sense — it has tags but we also
+    // create a truly untagged item to confirm it is excluded.
+    insert.run("d", "note", "d", "alpha content", "web", now, now);
+
+    const results = search.queryWithFilters(db, "alpha", {
+      tag: "docker,kubernetes",
+    });
+
+    const ids = results.map((r) => r.id);
+    expect(ids).toContain("a");
+    expect(ids).toContain("b");
+    expect(ids).toContain("c");
+    // "d" has no tag → excluded.
+    expect(ids).not.toContain("d");
+    // "c" matches two selected tags but must not be duplicated.
+    expect(new Set(ids).size).toBe(ids.length);
+    db.close();
+  });
+
   it("returns empty array when no matches satisfy filters", () => {
     const db = createTestDb();
     seedFtsFixtures(db);

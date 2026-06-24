@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { splitTags } from "@/lib/tags";
 
 /**
  * Two-level visibility flags are projected onto the search result so
@@ -158,21 +159,24 @@ export const search = {
       includePrivate,
     ];
 
-    let joins = "JOIN content_items_search cis ON ci.rowid = cis.rowid";
+    const joins = "JOIN content_items_search cis ON ci.rowid = cis.rowid";
 
     if (options?.type) {
       where.push("ci.type = ?");
       params.push(options.type);
     }
     if (options?.tag) {
-      // tags.name uses COLLATE NOCASE; the comparison inherits the column
-      // collation, so tag matching is case-insensitive without extra work.
-      joins += `
-        JOIN content_tags ct ON ct.content_id = ci.id
-        JOIN tags t ON t.id = ct.tag_id
-      `;
-      where.push("t.name = ?");
-      params.push(options.tag);
+      // Multi-tag OR matching via a correlated EXISTS subquery — avoids
+      // duplicate rows and keeps COUNT correct. `tags.name` is COLLATE
+      // NOCASE so matching is case-insensitive.
+      const tagNames = splitTags(options.tag);
+      if (tagNames.length > 0) {
+        const placeholders = tagNames.map(() => "?").join(",");
+        where.push(
+          `EXISTS (SELECT 1 FROM content_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.content_id = ci.id AND t.name IN (${placeholders}))`
+        );
+        params.push(...tagNames);
+      }
     }
 
     params.push(limit, offset);
@@ -204,19 +208,21 @@ export const search = {
       includePrivate,
     ];
 
-    let joins = "JOIN content_items_search cis ON ci.rowid = cis.rowid";
+    const joins = "JOIN content_items_search cis ON ci.rowid = cis.rowid";
 
     if (options?.type) {
       where.push("ci.type = ?");
       params.push(options.type);
     }
     if (options?.tag) {
-      joins += `
-        JOIN content_tags ct ON ct.content_id = ci.id
-        JOIN tags t ON t.id = ct.tag_id
-      `;
-      where.push("t.name = ?");
-      params.push(options.tag);
+      const tagNames = splitTags(options.tag);
+      if (tagNames.length > 0) {
+        const placeholders = tagNames.map(() => "?").join(",");
+        where.push(
+          `EXISTS (SELECT 1 FROM content_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.content_id = ci.id AND t.name IN (${placeholders}))`
+        );
+        params.push(...tagNames);
+      }
     }
 
     const stmt = db.prepare(`
