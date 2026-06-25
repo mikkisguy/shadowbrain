@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getDb, contentItems } from "@/db/index";
@@ -180,7 +179,11 @@ export default async function ItemDetailPage({
   return (
     <DetailLayout
       sidebar={
-        <ItemSidebar outbound={links.outbound} inbound={links.inbound} />
+        <ItemSidebar
+          tags={tags}
+          outbound={links.outbound}
+          inbound={links.inbound}
+        />
       }
     >
       <header className="flex flex-col gap-3">
@@ -219,21 +222,6 @@ export default async function ItemDetailPage({
       </header>
 
       <MarkdownContent content={item.content} />
-
-      {tags.length > 0 ? (
-        <ul aria-label="Tags" className="flex flex-wrap items-center gap-1.5">
-          {tags.map((tag) => (
-            <li key={tag.id}>
-              <Link
-                href={`/?tag=${encodeURIComponent(tag.name)}`}
-                className="border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong rounded-sm border px-2 py-0.5 font-mono text-[0.7rem] tracking-wide transition-colors"
-              >
-                #{tag.name}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      ) : null}
 
       {/* Type-specific metadata display (issue #103) */}
       {renderMetadataSection(item.type, item.metadata)}

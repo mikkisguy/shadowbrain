@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
-import type { OutboundLink, InboundLink } from "@/db/index";
+import type { OutboundLink, InboundLink, Tag } from "@/db/index";
 
 /**
  * Links / backlinks sidebar for the item detail page (issue #26).
@@ -97,13 +97,31 @@ function Section({
 }
 
 export interface ItemSidebarProps {
+  tags: Tag[];
   outbound: OutboundLink[];
   inbound: InboundLink[];
 }
 
-export function ItemSidebar({ outbound, inbound }: ItemSidebarProps) {
+export function ItemSidebar({ tags, outbound, inbound }: ItemSidebarProps) {
   return (
     <div className="flex flex-col gap-6" data-testid="item-sidebar-content">
+      {tags.length > 0 ? (
+        <Section title="Tags" emptyText="No tags yet.">
+          <ul aria-label="Tags" className="flex flex-wrap items-center gap-1.5">
+            {tags.map((tag) => (
+              <li key={tag.id}>
+                <Link
+                  href={`/?tag=${encodeURIComponent(tag.name)}`}
+                  className="border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong rounded-sm border px-2 py-0.5 font-mono text-[0.7rem] tracking-wide transition-colors"
+                >
+                  #{tag.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
       <Section title="Links" emptyText="No outbound links yet.">
         {outbound.length > 0 ? (
           <ul className="flex flex-col gap-2">
