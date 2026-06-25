@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { getDb, contentItems } from "@/db/index";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
 
-import { BackButton } from "./back-button";
+import { DetailLayout } from "./detail-layout";
+import { ItemSidebar } from "./item-sidebar";
 import { MarkdownContent } from "./markdown-content";
 
 /**
@@ -17,8 +18,9 @@ import { MarkdownContent } from "./markdown-content";
  * (react-markdown + remark-gfm); everything else is server-rendered.
  *
  * Loading (`loading.tsx`) and not-found (`not-found.tsx`) states live
- * alongside this page. The links / backlinks sidebar is a separate
- * concern owned by issue #26.
+ * alongside this page. The links / backlinks sidebar (issue #26) is
+ * rendered by `ItemSidebar` inside the `DetailLayout` shell, which
+ * owns the show/hide toggle and the responsive two-column layout.
  *
  * Auth is enforced by the proxy (`src/proxy.ts`) for every non-public
  * route, so an unauthenticated visitor never reaches this server
@@ -171,18 +173,16 @@ export default async function ItemDetailPage({
   });
   if (!result) notFound();
 
-  const { item, tags } = result;
+  const { item, tags, links } = result;
   const badgeColor = typeColorClass(item.type);
   const badgeLabel = typeLabel(item.type);
 
   return (
-    <main
-      id="main-content"
-      data-testid="item-detail-page"
-      className="mx-auto flex w-full max-w-screen-md flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12"
+    <DetailLayout
+      sidebar={
+        <ItemSidebar outbound={links.outbound} inbound={links.inbound} />
+      }
     >
-      <BackButton fallbackHref="/" />
-
       <header className="flex flex-col gap-3">
         {/* Coloured type badge — the chip background is the type's
             design-system token; near-black text (text-background)
@@ -250,6 +250,6 @@ export default async function ItemDetailPage({
           </a>
         </p>
       ) : null}
-    </main>
+    </DetailLayout>
   );
 }

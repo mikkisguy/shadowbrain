@@ -42,7 +42,25 @@ afterEach(() => {
   router.refresh.mockReset();
 });
 
-function mockItem(type: string, metadata: string | null, content = "content") {
+type MockLinks = {
+  outbound?: Array<{
+    id: string;
+    link_type: string;
+    target: { id: string; title: string | null; type: string };
+  }>;
+  inbound?: Array<{
+    id: string;
+    link_type: string;
+    source: { id: string; title: string | null; type: string };
+  }>;
+};
+
+function mockItem(
+  type: string,
+  metadata: string | null,
+  content = "content",
+  links: MockLinks = {}
+) {
   mocks.findWithRelations.mockReturnValue({
     item: {
       id: "1",
@@ -59,6 +77,10 @@ function mockItem(type: string, metadata: string | null, content = "content") {
       updated_at: "2026-04-12T16:45:12.000Z",
     },
     tags: [],
+    links: {
+      outbound: links.outbound ?? [],
+      inbound: links.inbound ?? [],
+    },
   });
 }
 
@@ -252,5 +274,103 @@ describe("ItemDetailPage foundation (issue #25)", () => {
 
     const link = screen.getByRole("link", { name: "section" });
     expect(link).not.toHaveAttribute("target");
+  });
+});
+
+describe("ItemDetailPage links sidebar (issue #26)", () => {
+  it("renders empty states when there are no links or backlinks", async () => {
+    mockItem("note", null);
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    expect(screen.getByRole("heading", { name: "Links" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Backlinks" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("No outbound links yet.")).toBeInTheDocument();
+    expect(screen.getByText("No backlinks yet.")).toBeInTheDocument();
+  });
+
+  it("renders outbound links with title, link type, and a link to the item", async () => {
+    mockItem("note", null, "content", {
+      outbound: [
+        {
+          id: "l1",
+          link_type: "depends-on",
+          target: { id: "42", title: "Linked project", type: "project" },
+        },
+      ],
+    });
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    const link = screen.getByRole("link", { name: /Linked project/ });
+    expect(link).toHaveAttribute("href", "/item/42");
+    // kebab-case link type is shown as spaced words.
+    expect(screen.getByText("depends on")).toBeInTheDocument();
+  });
+
+  it("renders backlinks pointing at the source item", async () => {
+    mockItem("note", null, "content", {
+      inbound: [
+        {
+          id: "l2",
+          link_type: "references",
+          source: { id: "7", title: "Referring note", type: "note" },
+        },
+      ],
+    });
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    const link = screen.getByRole("link", { name: /Referring note/ });
+    expect(link).toHaveAttribute("href", "/item/7");
+  });
+
+  it("falls back to 'Untitled' for a linked item with no title", async () => {
+    mockItem("note", null, "content", {
+      outbound: [
+        {
+          id: "l3",
+          link_type: "related-to",
+          target: { id: "9", title: null, type: "note" },
+        },
+      ],
+    });
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    expect(screen.getByText("Untitled")).toBeInTheDocument();
+  });
+
+  it("toggles the sidebar open and closed", async () => {
+    const user = userEvent.setup();
+    mockItem("note", null);
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    const toggle = screen.getByTestId("sidebar-toggle");
+    const sidebar = screen.getByTestId("item-sidebar");
+
+    // matchMedia stub reports "no match" (mobile) → closed by default.
+    expect(sidebar.className).toContain("hidden");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(toggle);
+    expect(sidebar.className).not.toContain("hidden");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(toggle);
+    expect(sidebar.className).toContain("hidden");
+  });
+
+  it("persists the open state to sessionStorage", async () => {
+    const user = userEvent.setup();
+    mockItem("note", null);
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    await user.click(screen.getByTestId("sidebar-toggle"));
+    expect(sessionStorage.getItem("item.sidebarOpen")).toBe("true");
   });
 });

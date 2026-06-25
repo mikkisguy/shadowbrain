@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import type { VisibilityOptions } from "./content-items";
 
 export interface ContentLink {
   id: string;
@@ -7,6 +8,41 @@ export interface ContentLink {
   link_type: string;
   context: string | null;
   created_at: string;
+}
+
+/** A minimal reference to the content item on the other end of a link —
+ *  just what the item-detail sidebar (issue #26) needs to render a row
+ *  and link to it. */
+export interface LinkedItemRef {
+  id: string;
+  title: string | null;
+  type: string;
+}
+
+/** An outbound link (this item is the `source`) enriched with the
+ *  `target` item it points to. */
+export interface OutboundLink extends ContentLink {
+  target: LinkedItemRef;
+}
+
+/** An inbound link / backlink (this item is the `target`) enriched
+ *  with the `source` item that points at it. */
+export interface InboundLink extends ContentLink {
+  source: LinkedItemRef;
+}
+
+/** Raw join row shape returned by the enriched link queries before it
+ *  is reshaped into {@link OutboundLink} / {@link InboundLink}. */
+interface LinkJoinRow {
+  id: string;
+  source_id: string;
+  target_id: string;
+  link_type: string;
+  context: string | null;
+  created_at: string;
+  item_id: string;
+  item_title: string | null;
+  item_type: string;
 }
 
 export const contentLinks = {
@@ -43,6 +79,93 @@ export const contentLinks = {
   findByTarget: (db: Database.Database, targetId: string) => {
     const stmt = db.prepare("SELECT * FROM content_links WHERE target_id = ?");
     return stmt.all(targetId) as ContentLink[];
+  },
+
+  /**
+   * Outbound links from `sourceId`, each enriched with the `target`
+   * item it points to (id, title, type) so the caller can render a
+   * label and a link without a second round-trip per row.
+   *
+   * The join is INNER, so a link whose target is filtered out by the
+   * two-level visibility flags (issue #54) drops from the result
+   * entirely — a caller that did not opt in never learns a hidden /
+   * private item is linked. `includeHidden` / `includePrivate` default
+   * to `false`, mirroring the content-item read helpers. Rows are
+   * ordered newest-first for a stable display order.
+   */
+  findOutboundWithItems: (
+    db: Database.Database,
+    sourceId: string,
+    options: VisibilityOptions = {}
+  ): OutboundLink[] => {
+    const includeHidden = options.includeHidden ?? false;
+    const includePrivate = options.includePrivate ?? false;
+    const stmt = db.prepare(`
+      SELECT
+        cl.id, cl.source_id, cl.target_id, cl.link_type, cl.context,
+        cl.created_at,
+        ci.id AS item_id, ci.title AS item_title, ci.type AS item_type
+      FROM content_links cl
+      JOIN content_items ci ON ci.id = cl.target_id
+      WHERE cl.source_id = ?
+        AND (ci.is_hidden = 0 OR ?)
+        AND (ci.is_private = 0 OR ?)
+      ORDER BY cl.created_at DESC, cl.id
+    `);
+    const rows = stmt.all(
+      sourceId,
+      includeHidden ? 1 : 0,
+      includePrivate ? 1 : 0
+    ) as LinkJoinRow[];
+    return rows.map((r) => ({
+      id: r.id,
+      source_id: r.source_id,
+      target_id: r.target_id,
+      link_type: r.link_type,
+      context: r.context,
+      created_at: r.created_at,
+      target: { id: r.item_id, title: r.item_title, type: r.item_type },
+    }));
+  },
+
+  /**
+   * Inbound links / backlinks to `targetId`, each enriched with the
+   * `source` item that points at it. Same INNER-join visibility
+   * semantics as {@link findOutboundWithItems}.
+   */
+  findInboundWithItems: (
+    db: Database.Database,
+    targetId: string,
+    options: VisibilityOptions = {}
+  ): InboundLink[] => {
+    const includeHidden = options.includeHidden ?? false;
+    const includePrivate = options.includePrivate ?? false;
+    const stmt = db.prepare(`
+      SELECT
+        cl.id, cl.source_id, cl.target_id, cl.link_type, cl.context,
+        cl.created_at,
+        ci.id AS item_id, ci.title AS item_title, ci.type AS item_type
+      FROM content_links cl
+      JOIN content_items ci ON ci.id = cl.source_id
+      WHERE cl.target_id = ?
+        AND (ci.is_hidden = 0 OR ?)
+        AND (ci.is_private = 0 OR ?)
+      ORDER BY cl.created_at DESC, cl.id
+    `);
+    const rows = stmt.all(
+      targetId,
+      includeHidden ? 1 : 0,
+      includePrivate ? 1 : 0
+    ) as LinkJoinRow[];
+    return rows.map((r) => ({
+      id: r.id,
+      source_id: r.source_id,
+      target_id: r.target_id,
+      link_type: r.link_type,
+      context: r.context,
+      created_at: r.created_at,
+      source: { id: r.item_id, title: r.item_title, type: r.item_type },
+    }));
   },
 
   /**

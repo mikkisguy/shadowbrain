@@ -346,6 +346,12 @@ export const contentItems = {
    * Same visibility rules as `findById`: the item is returned only if
    * every set visibility flag is covered by the corresponding opt-in.
    * Otherwise the function returns `null` (treated as 404 by the route).
+   *
+   * `links.outbound` / `links.inbound` are enriched with the connected
+   * item (id, title, type) so the item-detail sidebar (issue #26) can
+   * render a label and a link in one pass. The same `options` gate the
+   * connected items: a link to a hidden / private item the caller did
+   * not opt into is omitted (see `contentLinks.findOutboundWithItems`).
    */
   findWithRelations: (
     db: Database.Database,
@@ -356,8 +362,8 @@ export const contentItems = {
     if (!item) return null;
 
     const tags = contentTags.findByContent(db, id);
-    const outbound = contentLinks.findBySource(db, id);
-    const inbound = contentLinks.findByTarget(db, id);
+    const outbound = contentLinks.findOutboundWithItems(db, id, options);
+    const inbound = contentLinks.findInboundWithItems(db, id, options);
 
     return { item, tags, links: { outbound, inbound } };
   },

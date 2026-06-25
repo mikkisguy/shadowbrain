@@ -17,7 +17,12 @@ export { auditLogs } from "./repositories/audit-logs";
 export type { ContentItem } from "./repositories/content-items";
 export { contentItems } from "./repositories/content-items";
 
-export type { ContentLink } from "./repositories/content-links";
+export type {
+  ContentLink,
+  LinkedItemRef,
+  OutboundLink,
+  InboundLink,
+} from "./repositories/content-links";
 export { contentLinks } from "./repositories/content-links";
 
 export type { Tag, TagWithCount } from "./repositories/tags";
