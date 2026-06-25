@@ -84,6 +84,7 @@ export function TagsPage() {
           </h1>
           <Button
             type="button"
+            variant="inverted"
             onClick={() => setIsCreateOpen(true)}
             data-testid="new-tag-button"
           >

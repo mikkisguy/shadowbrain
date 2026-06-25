@@ -222,6 +222,7 @@ function TagForm({
         </DialogClose>
         <Button
           type="submit"
+          variant="inverted"
           disabled={isSubmitting}
           data-testid="tag-form-submit"
         >
