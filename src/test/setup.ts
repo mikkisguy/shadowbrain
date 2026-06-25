@@ -28,6 +28,26 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   (globalThis as any).ResizeObserver = ResizeObserverPolyfill;
 }
 
+// jsdom does not implement `window.matchMedia`. Components that read it
+// for a responsive default (e.g. the item-detail sidebar in
+// DetailLayout) would throw on mount without this stub. It reports
+// "does not match" by default — i.e. the mobile / narrow viewport —
+// which keeps responsive-default tests deterministic. A test that needs
+// the desktop branch can override `window.matchMedia` for its scope.
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
+  window.matchMedia = (query: string): MediaQueryList =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+}
+
 // `cmdk` calls `Element.prototype.scrollIntoView` to keep
 // the keyboard-selected item in view. jsdom does not
 // implement scroll/layout, so we polyfill it as a no-op

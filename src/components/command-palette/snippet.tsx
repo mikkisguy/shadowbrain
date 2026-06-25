@@ -31,35 +31,9 @@ export function renderSnippet(snippet: string | null): React.ReactNode {
 }
 
 /**
- * Map a content-item `type` to the matching design-system
- * color token. Falls back to `--type-raw` for unknown types
- * so the palette still renders something. Each token is
- * already declared in `src/app/globals.css`.
+ * Map a content-item `type` to the matching design-system colour
+ * utility (`bg-type-*`). Delegates to the canonical `typeColorClass`
+ * in `src/lib/content-types.ts`; re-exported here under the legacy
+ * `typeBadgeClasses` name so existing importers are undisturbed.
  */
-export function typeBadgeClasses(type: string): string {
-  switch (type) {
-    case "raw_text":
-      return "bg-type-raw";
-    case "image":
-      return "bg-type-image";
-    case "note":
-      return "bg-type-note";
-    case "bookmark":
-      return "bg-type-bookmark";
-    case "journal":
-      return "bg-type-journal";
-    case "question":
-      return "bg-type-question";
-    case "project":
-      return "bg-type-project";
-    case "person":
-      return "bg-type-person";
-    case "event":
-      return "bg-type-event";
-    case "dream":
-      return "bg-type-dream";
-    case "raw":
-    default:
-      return "bg-type-raw";
-  }
-}
+export { typeColorClass as typeBadgeClasses } from "@/lib/content-types";

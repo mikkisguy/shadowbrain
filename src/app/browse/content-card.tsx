@@ -44,6 +44,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { typeColorClass, typeLabel } from "@/lib/content-types";
 import { parseSnippet } from "@/lib/snippet";
 import {
   Tooltip,
@@ -78,34 +79,6 @@ export interface ContentCardProps {
    */
   variant?: "pill" | "larger-dot";
 }
-
-const TYPE_DOT_CLASS: Record<string, string> = {
-  note: "bg-type-note",
-  journal: "bg-type-journal",
-  bookmark: "bg-type-bookmark",
-  question: "bg-type-question",
-  project: "bg-type-project",
-  person: "bg-type-person",
-  event: "bg-type-event",
-  dream: "bg-type-dream",
-  raw: "bg-type-raw",
-  raw_text: "bg-type-raw",
-  image: "bg-type-image",
-};
-
-const TYPE_LABEL: Record<string, string> = {
-  note: "Note",
-  journal: "Journal",
-  bookmark: "Bookmark",
-  question: "Question",
-  project: "Project",
-  person: "Person",
-  event: "Event",
-  dream: "Dream",
-  raw: "Raw",
-  raw_text: "Raw",
-  image: "Image",
-};
 
 const RELATIVE = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
@@ -209,8 +182,8 @@ export function ContentCard({
   onTagClick,
   variant = "larger-dot",
 }: ContentCardProps) {
-  const dotClass = TYPE_DOT_CLASS[item.type] ?? "bg-type-raw";
-  const typeLabel = TYPE_LABEL[item.type] ?? item.type;
+  const dotClass = typeColorClass(item.type);
+  const label = typeLabel(item.type);
   // Prefer an explicit `tags` prop (the feed may pre-resolve them);
   // fall back to the tags attached to the item by the API.
   const tagsList = tags ?? item.tags;
@@ -294,7 +267,7 @@ export function ContentCard({
                 "text-background"
               )}
             >
-              {typeLabel}
+              {label}
             </span>
           ) : (
             // `larger-dot` variant: a slightly chunkier dot
@@ -306,7 +279,7 @@ export function ContentCard({
                 aria-hidden
                 className={cn("size-2.5 rounded-full", dotClass)}
               />
-              {typeLabel}
+              {label}
             </span>
           )}
           <Tooltip>
@@ -395,7 +368,7 @@ export function ContentCard({
       <Link
         href={`/item/${item.id}`}
         className="focus-visible:ring-ring absolute inset-0 z-10 rounded-sm focus-visible:ring-2 focus-visible:outline-none"
-        aria-label={`Open ${item.title ?? typeLabel}`}
+        aria-label={`Open ${item.title ?? label}`}
       >
         <span className="sr-only">Open item</span>
       </Link>

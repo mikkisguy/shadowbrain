@@ -1,24 +1,25 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
 import { getDb, contentItems } from "@/db/index";
+import { typeColorClass, typeLabel } from "@/lib/content-types";
+
+import { DetailLayout } from "./detail-layout";
+import { ItemSidebar } from "./item-sidebar";
+import { MarkdownContent } from "./markdown-content";
 
 /**
  * Item detail page (`/item/[id]`).
  *
- * Minimal destination for the Browse card's click-through (issue #22).
- * The card navigates here via a stretched link; this page renders the
- * item's identity (type, title, content, tags, timestamps) so the link
- * is never a dead end.
+ * The full detail experience (issue #25): a coloured type badge, the
+ * title, markdown-rendered content, tags, and metadata (created /
+ * updated / source, plus the type-specific metadata section). The
+ * body is rendered by the `MarkdownContent` client component
+ * (react-markdown + remark-gfm); everything else is server-rendered.
  *
- * Scope note: issue #25 ("Item detail page foundation") owns the full
- * detail experience — markdown rendering via react-markdown, a
- * dedicated loading state, the 404 styling, and the sidebar with
- * links / backlinks (#26). This stub intentionally renders the content
- * as plain preformatted text and omits the sidebar so #25 can replace
- * it without unpicking bespoke work. When #25 lands, this page is the
- * starting point it transforms.
+ * Loading (`loading.tsx`) and not-found (`not-found.tsx`) states live
+ * alongside this page. The links / backlinks sidebar (issue #26) is
+ * rendered by `ItemSidebar` inside the `DetailLayout` shell, which
+ * owns the show/hide toggle and the responsive two-column layout.
  *
  * Auth is enforced by the proxy (`src/proxy.ts`) for every non-public
  * route, so an unauthenticated visitor never reaches this server
@@ -27,38 +28,6 @@ import { getDb, contentItems } from "@/db/index";
  * the admin's `?include_hidden=1` / `?include_private=1` opt-in on the
  * API.
  */
-
-/** Type-token dot classes, mirroring the Browse card's mapping. Kept
- *  local (not imported from the client card component) so this server
- *  component has no client-module dependency. #25 may extract a shared
- *  token map. */
-const TYPE_DOT_CLASS: Record<string, string> = {
-  note: "bg-type-note",
-  journal: "bg-type-journal",
-  bookmark: "bg-type-bookmark",
-  question: "bg-type-question",
-  project: "bg-type-project",
-  person: "bg-type-person",
-  event: "bg-type-event",
-  dream: "bg-type-dream",
-  raw: "bg-type-raw",
-  raw_text: "bg-type-raw",
-  image: "bg-type-image",
-};
-
-const TYPE_LABEL: Record<string, string> = {
-  note: "Note",
-  journal: "Journal",
-  bookmark: "Bookmark",
-  question: "Question",
-  project: "Project",
-  person: "Person",
-  event: "Event",
-  dream: "Dream",
-  raw: "Raw",
-  raw_text: "Raw",
-  image: "Image",
-};
 
 const ABSOLUTE = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
@@ -203,30 +172,29 @@ export default async function ItemDetailPage({
   });
   if (!result) notFound();
 
-  const { item, tags } = result;
-  const dotClass = TYPE_DOT_CLASS[item.type] ?? "bg-type-raw";
-  const typeLabel = TYPE_LABEL[item.type] ?? item.type;
+  const { item, tags, links } = result;
+  const badgeColor = typeColorClass(item.type);
+  const badgeLabel = typeLabel(item.type);
 
   return (
-    <main
-      id="main-content"
-      data-testid="item-detail-page"
-      className="mx-auto flex w-full max-w-screen-md flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12"
+    <DetailLayout
+      sidebar={
+        <ItemSidebar
+          tags={tags}
+          outbound={links.outbound}
+          inbound={links.inbound}
+        />
+      }
     >
-      <div>
-        <Link
-          href="/"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 font-sans text-sm transition-colors"
-        >
-          <ArrowLeft className="size-3.5" />
-          Back to Browse
-        </Link>
-      </div>
-
       <header className="flex flex-col gap-3">
-        <span className="text-muted-foreground inline-flex items-center gap-2 font-mono text-[0.7rem] font-medium tracking-[0.16em] uppercase">
-          <span aria-hidden className={cnDot(dotClass)} />
-          {typeLabel}
+        {/* Coloured type badge — the chip background is the type's
+            design-system token; near-black text (text-background)
+            reads cleanly on the saturated type colours. */}
+        <span
+          data-testid="item-type-badge"
+          className={`${badgeColor} text-background inline-flex w-fit items-center rounded-sm px-2 py-0.5 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase`}
+        >
+          {badgeLabel}
         </span>
         {item.title ? (
           <h1 className="text-foreground font-serif text-3xl font-semibold tracking-[-0.01em] sm:text-4xl">
@@ -253,26 +221,7 @@ export default async function ItemDetailPage({
         </dl>
       </header>
 
-      {/* Plain-text content. #25 replaces this with react-markdown
-          (code blocks, wikilinks, the works). */}
-      <div className="text-foreground font-sans text-base leading-relaxed break-words whitespace-pre-wrap">
-        {item.content}
-      </div>
-
-      {tags.length > 0 ? (
-        <ul aria-label="Tags" className="flex flex-wrap items-center gap-1.5">
-          {tags.map((tag) => (
-            <li key={tag.id}>
-              <Link
-                href={`/?tag=${encodeURIComponent(tag.name)}`}
-                className="border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong rounded-sm border px-2 py-0.5 font-mono text-[0.7rem] tracking-wide transition-colors"
-              >
-                #{tag.name}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <MarkdownContent content={item.content} />
 
       {/* Type-specific metadata display (issue #103) */}
       {renderMetadataSection(item.type, item.metadata)}
@@ -289,13 +238,6 @@ export default async function ItemDetailPage({
           </a>
         </p>
       ) : null}
-    </main>
+    </DetailLayout>
   );
-}
-
-/** Tiny helper so the dot class string composes cleanly with the
- *  shared shape (`size-2.5 rounded-full <token>`). Keeps the JSX
- *  readable without a full `cn` import for one element. */
-function cnDot(token: string): string {
-  return `size-2.5 rounded-full ${token}`;
 }
