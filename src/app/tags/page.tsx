@@ -1,10 +1,14 @@
-import { ComingSoonPage } from "@/components/layout/coming-soon-page";
+import { TagsPage } from "./tags-page";
 
-export default function TagsPage() {
-  return (
-    <ComingSoonPage
-      label="Tags"
-      description="Tag management — list, rename, merge, and delete the labels that organise your content."
-    />
-  );
+/**
+ * Tags page (`/tags`).
+ *
+ * Phase 3 — Web UI Core · issue #27. A thin server shell that
+ * delegates to the `TagsPage` client component, which owns the
+ * list-fetch lifecycle and the create / rename / delete dialogs.
+ * The proxy (`src/proxy.ts`) enforces auth on `/tags`, so an
+ * unauthenticated visitor never reaches this component.
+ */
+export default function Page() {
+  return <TagsPage />;
 }

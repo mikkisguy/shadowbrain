@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Newsreader } from "next/font/google";
+import { Geist, JetBrains_Mono, Newsreader } from "next/font/google";
 import { cookies } from "next/headers";
 
 import { SkipToContent } from "@/components/layout/skip-to-content";
@@ -14,14 +14,18 @@ import "./globals.css";
 
 /**
  * Three typefaces per the design system spec:
- *   - Inter          — sans, primary UI (400, 500, 700)
+ *   - Geist          — sans, primary UI (400, 500, 700)
  *   - Newsreader     — serif, brand moments (400, 600)
  *   - JetBrains Mono — mono, code/data (400, 500)
  *
  * All three are loaded via `next/font/google` for zero-runtime cost
  * and exposed as CSS variables consumed by Tailwind's font utilities.
+ * Geist is the technical grotesque that bridges the literary serif and
+ * the JetBrains mono — it shares its design language with Geist Mono,
+ * so the UI sans sits naturally beside the mono accents on buttons,
+ * dialogs, and data markers.
  */
-const inter = Inter({
+const geist = Geist({
   subsets: ["latin"],
   weight: ["400", "500", "700"],
   variable: "--font-sans",
@@ -74,7 +78,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${newsreader.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${geist.variable} ${newsreader.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="bg-background text-foreground flex min-h-full flex-col">
         {/*

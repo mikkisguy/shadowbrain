@@ -34,7 +34,7 @@ vi.mock("next/headers", () => ({
 }));
 
 vi.mock("next/font/google", () => ({
-  Inter: () => ({ variable: "--font-sans", className: null }),
+  Geist: () => ({ variable: "--font-sans", className: null }),
   Newsreader: () => ({ variable: "--font-serif", className: null }),
   JetBrains_Mono: () => ({ variable: "--font-mono", className: null }),
 }));

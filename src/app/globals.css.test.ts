@@ -74,7 +74,7 @@ describe("design system — globals.css tokens", () => {
     }
   });
 
-  it("exposes font CSS variables for Inter, Newsreader, and JetBrains Mono", () => {
+  it("exposes font CSS variables for Geist, Newsreader, and JetBrains Mono", () => {
     expect(css).toMatch(/--font-sans:\s*var\(--font-sans\)/);
     expect(css).toMatch(/--font-serif:\s*var\(--font-serif\)/);
     expect(css).toMatch(/--font-mono:\s*var\(--font-mono\)/);
