@@ -94,7 +94,7 @@ accent on detail view. See the design system spec for the full rule.
 
 | Family         | Role                 | Weights       | Source                              |
 | -------------- | -------------------- | ------------- | ----------------------------------- |
-| Inter          | Sans, primary UI     | 400, 500, 700 | Google Fonts via `next/font/google` |
+| Geist          | Sans, primary UI     | 400, 500, 700 | Google Fonts via `next/font/google` |
 | Newsreader     | Serif, brand moments | 400, 600      | Google Fonts via `next/font/google` |
 | JetBrains Mono | Mono, code/data      | 400, 500      | Google Fonts via `next/font/google` |
 

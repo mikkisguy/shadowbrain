@@ -101,7 +101,12 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "bg-muted/50 -mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t p-4 sm:flex-row sm:justify-end",
+        // Dialog buttons wear the JetBrains-mono "tracked label"
+        // treatment regardless of their variant (the primary `inverted`
+        // confirm, the `outline` Cancel, a `destructive` Delete), so the
+        // whole footer reads as one deliberate mono control row. Scoped
+        // to the footer's buttons so it never leaks to body content.
+        "bg-muted/50 -mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t p-4 sm:flex-row sm:justify-end [&_button]:font-mono [&_button]:text-xs [&_button]:font-normal [&_button]:tracking-[0.12em] [&_button]:capitalize",
         className
       )}
       {...props}
@@ -120,7 +125,10 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-base leading-none font-medium", className)}
+      className={cn(
+        "mb-2 font-mono text-base leading-none font-medium tracking-[0.01em]",
+        className
+      )}
       {...props}
     />
   );
