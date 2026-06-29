@@ -10,6 +10,8 @@ import { GET, PATCH } from "@/app/api/settings/route";
 import { POST as POST_TEST } from "@/app/api/settings/test-connection/route";
 import { GET as GET_SYSTEM_INFO } from "@/app/api/settings/system-info/route";
 import { GET as GET_EXPORT } from "@/app/api/export/route";
+import { GET as GET_OPENROUTER_MODELS } from "@/app/api/settings/openrouter/models/route";
+import { GET as GET_PROVIDER_MODELS } from "@/app/api/settings/provider-models/route";
 
 describe("/api/settings", () => {
   beforeEach(() => {
@@ -139,5 +141,76 @@ describe("/api/settings", () => {
     expect(res.headers.get("Content-Type")).toContain("application/json");
     const body = await res.text();
     expect(body.startsWith("[")).toBe(true);
+  });
+
+  it("records last_backup_at on a successful export", async () => {
+    const res = await GET_EXPORT(
+      await authedGet("http://localhost/api/export?format=json")
+    );
+    expect(res.status).toBe(200);
+
+    const db = getDb();
+    const lastBackupAt = settings.get(db, "last_backup_at");
+    expect(lastBackupAt).not.toBeNull();
+    expect(() => new Date(lastBackupAt as string).toISOString()).not.toThrow();
+  });
+
+  describe("unauthenticated access", () => {
+    it("rejects GET /api/settings with 401", async () => {
+      const res = await GET(new Request("http://localhost/api/settings"));
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects PATCH /api/settings with 401", async () => {
+      const res = await PATCH(
+        new Request("http://localhost/api/settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ai_model: "openai/gpt-4" }),
+        })
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects POST /api/settings/test-connection with 401", async () => {
+      const res = await POST_TEST(
+        new Request("http://localhost/api/settings/test-connection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: "hermes" }),
+        })
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects GET /api/settings/system-info with 401", async () => {
+      const res = await GET_SYSTEM_INFO(
+        new Request("http://localhost/api/settings/system-info")
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects GET /api/settings/openrouter/models with 401", async () => {
+      const res = await GET_OPENROUTER_MODELS(
+        new Request("http://localhost/api/settings/openrouter/models")
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects GET /api/settings/provider-models with 401", async () => {
+      const res = await GET_PROVIDER_MODELS(
+        new Request(
+          "http://localhost/api/settings/provider-models?provider=opencode-go"
+        )
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects GET /api/export with 401", async () => {
+      const res = await GET_EXPORT(
+        new Request("http://localhost/api/export?format=json")
+      );
+      expect(res.status).toBe(401);
+    });
   });
 });

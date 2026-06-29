@@ -1,5 +1,10 @@
 import type { PublicSettings } from "@/lib/settings/public";
 
+// The writable settings shape is mirrored in three places that must stay in
+// sync when a setting is added or removed:
+//   1. `SettingsDraft` below (the client draft shape),
+//   2. `DRAFT_KEYS` / `SECRET_KEYS` in `./dirty.ts` (dirty-tracking + patch),
+//   3. `patchSchema` in `src/app/api/settings/route.ts` (server validation).
 export type SettingsDraft = {
   openrouter_api_key: string;
   ai_model: string;

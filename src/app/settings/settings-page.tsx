@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { AiFeaturesSection } from "./ai-features-section";
@@ -33,6 +33,13 @@ export function SettingsPage() {
     if (!saved || !draft) return false;
     return isSettingsDirty(saved, draft, clearedSecrets);
   }, [saved, draft, clearedSecrets]);
+
+  // Auto-dismiss the "Settings saved." confirmation so it doesn't linger.
+  useEffect(() => {
+    if (!saveMessage) return;
+    const timer = setTimeout(() => setSaveMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [saveMessage]);
 
   async function handleSave() {
     if (!saved || !draft) return;

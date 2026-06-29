@@ -1,4 +1,4 @@
-import { getDb, contentItems } from "@/db/index";
+import { getDb, contentItems, settings } from "@/db/index";
 import { errorResponse, logServerError } from "@/lib/api";
 import { requireAuthenticated } from "@/lib/auth/guard";
 import { log } from "@/lib/logger";
@@ -42,7 +42,13 @@ export async function GET(request: Request) {
     }
 
     const items = listAllItems();
-    const exportedAt = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const exportedAt = now.toISOString().slice(0, 10);
+
+    // A successful export is the closest thing to a backup the app
+    // performs today, so record it as the last backup timestamp. The
+    // System info card surfaces this value.
+    settings.set(getDb(), "last_backup_at", now.toISOString());
 
     log("info", "content exported", {
       event: "export.content",

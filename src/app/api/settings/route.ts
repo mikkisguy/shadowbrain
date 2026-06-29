@@ -13,6 +13,9 @@ import { toPublicSettings } from "@/lib/settings/public";
 
 const secretPatchValue = z.union([z.string(), z.null()]);
 
+// Keep in sync with `SettingsDraft` in `src/app/settings/types.ts` and
+// `DRAFT_KEYS` in `src/app/settings/dirty.ts` when adding or removing a
+// setting. `.strict()` rejects any key not listed here.
 const patchSchema = z
   .object({
     openrouter_api_key: secretPatchValue.optional(),
@@ -70,6 +73,10 @@ export async function PATCH(request: Request) {
       return errorResponse("VALIDATION_ERROR", "No settings to update", 400);
     }
 
+    // Defense-in-depth against schema drift: `patchSchema` is `.strict()`
+    // and only lists writable keys, so a parsed body can't currently carry
+    // an unknown or read-only key. These guards fail closed if someone later
+    // adds a read-only key (e.g. `last_backup_at`) to the schema by mistake.
     for (const [key] of entries) {
       if (!isSettingsKey(key)) {
         return errorResponse("VALIDATION_ERROR", "Invalid input", 400, {

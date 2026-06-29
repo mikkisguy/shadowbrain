@@ -1,5 +1,7 @@
 import type { SettingsDraft, SettingsSnapshot } from "./types";
 
+// Keep in sync with `SettingsDraft` in `./types.ts` and `patchSchema` in
+// `src/app/api/settings/route.ts` when adding or removing a setting.
 const DRAFT_KEYS: Array<keyof SettingsDraft> = [
   "openrouter_api_key",
   "ai_model",

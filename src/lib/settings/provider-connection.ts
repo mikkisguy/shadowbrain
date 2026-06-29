@@ -1,6 +1,15 @@
 import type Database from "better-sqlite3";
 import { getSettingValue } from "@/lib/settings/public";
 
+// NOTE: SSRF policy exemption. The fetches below intentionally do NOT run
+// through `validateFetchUrl` (src/lib/ssrf.ts). The target base URLs are
+// admin-only chat-provider endpoints saved via the authenticated settings
+// route, and the defaults point at local services (e.g. Hermes at
+// `http://localhost:8642/v1`) that `validateFetchUrl` would block by design.
+// These are trusted, operator-configured destinations — not arbitrary
+// user-supplied URLs — so the private-range guard does not apply. See
+// AGENTS.md (SSRF Protection) for the carve-out.
+
 export type ChatProvider = "hermes" | "opencode-go";
 
 export type ProviderConnectionResult =
