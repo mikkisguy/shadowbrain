@@ -251,6 +251,36 @@
     appearance: none;
   }
 
+  /* Custom scrollbars — match the editorial dark theme instead of the
+   * OS default. A cream thumb at the `--border-strong` opacity floats on
+   * a transparent track (the 2px transparent border + padding-box clip
+   * gives the pill inset breathing room) and brightens to
+   * `--muted-foreground` on hover. Firefox uses the standard
+   * `scrollbar-*` properties; WebKit/Blink uses the pseudo-elements. */
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   /* Respect the user's motion preference. The spec's 150ms ease-out
    * is the default; users who have asked the OS to reduce motion
    * get instant transitions and no animations. */

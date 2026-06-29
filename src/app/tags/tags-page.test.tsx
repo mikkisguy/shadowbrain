@@ -20,6 +20,8 @@ const refresh = vi.fn();
 const createTag = vi.fn();
 const renameTag = vi.fn();
 const deleteTag = vi.fn();
+const mergeTag = vi.fn();
+const deleteUnusedTags = vi.fn();
 
 const hookValues: {
   tags: TagWithCount[];
@@ -41,6 +43,9 @@ vi.mock("./api", () => ({
   createTag: (name: string) => createTag(name),
   renameTag: (id: string, name: string) => renameTag(id, name),
   deleteTag: (id: string) => deleteTag(id),
+  mergeTag: (sourceId: string, targetId: string) =>
+    mergeTag(sourceId, targetId),
+  deleteUnusedTags: () => deleteUnusedTags(),
 }));
 
 function tag(name: string, count = 0): TagWithCount {
@@ -52,6 +57,8 @@ beforeEach(() => {
   createTag.mockReset().mockResolvedValue(undefined);
   renameTag.mockReset().mockResolvedValue(undefined);
   deleteTag.mockReset().mockResolvedValue(undefined);
+  mergeTag.mockReset().mockResolvedValue(undefined);
+  deleteUnusedTags.mockReset().mockResolvedValue({ deleted: 0 });
   hookValues.tags = [];
   hookValues.status = "success";
   hookValues.error = null;
@@ -209,6 +216,68 @@ describe("TagsPage", () => {
 
     await user.click(screen.getByTestId("delete-tag-confirm"));
     await waitFor(() => expect(deleteTag).toHaveBeenCalledWith("alpha"));
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("filters tags by search query", async () => {
+    const user = userEvent.setup();
+    hookValues.tags = [tag("alpha"), tag("beta"), tag("gamma")];
+    render(<TagsPage />);
+
+    await user.type(screen.getByTestId("tags-search"), "alp");
+    expect(screen.getAllByTestId("tag-row")).toHaveLength(1);
+    expect(screen.getByText("alpha")).toBeInTheDocument();
+    expect(screen.queryByText("beta")).not.toBeInTheDocument();
+  });
+
+  it("shows a no-matches state when search finds nothing", async () => {
+    const user = userEvent.setup();
+    hookValues.tags = [tag("alpha")];
+    render(<TagsPage />);
+
+    await user.type(screen.getByTestId("tags-search"), "zzz");
+    expect(screen.getByTestId("tags-no-matches")).toBeInTheDocument();
+    expect(screen.queryByTestId("tags-empty")).not.toBeInTheDocument();
+  });
+
+  it("filters to unused tags only", async () => {
+    const user = userEvent.setup();
+    hookValues.tags = [tag("alpha", 2), tag("beta", 0), tag("gamma", 0)];
+    render(<TagsPage />);
+
+    await user.click(screen.getByTestId("filter-unused"));
+    const names = screen
+      .getAllByTestId("tag-row")
+      .map((row) => within(row).getByText(/beta|gamma/).textContent);
+    expect(names).toEqual(["beta", "gamma"]);
+  });
+
+  it("shows delete-unused when unused tags exist and confirms bulk delete", async () => {
+    const user = userEvent.setup();
+    hookValues.tags = [tag("alpha", 1), tag("beta", 0)];
+    render(<TagsPage />);
+
+    expect(screen.getByTestId("delete-unused-button")).toHaveTextContent(
+      "Delete unused (1)"
+    );
+    await user.click(screen.getByTestId("delete-unused-button"));
+    await user.click(screen.getByTestId("delete-unused-tags-confirm"));
+
+    await waitFor(() => expect(deleteUnusedTags).toHaveBeenCalled());
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("opens the merge dialog and merges tags", async () => {
+    const user = userEvent.setup();
+    hookValues.tags = [tag("alpha", 3), tag("beta", 1)];
+    render(<TagsPage />);
+
+    await user.click(screen.getAllByTestId("tag-merge-button")[0]);
+    expect(screen.getByTestId("merge-tag-dialog")).toBeInTheDocument();
+    expect(screen.getByTestId("merge-tag-dialog")).toHaveTextContent("3 items");
+
+    await user.click(screen.getByTestId("merge-tag-confirm"));
+    await waitFor(() => expect(mergeTag).toHaveBeenCalledWith("alpha", "beta"));
     expect(refresh).toHaveBeenCalled();
   });
 });

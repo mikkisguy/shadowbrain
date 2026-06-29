@@ -118,3 +118,35 @@ export async function deleteTag(id: string): Promise<void> {
   });
   if (!response.ok) await throwForResponse(response);
 }
+
+/** Delete every tag with zero usages. */
+export async function deleteUnusedTags(): Promise<{ deleted: number }> {
+  const response = await fetch("/api/tags/delete-unused", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) await throwForResponse(response);
+  return (await response.json()) as { deleted: number };
+}
+
+/** Merge `sourceId` into `targetId`. Resolves with the updated target tag. */
+export async function mergeTag(
+  sourceId: string,
+  targetId: string
+): Promise<TagWithCount> {
+  const response = await fetch(
+    `/api/tags/${encodeURIComponent(sourceId)}/merge`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ targetId }),
+    }
+  );
+  if (!response.ok) await throwForResponse(response);
+  return (await response.json()) as TagWithCount;
+}

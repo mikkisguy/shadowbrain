@@ -6,7 +6,9 @@ import {
   TagsApiError,
   createTag,
   deleteTag,
+  deleteUnusedTags,
   fetchTags,
+  mergeTag,
   renameTag,
 } from "./api";
 
@@ -154,5 +156,48 @@ describe("deleteTag", () => {
   it("throws a TagsApiError on failure", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({}, { status: 404 }));
     await expect(deleteTag("missing")).rejects.toBeInstanceOf(TagsApiError);
+  });
+});
+
+describe("deleteUnusedTags", () => {
+  it("POSTs /api/tags/delete-unused and returns the deleted count", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ deleted: 2 }));
+    const result = await deleteUnusedTags();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/tags/delete-unused",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(result.deleted).toBe(2);
+  });
+});
+
+describe("mergeTag", () => {
+  it("POSTs /api/tags/[id]/merge with the target id", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: "beta",
+        name: "beta",
+        color: null,
+        created_at: "x",
+        count: 4,
+      })
+    );
+
+    const result = await mergeTag("alpha", "beta");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/tags/alpha/merge",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ targetId: "beta" }),
+      })
+    );
+    expect(result.count).toBe(4);
+  });
+
+  it("encodes the source id in the URL", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({}));
+    await mergeTag("a/b", "c");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/tags/a%2Fb/merge");
   });
 });
