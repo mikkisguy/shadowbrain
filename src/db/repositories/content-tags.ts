@@ -38,6 +38,22 @@ export const contentTags = {
    *
    *  Names are ordered alphabetically (`tags.name`) so the card's
    *  tag strip is deterministic across requests. */
+  /**
+   * Move every `content_tags` row from `fromTagId` to `toTagId`.
+   * Rows where the target already tags the item are skipped via
+   * `UPDATE OR IGNORE` (PK is `(content_id, tag_id)`); any leftover
+   * source rows are removed in a follow-up DELETE.
+   */
+  repointTag: (db: Database.Database, fromTagId: string, toTagId: string) => {
+    const update = db.prepare(
+      "UPDATE OR IGNORE content_tags SET tag_id = ? WHERE tag_id = ?"
+    );
+    const remove = db.prepare("DELETE FROM content_tags WHERE tag_id = ?");
+    const result = update.run(toTagId, fromTagId);
+    remove.run(fromTagId);
+    return { changes: result.changes };
+  },
+
   findNamesByContentIds: (
     db: Database.Database,
     contentIds: readonly string[]

@@ -8,6 +8,8 @@ import {
 import { getDb, contentItems, contentTags, tags } from "@/db/index";
 import { GET, POST } from "@/app/api/tags/route";
 import { PATCH, DELETE } from "@/app/api/tags/[id]/route";
+import { POST as POST_MERGE } from "@/app/api/tags/[id]/merge/route";
+import { POST as POST_DELETE_UNUSED } from "@/app/api/tags/delete-unused/route";
 
 const NOW = () => new Date().toISOString();
 
@@ -375,5 +377,232 @@ describe("/api/tags/[id]", () => {
       { params: Promise.resolve({ id: created.id }) }
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /api/tags/[id]/merge", () => {
+  beforeEach(() => {
+    cleanupTestDb();
+    createTestDb().close();
+  });
+
+  afterEach(() => {
+    cleanupTestDb();
+  });
+
+  it("re-points content_tags from source to target and deletes the source", async () => {
+    const source = await createTag("alpha");
+    const target = await createTag("beta");
+    const itemA = makeContentItem();
+    const itemB = makeContentItem();
+    const db = getDb();
+    const now = NOW();
+    contentTags.addTag(db, itemA, source.id, now);
+    contentTags.addTag(db, itemB, source.id, now);
+
+    const res = await POST_MERGE(
+      await authedRequest(`http://localhost/api/tags/${source.id}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId: target.id }),
+      }),
+      { params: Promise.resolve({ id: source.id }) }
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.id).toBe(target.id);
+    expect(json.name).toBe("beta");
+    expect(json.count).toBe(2);
+
+    expect(tags.findById(db, source.id)).toBeUndefined();
+    const itemATags = contentTags.findByContent(db, itemA) as Array<{
+      id: string;
+    }>;
+    const itemBTags = contentTags.findByContent(db, itemB) as Array<{
+      id: string;
+    }>;
+    expect(itemATags).toHaveLength(1);
+    expect(itemATags[0].id).toBe(target.id);
+    expect(itemBTags).toHaveLength(1);
+    expect(itemBTags[0].id).toBe(target.id);
+  });
+
+  it("dedupes when the target already tags an item", async () => {
+    const source = await createTag("alpha");
+    const target = await createTag("beta");
+    const itemId = makeContentItem();
+    const db = getDb();
+    const now = NOW();
+    contentTags.addTag(db, itemId, source.id, now);
+    contentTags.addTag(db, itemId, target.id, now);
+
+    const res = await POST_MERGE(
+      await authedRequest(`http://localhost/api/tags/${source.id}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId: target.id }),
+      }),
+      { params: Promise.resolve({ id: source.id }) }
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.count).toBe(1);
+    expect(contentTags.findByContent(db, itemId)).toHaveLength(1);
+  });
+
+  it("returns 400 when merging a tag into itself", async () => {
+    const source = await createTag("alpha");
+    const res = await POST_MERGE(
+      await authedRequest(`http://localhost/api/tags/${source.id}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId: source.id }),
+      }),
+      { params: Promise.resolve({ id: source.id }) }
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns 404 when the source tag is missing", async () => {
+    const target = await createTag("beta");
+    const missingId = makeId();
+    const res = await POST_MERGE(
+      await authedRequest(`http://localhost/api/tags/${missingId}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId: target.id }),
+      }),
+      { params: Promise.resolve({ id: missingId }) }
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when the target tag is missing", async () => {
+    const source = await createTag("alpha");
+    const missingId = makeId();
+    const res = await POST_MERGE(
+      await authedRequest(`http://localhost/api/tags/${source.id}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId: missingId }),
+      }),
+      { params: Promise.resolve({ id: source.id }) }
+    );
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json.error.code).toBe("NOT_FOUND");
+  });
+
+  it("writes a tag.merge audit log row", async () => {
+    const source = await createTag("alpha");
+    const target = await createTag("beta");
+    const itemId = makeContentItem();
+    const db = getDb();
+    contentTags.addTag(db, itemId, source.id, NOW());
+
+    const res = await POST_MERGE(
+      await authedRequest(`http://localhost/api/tags/${source.id}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId: target.id }),
+      }),
+      { params: Promise.resolve({ id: source.id }) }
+    );
+    expect(res.status).toBe(200);
+
+    const audit = db
+      .prepare(
+        "SELECT action, metadata FROM audit_logs WHERE action = 'tag.merge' ORDER BY created_at DESC LIMIT 1"
+      )
+      .get() as { action: string; metadata: string };
+    expect(audit.action).toBe("tag.merge");
+    const metadata = JSON.parse(audit.metadata) as {
+      source: string;
+      target: string;
+      affected: number;
+    };
+    expect(metadata.source).toBe("alpha");
+    expect(metadata.target).toBe("beta");
+    expect(metadata.affected).toBe(1);
+  });
+});
+
+describe("POST /api/tags/delete-unused", () => {
+  beforeEach(() => {
+    cleanupTestDb();
+    createTestDb().close();
+  });
+
+  afterEach(() => {
+    cleanupTestDb();
+  });
+
+  it("deletes every tag with zero usages", async () => {
+    const used = await createTag("alpha");
+    await createTag("unused-a");
+    await createTag("unused-b");
+    const db = getDb();
+    contentTags.addTag(db, makeContentItem(), used.id, NOW());
+
+    const res = await POST_DELETE_UNUSED(
+      await authedRequest("http://localhost/api/tags/delete-unused", {
+        method: "POST",
+      })
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.deleted).toBe(2);
+
+    const remaining = tags.findAll(db).map((row) => row.name);
+    expect(remaining).toEqual(["alpha"]);
+  });
+
+  it("writes a tag.delete audit row per removed tag", async () => {
+    await createTag("unused");
+    const db = getDb();
+    const before = (
+      db.prepare("SELECT COUNT(*) as c FROM audit_logs").get() as { c: number }
+    ).c;
+
+    const res = await POST_DELETE_UNUSED(
+      await authedRequest("http://localhost/api/tags/delete-unused", {
+        method: "POST",
+      })
+    );
+    expect(res.status).toBe(200);
+
+    const after = (
+      db.prepare("SELECT COUNT(*) as c FROM audit_logs").get() as { c: number }
+    ).c;
+    expect(after - before).toBe(1);
+
+    const audit = db
+      .prepare(
+        "SELECT action, metadata FROM audit_logs WHERE action = 'tag.delete' ORDER BY created_at DESC LIMIT 1"
+      )
+      .get() as { action: string; metadata: string };
+    expect(audit.action).toBe("tag.delete");
+    expect(JSON.parse(audit.metadata)).toMatchObject({
+      name: "unused",
+      bulk: true,
+    });
+  });
+
+  it("returns deleted: 0 when every tag is in use", async () => {
+    const used = await createTag("alpha");
+    const db = getDb();
+    contentTags.addTag(db, makeContentItem(), used.id, NOW());
+
+    const res = await POST_DELETE_UNUSED(
+      await authedRequest("http://localhost/api/tags/delete-unused", {
+        method: "POST",
+      })
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.deleted).toBe(0);
+    expect(tags.findAll(db)).toHaveLength(1);
   });
 });

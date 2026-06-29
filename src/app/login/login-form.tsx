@@ -108,7 +108,7 @@ export function LoginForm({ from }: LoginFormProps) {
       <button
         type="submit"
         disabled={submitting}
-        className="bg-primary text-primary-foreground hover:bg-primary/80 rounded-sm px-3 py-2 font-sans text-sm font-medium transition-colors disabled:opacity-50"
+        className="bg-primary text-primary-foreground hover:bg-primary/80 hover:border-border-strong cursor-pointer rounded-sm border border-transparent bg-clip-padding px-3 py-2 font-mono text-xs font-normal tracking-[0.12em] capitalize transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {submitting ? "Signing in…" : "Sign in"}
       </button>
