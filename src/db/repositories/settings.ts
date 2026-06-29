@@ -38,4 +38,9 @@ export const settings = {
     );
     return stmt.run(row.key, row.value);
   },
+
+  delete: (db: Database.Database, key: string) => {
+    const stmt = db.prepare("DELETE FROM settings WHERE key = ?");
+    return stmt.run(key);
+  },
 };

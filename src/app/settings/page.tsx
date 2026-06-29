@@ -1,10 +1,11 @@
-import { ComingSoonPage } from "@/components/layout/coming-soon-page";
+import { SettingsPage } from "./settings-page";
 
-export default function SettingsPage() {
-  return (
-    <ComingSoonPage
-      label="Settings"
-      description="Configuration for the AI Processor and the chat providers. Keys, default models, and connection tests live here."
-    />
-  );
+/**
+ * Settings page (`/settings`).
+ *
+ * Phase 3 — Web UI Core · issue #29. A thin server shell that
+ * delegates to the `SettingsPage` client component.
+ */
+export default function Page() {
+  return <SettingsPage />;
 }
