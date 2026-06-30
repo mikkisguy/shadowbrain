@@ -21,7 +21,7 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/80",
         inverted:
-          "bg-surface-inverted text-foreground-inverted font-mono text-xs font-normal tracking-[0.12em] capitalize hover:border-foreground-inverted/20 hover:bg-[color-mix(in_oklch,var(--surface-inverted),var(--foreground-inverted)_8%)]",
+          "bg-surface-inverted text-foreground-inverted hover:border-foreground-inverted/20 hover:bg-[color-mix(in_oklch,var(--surface-inverted),var(--foreground-inverted)_8%)]",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
@@ -45,6 +45,9 @@ const buttonVariants = cva(
           "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",
       },
+      mono: {
+        true: "font-mono text-xs font-normal tracking-[0.12em] capitalize",
+      },
     },
     defaultVariants: {
       variant: "default",
@@ -57,12 +60,13 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  mono,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
   return (
     <ButtonPrimitive
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(buttonVariants({ variant, size, mono, className }))}
       {...props}
     />
   );
