@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { AiFeaturesSection } from "./ai-features-section";
@@ -10,7 +10,144 @@ import { buildSettingsPatch, isSettingsDirty } from "./dirty";
 import { ExportSection } from "./export-section";
 import { SaveBar } from "./save-bar";
 import { SystemInfoSection } from "./system-info-section";
+import type { SettingsDraft, SettingsSnapshot } from "./types";
 import { useSettings } from "./use-settings";
+
+/* ------------------------------------------------------------------ */
+/*  Section registry                                                   */
+/*  Single source of truth for tab order + how each section renders.  */
+/*  Only the active tab mounts, so each section's effects (model       */
+/*  fetches, system-info load) run lazily on first visit.              */
+/* ------------------------------------------------------------------ */
+
+interface SectionRenderProps {
+  draft: SettingsDraft;
+  saved: SettingsSnapshot;
+  clearedSecrets: Set<keyof SettingsDraft>;
+  setDraft: React.Dispatch<React.SetStateAction<SettingsDraft | null>>;
+  clearSecret: (key: keyof SettingsDraft) => void;
+}
+
+interface SectionDef {
+  id: string;
+  label: string;
+  render: (props: SectionRenderProps) => React.ReactNode;
+}
+
+const SECTIONS: SectionDef[] = [
+  {
+    id: "ai-features",
+    label: "AI Features",
+    render: (p) => (
+      <AiFeaturesSection
+        draft={p.draft}
+        saved={p.saved}
+        clearedSecrets={p.clearedSecrets}
+        onChange={(patch) =>
+          p.setDraft((prev) => (prev ? { ...prev, ...patch } : prev))
+        }
+        onClearSecret={() => p.clearSecret("openrouter_api_key")}
+      />
+    ),
+  },
+  {
+    id: "chat-providers",
+    label: "Chat providers",
+    render: (p) => (
+      <ChatProvidersSection
+        saved={p.saved}
+        draft={p.draft}
+        clearedSecrets={p.clearedSecrets}
+        onChange={(patch) =>
+          p.setDraft((prev) => (prev ? { ...prev, ...patch } : prev))
+        }
+        onClearHermesSecret={() => p.clearSecret("hermes_api_key")}
+        onClearOpenCodeSecret={() => p.clearSecret("opencode_go_api_key")}
+      />
+    ),
+  },
+  {
+    id: "data",
+    label: "Data",
+    render: () => (
+      <div className="flex flex-col gap-8">
+        <ExportSection />
+        <SystemInfoSection />
+      </div>
+    ),
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/*  Tab bar                                                            */
+/* ------------------------------------------------------------------ */
+
+function SettingsTabs({
+  active,
+  onChange,
+}: {
+  active: string;
+  onChange: (id: string) => void;
+}) {
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const idx = SECTIONS.findIndex((s) => s.id === active);
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+        event.preventDefault();
+        const next = (idx + 1) % SECTIONS.length;
+        onChange(SECTIONS[next].id);
+        tabRefs.current[next]?.focus();
+      } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const prev = (idx - 1 + SECTIONS.length) % SECTIONS.length;
+        onChange(SECTIONS[prev].id);
+        tabRefs.current[prev]?.focus();
+      }
+    },
+    [active, onChange]
+  );
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Settings sections"
+      onKeyDown={handleKeyDown}
+      className="border-border flex gap-1 overflow-x-auto border-b"
+    >
+      {SECTIONS.map((section, i) => {
+        const isActive = section.id === active;
+        return (
+          <button
+            key={section.id}
+            ref={(el) => {
+              tabRefs.current[i] = el;
+            }}
+            type="button"
+            role="tab"
+            id={`tab-${section.id}`}
+            aria-selected={isActive}
+            aria-controls={`tabpanel-${section.id}`}
+            tabIndex={isActive ? 0 : -1}
+            onClick={() => onChange(section.id)}
+            className={`shrink-0 border-b-2 px-4 py-2.5 font-sans text-sm font-medium transition-colors ${
+              isActive
+                ? "border-foreground bg-surface-elevated text-foreground"
+                : "text-muted-foreground hover:text-foreground border-transparent"
+            }`}
+          >
+            {section.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Page                                                               */
+/* ------------------------------------------------------------------ */
 
 export function SettingsPage() {
   const {
@@ -25,6 +162,7 @@ export function SettingsPage() {
     refresh,
   } = useSettings();
 
+  const [active, setActive] = useState(SECTIONS[0].id);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -65,6 +203,15 @@ export function SettingsPage() {
     setSaveMessage(null);
   }
 
+  // Draft state is shared across tabs, so switching tabs preserves
+  // unsaved edits and the global SaveBar keeps working.
+  const sectionProps: SectionRenderProps | null =
+    draft && saved
+      ? { draft, saved, clearedSecrets, setDraft, clearSecret }
+      : null;
+
+  const activeSection = SECTIONS.find((s) => s.id === active) ?? SECTIONS[0];
+
   return (
     <main
       id="main-content"
@@ -100,7 +247,7 @@ export function SettingsPage() {
         </div>
       ) : null}
 
-      {status === "loading" || !draft || !saved ? (
+      {status === "loading" || !sectionProps ? (
         <div
           data-testid="settings-loading"
           role="status"
@@ -130,34 +277,21 @@ export function SettingsPage() {
             </p>
           ) : null}
 
-          <AiFeaturesSection
-            draft={draft}
-            saved={saved}
-            clearedSecrets={clearedSecrets}
-            onChange={(patch) =>
-              setDraft((prev) => (prev ? { ...prev, ...patch } : prev))
-            }
-            onClearSecret={() => clearSecret("openrouter_api_key")}
-          />
+          <SettingsTabs active={active} onChange={setActive} />
 
-          <ChatProvidersSection
-            saved={saved}
-            draft={draft}
-            clearedSecrets={clearedSecrets}
-            onChange={(patch) =>
-              setDraft((prev) => (prev ? { ...prev, ...patch } : prev))
-            }
-            onClearHermesSecret={() => clearSecret("hermes_api_key")}
-            onClearOpenCodeSecret={() => clearSecret("opencode_go_api_key")}
-          />
-
-          <ExportSection />
-          <SystemInfoSection />
+          <div
+            role="tabpanel"
+            id={`tabpanel-${activeSection.id}`}
+            aria-labelledby={`tab-${activeSection.id}`}
+            className="flex flex-col"
+          >
+            {activeSection.render(sectionProps)}
+          </div>
         </>
       )}
 
       <SaveBar
-        visible={dirty}
+        dirty={dirty}
         saving={saving}
         onSave={() => void handleSave()}
         onDiscard={handleDiscard}
