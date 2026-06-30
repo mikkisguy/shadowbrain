@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, JetBrains_Mono, Newsreader } from "next/font/google";
 import { cookies } from "next/headers";
+import { Toaster } from "sonner";
 
 import { SkipToContent } from "@/components/layout/skip-to-content";
 import { TopNav } from "@/components/layout/top-nav";
@@ -117,6 +118,13 @@ export default async function RootLayout({
             {isAuthenticated ? <Footer /> : null}
           </TooltipProvider>
         </CommandPaletteRoot>
+        {/*
+          Global toast surface. Mounted once in the root layout so any
+          client component can call `toast()` (e.g. settings save
+          feedback). Dark theme matches the default appearance; richColors
+          gives success/error their semantic green/red.
+        */}
+        <Toaster theme="dark" position="bottom-right" richColors />
       </body>
     </html>
   );

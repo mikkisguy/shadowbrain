@@ -37,6 +37,7 @@ function ProviderSubsection({
   testing,
   onTest,
   modelField,
+  savedVersion,
 }: {
   title: string;
   description: string;
@@ -62,6 +63,7 @@ function ProviderSubsection({
     onChange: (value: string) => void;
     onRefresh: () => void;
   };
+  savedVersion: number;
 }) {
   const modelItems = Object.fromEntries(
     modelField?.options.map((option) => [option.id, option.name]) ?? []
@@ -92,6 +94,7 @@ function ProviderSubsection({
       </div>
 
       <SecretInput
+        key={savedVersion}
         id={secretId}
         label={secretLabel}
         isSet={secretIsSet}
@@ -170,6 +173,7 @@ export function ChatProvidersSection({
   onChange,
   onClearHermesSecret,
   onClearOpenCodeSecret,
+  savedVersion,
 }: {
   saved: SettingsSnapshot;
   draft: SettingsDraft;
@@ -177,6 +181,7 @@ export function ChatProvidersSection({
   onChange: (patch: Partial<SettingsDraft>) => void;
   onClearHermesSecret: () => void;
   onClearOpenCodeSecret: () => void;
+  savedVersion: number;
 }) {
   const [hermesTestResult, setHermesTestResult] = useState<string | null>(null);
   const [openCodeTestResult, setOpenCodeTestResult] = useState<string | null>(
@@ -279,6 +284,7 @@ export function ChatProvidersSection({
         testResult={hermesTestResult}
         testing={hermesTesting}
         onTest={() => void runTest("hermes")}
+        savedVersion={savedVersion}
       />
 
       <ProviderSubsection
@@ -309,6 +315,7 @@ export function ChatProvidersSection({
           onChange: (value) => onChange({ opencode_go_model: value }),
           onRefresh: () => void loadOpenCodeModels(),
         }}
+        savedVersion={savedVersion}
       />
     </section>
   );

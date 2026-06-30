@@ -24,7 +24,7 @@ export function SaveBar({
   return (
     <div
       data-testid="settings-save-bar"
-      className="border-border bg-background/95 supports-backdrop-filter:bg-background/80 sticky bottom-0 z-30 -mx-4 border-t px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6"
+      className="border-border bg-background/95 supports-backdrop-filter:bg-background/80 sticky bottom-0 z-30 border-t py-3 backdrop-blur"
     >
       <div className="mx-auto flex w-full max-w-screen-md flex-wrap items-center justify-between gap-3">
         <p className="text-muted-foreground font-sans text-sm">{message}</p>

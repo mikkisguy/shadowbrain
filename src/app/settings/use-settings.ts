@@ -18,6 +18,14 @@ export interface UseSettingsResult {
   clearSecret: (key: keyof SettingsDraft) => void;
   applySaved: (snapshot: SettingsSnapshot) => void;
   refresh: () => void;
+  /**
+   * Increments on every `applySaved` (initial load, save, discard).
+   * Consumers use it as a remount `key` for components whose local
+   * state must re-initialise against the fresh snapshot — e.g.
+   * `SecretInput`, whose "configured vs editing" view depends on the
+   * post-save `isSet` flag.
+   */
+  savedVersion: number;
 }
 
 const LOAD_ERROR = "Couldn't load your settings right now. Please try again.";
@@ -31,12 +39,14 @@ export function useSettings(): UseSettingsResult {
     Set<keyof SettingsDraft>
   >(() => new Set());
   const [reloadToken, setReloadToken] = useState(0);
+  const [savedVersion, setSavedVersion] = useState(0);
   const versionRef = useRef(0);
 
   const applySaved = useCallback((snapshot: SettingsSnapshot) => {
     setSaved(snapshot);
     setDraft(snapshotToDraft(snapshot));
     setClearedSecrets(new Set());
+    setSavedVersion((v) => v + 1);
   }, []);
 
   const refresh = useCallback(() => {
@@ -88,5 +98,6 @@ export function useSettings(): UseSettingsResult {
     clearSecret,
     applySaved,
     refresh,
+    savedVersion,
   };
 }

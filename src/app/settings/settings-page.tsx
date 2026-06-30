@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { AiFeaturesSection } from "./ai-features-section";
@@ -26,6 +27,7 @@ interface SectionRenderProps {
   clearedSecrets: Set<keyof SettingsDraft>;
   setDraft: React.Dispatch<React.SetStateAction<SettingsDraft | null>>;
   clearSecret: (key: keyof SettingsDraft) => void;
+  savedVersion: number;
 }
 
 interface SectionDef {
@@ -47,6 +49,7 @@ const SECTIONS: SectionDef[] = [
           p.setDraft((prev) => (prev ? { ...prev, ...patch } : prev))
         }
         onClearSecret={() => p.clearSecret("openrouter_api_key")}
+        savedVersion={p.savedVersion}
       />
     ),
   },
@@ -63,6 +66,7 @@ const SECTIONS: SectionDef[] = [
         }
         onClearHermesSecret={() => p.clearSecret("hermes_api_key")}
         onClearOpenCodeSecret={() => p.clearSecret("opencode_go_api_key")}
+        savedVersion={p.savedVersion}
       />
     ),
   },
@@ -160,37 +164,27 @@ export function SettingsPage() {
     clearSecret,
     applySaved,
     refresh,
+    savedVersion,
   } = useSettings();
 
   const [active, setActive] = useState(SECTIONS[0].id);
   const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   const dirty = useMemo(() => {
     if (!saved || !draft) return false;
     return isSettingsDirty(saved, draft, clearedSecrets);
   }, [saved, draft, clearedSecrets]);
 
-  // Auto-dismiss the "Settings saved." confirmation so it doesn't linger.
-  useEffect(() => {
-    if (!saveMessage) return;
-    const timer = setTimeout(() => setSaveMessage(null), 4000);
-    return () => clearTimeout(timer);
-  }, [saveMessage]);
-
   async function handleSave() {
     if (!saved || !draft) return;
     setSaving(true);
-    setSaveError(null);
-    setSaveMessage(null);
     try {
       const patch = buildSettingsPatch(saved, draft, clearedSecrets);
       const snapshot = await saveSettings(patch);
       applySaved(snapshot);
-      setSaveMessage("Settings saved.");
+      toast.success("Settings saved.");
     } catch {
-      setSaveError("Couldn't save your settings. Please try again.");
+      toast.error("Couldn't save your settings. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -199,15 +193,13 @@ export function SettingsPage() {
   function handleDiscard() {
     if (!saved) return;
     applySaved(saved);
-    setSaveError(null);
-    setSaveMessage(null);
   }
 
   // Draft state is shared across tabs, so switching tabs preserves
   // unsaved edits and the global SaveBar keeps working.
   const sectionProps: SectionRenderProps | null =
     draft && saved
-      ? { draft, saved, clearedSecrets, setDraft, clearSecret }
+      ? { draft, saved, clearedSecrets, setDraft, clearSecret, savedVersion }
       : null;
 
   const activeSection = SECTIONS.find((s) => s.id === active) ?? SECTIONS[0];
@@ -260,23 +252,6 @@ export function SettingsPage() {
         </div>
       ) : (
         <>
-          {saveMessage ? (
-            <p
-              className="text-foreground border-border bg-surface-elevated rounded-sm border px-3 py-2 font-sans text-sm"
-              data-testid="settings-save-success"
-            >
-              {saveMessage}
-            </p>
-          ) : null}
-          {saveError ? (
-            <p
-              className="text-error border-border bg-surface-elevated rounded-sm border px-3 py-2 font-sans text-sm"
-              data-testid="settings-save-error"
-            >
-              {saveError}
-            </p>
-          ) : null}
-
           <SettingsTabs active={active} onChange={setActive} />
 
           <div

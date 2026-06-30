@@ -60,12 +60,14 @@ export function AiFeaturesSection({
   clearedSecrets,
   onChange,
   onClearSecret,
+  savedVersion,
 }: {
   draft: SettingsDraft;
   saved: SettingsSnapshot;
   clearedSecrets: Set<keyof SettingsDraft>;
   onChange: (patch: Partial<SettingsDraft>) => void;
   onClearSecret: () => void;
+  savedVersion: number;
 }) {
   const [browseOpen, setBrowseOpen] = useState(false);
   const [browseTarget, setBrowseTarget] = useState<ModelField>("ai_model");
@@ -104,6 +106,7 @@ export function AiFeaturesSection({
       </header>
 
       <SecretInput
+        key={savedVersion}
         id="openrouter-api-key"
         label="OpenRouter API key"
         isSet={
