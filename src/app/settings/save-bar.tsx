@@ -29,6 +29,7 @@ export function SaveBar({
             type="button"
             variant="outline"
             size="sm"
+            mono
             onClick={onDiscard}
             disabled={saving}
             data-testid="settings-discard"
@@ -39,6 +40,7 @@ export function SaveBar({
             type="button"
             variant="inverted"
             size="sm"
+            mono
             onClick={onSave}
             disabled={saving}
             data-testid="settings-save-all"
