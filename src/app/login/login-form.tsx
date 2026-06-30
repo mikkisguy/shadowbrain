@@ -15,6 +15,9 @@
 
 import { useState, type FormEvent } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
 interface LoginFormProps {
   /** Where to navigate on a successful login. Must be a same-origin
    *  path (validated by the server-rendered page). */
@@ -67,7 +70,7 @@ export function LoginForm({ from }: LoginFormProps) {
         <span className="text-muted-foreground font-sans text-xs font-medium tracking-[0.12em] uppercase">
           Username
         </span>
-        <input
+        <Input
           name="username"
           type="text"
           autoComplete="username"
@@ -75,7 +78,7 @@ export function LoginForm({ from }: LoginFormProps) {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           disabled={submitting}
-          className="border-border bg-background text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/30 rounded-sm border px-3 py-2 font-sans text-sm outline-none focus:ring-2 disabled:opacity-50"
+          className="h-10"
         />
       </label>
 
@@ -83,7 +86,7 @@ export function LoginForm({ from }: LoginFormProps) {
         <span className="text-muted-foreground font-sans text-xs font-medium tracking-[0.12em] uppercase">
           Password
         </span>
-        <input
+        <Input
           name="password"
           type="password"
           autoComplete="current-password"
@@ -91,7 +94,7 @@ export function LoginForm({ from }: LoginFormProps) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           disabled={submitting}
-          className="border-border bg-background text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/30 rounded-sm border px-3 py-2 font-sans text-sm outline-none focus:ring-2 disabled:opacity-50"
+          className="h-10"
         />
       </label>
 
@@ -105,13 +108,9 @@ export function LoginForm({ from }: LoginFormProps) {
         </p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="bg-primary text-primary-foreground hover:bg-primary/80 hover:border-border-strong cursor-pointer rounded-sm border border-transparent bg-clip-padding px-3 py-2 font-mono text-xs font-normal tracking-[0.12em] capitalize transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50"
-      >
+      <Button variant="default" mono type="submit" disabled={submitting}>
         {submitting ? "Signing in…" : "Sign in"}
-      </button>
+      </Button>
     </form>
   );
 }

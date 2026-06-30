@@ -75,7 +75,7 @@ export function CommandPalette() {
       <DialogPrimitive.Portal>
         <DialogPrimitive.Backdrop
           data-slot="dialog-overlay"
-          className="fixed inset-0 isolate z-50 bg-black/30 backdrop-blur-xs supports-backdrop-filter:backdrop-blur-xs"
+          className="bg-scrim fixed inset-0 isolate z-50 backdrop-blur-xs supports-backdrop-filter:backdrop-blur-xs"
         />
         <DialogPrimitive.Popup
           data-slot="dialog-content"
@@ -86,7 +86,7 @@ export function CommandPalette() {
             // results list is in the user's eye line.
             // Mobile: full-screen. The `md:` breakpoint is
             // the same one the top nav uses.
-            "bg-popover text-popover-foreground border-border fixed z-50 flex flex-col overflow-hidden border shadow-lg outline-none",
+            "bg-popover text-popover-foreground border-border fixed z-50 flex flex-col overflow-hidden border outline-none",
             "top-0 right-0 bottom-0 left-0 rounded-none",
             "md:top-[20%] md:right-auto md:bottom-auto md:left-1/2 md:max-h-[60vh] md:w-[min(32rem,calc(100%-2rem))] md:-translate-x-1/2 md:rounded-md"
           )}

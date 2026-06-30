@@ -136,7 +136,7 @@ export function BrowseToolbar({
               onFiltersChange({ q: "" });
             }}
             className={cn(
-              "text-muted-foreground hover:text-foreground absolute top-1/2 right-2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-sm",
+              "text-muted-foreground hover:text-foreground absolute top-1/2 right-2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-sm transition-colors",
               "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
             )}
           >

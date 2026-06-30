@@ -70,10 +70,11 @@ export interface ContentFeedProps {
 
 const SKELETON_CARD_COUNT = 6;
 
-/** Breakpoints for column count — mirrors the tailwind `sm:` and
- *  `lg:` thresholds the rest of the design system uses. */
+/** Breakpoints for column count — mirrors the tailwind `md:` and
+ *  `lg:` thresholds the rest of the design system uses. Mobile stays
+ *  a single column up to 768px (md) per the responsive spec. */
 function columnCountForWidth(width: number): number {
-  if (width < 640) return 1;
+  if (width < 768) return 1;
   if (width < 1024) return 2;
   return 3;
 }
@@ -292,7 +293,7 @@ export function ContentFeed({
               type="button"
               onClick={onLoadMore}
               data-testid="feed-load-more-button"
-              className="hover:text-foreground focus-visible:ring-ring rounded-sm px-3 py-1 focus-visible:ring-2 focus-visible:outline-none"
+              className="hover:text-foreground focus-visible:ring-ring rounded-sm px-3 py-1 transition-colors focus-visible:ring-2 focus-visible:outline-none"
             >
               Load more
             </button>

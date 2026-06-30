@@ -252,19 +252,19 @@ export function ContentCard({
           children (tag pills, the timestamp tooltip) re-enable pointer
           events with `pointer-events-auto` + `relative z-20` so they
           stay usable above the link overlay. */}
-      <div className="pointer-events-none relative z-20 flex flex-1 flex-col gap-3 p-4">
+      <div className="pointer-events-none relative z-20 flex flex-1 flex-col gap-3 p-3 md:p-4">
         <header className="flex items-center justify-between gap-3">
           {variant === "pill" ? (
             // Filled coloured chip — replaces both the dot and
             // the muted-foreground text. The chip background
-            // uses the type token; the text uses the surface
-            // foreground (cream) for contrast.
+            // uses the type token; the text uses the near-black
+            // inverted foreground for contrast on the fill.
             <span
               data-testid="content-card-pill"
               className={cn(
                 "inline-flex items-center rounded-sm px-2 py-0.5 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase",
                 dotClass,
-                "text-background"
+                "text-foreground-inverted"
               )}
             >
               {label}
@@ -298,7 +298,7 @@ export function ContentCard({
         </header>
 
         {item.title ? (
-          <h3 className="text-foreground font-serif text-lg leading-snug font-semibold tracking-[-0.01em] break-words">
+          <h3 className="text-foreground font-serif text-base leading-snug font-semibold tracking-[-0.01em] break-words max-md:line-clamp-1 md:text-lg">
             {item.title}
           </h3>
         ) : null}
@@ -310,7 +310,7 @@ export function ContentCard({
           // is neutralised — see `parseSnippet`.
           <p
             data-testid="content-card-snippet"
-            className="text-muted-foreground line-clamp-3 font-sans text-sm leading-relaxed break-words"
+            className="text-muted-foreground line-clamp-1 font-sans text-sm leading-relaxed break-words md:line-clamp-3"
           >
             {snippetParts.map((part, i) =>
               part.highlight ? (
@@ -321,7 +321,7 @@ export function ContentCard({
             )}
           </p>
         ) : (
-          <p className="text-muted-foreground line-clamp-3 font-sans text-sm leading-relaxed break-words">
+          <p className="text-muted-foreground line-clamp-1 font-sans text-sm leading-relaxed break-words md:line-clamp-3">
             {previewText(item.content)}
           </p>
         )}
@@ -340,8 +340,15 @@ export function ContentCard({
             aria-label="Tags"
             className="mt-auto flex flex-wrap items-center gap-1.5 pt-2"
           >
+            {/* Mobile compact: a tag count replaces the pill strip so a
+                dense row of tiny pills doesn't shrink already-small tap
+                targets on a narrow card. Pills return at md+ where the
+                card has room. */}
+            <li className="text-muted-foreground font-mono text-[0.65rem] tracking-wide md:hidden">
+              {tagsList.length} {tagsList.length === 1 ? "tag" : "tags"}
+            </li>
             {tagsList.slice(0, 4).map((tag) => (
-              <li key={tag}>
+              <li key={tag} className="hidden md:list-item">
                 <button
                   type="button"
                   data-testid="content-card-tag"

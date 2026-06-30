@@ -36,7 +36,7 @@ export function BackButton({ fallbackHref = "/" }: BackButtonProps) {
           router.push(fallbackHref);
         }
       }}
-      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 font-sans text-sm transition-colors"
+      className="text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center gap-1.5 font-sans text-sm transition-colors"
     >
       <ArrowLeft className="size-3.5" aria-hidden />
       Back

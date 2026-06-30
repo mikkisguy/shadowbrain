@@ -31,6 +31,10 @@
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-muted-foreground: var(--muted-foreground);
+  /* Scrim for modal/dialog overlays. Pure black reads correctly as a
+   * dimming layer over the dark canvas without introducing a shadow
+   * (the design system creates depth by color contrast, not elevation). */
+  --color-scrim: var(--scrim);
 
   /* --- Color: surface (warm — for featured content) --- */
   --color-surface-warm: var(--surface-warm);
@@ -41,6 +45,13 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-muted: var(--primary-muted);
+  /* A darker, higher-contrast shade of the brand blue used only as the
+   * fill of primary (default) buttons. The brand `--primary` (#3d6bff)
+   * is tuned for use as text/links on the near-black canvas (4.5:1),
+   * but a cream label on it only reaches ~3.2:1. `--primary-strong`
+   * (#2f50d6) lifts the cream label to ~4.7:1 (WCAG AA) while staying
+   * recognisably the same blue. Links/accents keep using `--primary`. */
+  --color-primary-strong: var(--primary-strong);
   --color-accent-cyan: var(--accent-cyan);
   --color-accent-violet: var(--accent-violet);
 
@@ -136,6 +147,7 @@
   --border: rgba(228, 220, 200, 0.1);
   --border-strong: rgba(228, 220, 200, 0.2);
   --muted-foreground: rgba(228, 220, 200, 0.65);
+  --scrim: rgba(0, 0, 0, 0.65);
 
   /* Surface — warm (for featured/elevated content; use sparingly) */
   --surface-warm: #322b19;
@@ -143,8 +155,9 @@
   --surface-warm-border: rgba(228, 220, 200, 0.1);
 
   /* Cool accents — primary is the anchor */
-  --primary: #3d6bff;
+  --primary: #406eff;
   --primary-foreground: #e4dcc8;
+  --primary-strong: #2f50d6;
   --primary-muted: rgba(61, 111, 255, 0.15);
   --accent-cyan: #4fcfff;
   --accent-violet: #7b6aff;
@@ -153,7 +166,7 @@
   --success: #22c55e;
   --error: #ef4444;
   --warning: #f59e0b;
-  --info: #3d6bff;
+  --info: #406eff;
 
   /* Type colors (data markers — used only as dots/edge accents) */
   --type-note: #22c55e;
@@ -164,7 +177,7 @@
   --type-person: #0ea5e9;
   --type-event: #f97316;
   --type-dream: #d946ef;
-  --type-raw: #6b7280;
+  --type-raw: #7b8290;
   --type-image: #84cc16;
 }
 
@@ -180,18 +193,20 @@
   --border: rgba(228, 220, 200, 0.1);
   --border-strong: rgba(228, 220, 200, 0.2);
   --muted-foreground: rgba(228, 220, 200, 0.65);
+  --scrim: rgba(0, 0, 0, 0.65);
   --surface-warm: #322b19;
   --surface-warm-foreground: #e4dcc8;
   --surface-warm-border: rgba(228, 220, 200, 0.1);
-  --primary: #3d6bff;
+  --primary: #406eff;
   --primary-foreground: #e4dcc8;
+  --primary-strong: #2f50d6;
   --primary-muted: rgba(61, 111, 255, 0.15);
   --accent-cyan: #4fcfff;
   --accent-violet: #7b6aff;
   --success: #22c55e;
   --error: #ef4444;
   --warning: #f59e0b;
-  --info: #3d6bff;
+  --info: #406eff;
   --type-note: #22c55e;
   --type-bookmark: #f59e0b;
   --type-journal: #7c5cfc;
@@ -200,7 +215,7 @@
   --type-person: #0ea5e9;
   --type-event: #f97316;
   --type-dream: #d946ef;
-  --type-raw: #6b7280;
+  --type-raw: #7b8290;
   --type-image: #84cc16;
 }
 

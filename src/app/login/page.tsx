@@ -105,7 +105,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
         <LoginForm from={safeFrom} />
 
-        <footer className="text-muted-foreground/60 border-border flex flex-col gap-1 border-t pt-4 text-center font-serif text-xs">
+        <footer className="text-muted-foreground border-border flex flex-col gap-1 border-t pt-4 text-center font-serif text-xs">
           <p>ShadowBrain v{process.env.npm_package_version}</p>
         </footer>
       </div>
