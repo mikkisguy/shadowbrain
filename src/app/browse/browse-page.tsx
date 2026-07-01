@@ -23,6 +23,7 @@ import { LayoutGrid, Rows3 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CelestialHeader } from "@/components/visual/celestial-motif";
 import { BrowseToolbar } from "./browse-toolbar";
 import { ContentFeed } from "./content-feed";
 import { useBrowseState } from "./use-browse-state";
@@ -64,11 +65,20 @@ export function BrowsePage() {
       data-testid="browse-page"
       className="mx-auto flex w-full max-w-screen-2xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-12"
     >
-      <header className="flex flex-col gap-3 pb-2">
-        <p className="text-muted-foreground font-mono text-[0.7rem] font-medium tracking-[0.16em] uppercase">
+      <header className="relative flex flex-col gap-3 overflow-hidden pb-2">
+        {/*
+          A restrained "title plate" — the celestial engraving confined
+          to the header band so it frames the title without reaching the
+          toolbar or the feed. On this surface content is the hero, so
+          the art lives only in this negative space above it. The title
+          text is lifted to z-10 so it reads above the (very faint)
+          line-work.
+        */}
+        <CelestialHeader headerShift={-15} />
+        <p className="text-muted-foreground relative z-10 font-mono text-[0.7rem] font-medium tracking-[0.16em] uppercase">
           {total} items
         </p>
-        <h1 className="text-foreground font-serif text-3xl font-semibold tracking-[-0.01em] sm:text-4xl">
+        <h1 className="text-foreground relative z-10 font-serif text-3xl font-semibold tracking-[-0.01em] sm:text-4xl">
           Browse your second brain
         </h1>
       </header>

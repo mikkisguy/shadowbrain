@@ -108,7 +108,7 @@ export function LoginForm({ from }: LoginFormProps) {
         </p>
       ) : null}
 
-      <Button variant="default" mono type="submit" disabled={submitting}>
+      <Button variant="inverted" type="submit" disabled={submitting} mono>
         {submitting ? "Signing in…" : "Sign in"}
       </Button>
     </form>
