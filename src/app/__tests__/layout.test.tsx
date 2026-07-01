@@ -46,6 +46,23 @@ vi.mock("@/lib/env", () => ({
   }),
 }));
 
+vi.mock("@/db/index", () => ({
+  getDb: () => ({}) as object,
+}));
+
+vi.mock("@/lib/backup/reminder", () => ({
+  readBackupStatus: () => ({
+    lastBackupAt: null,
+    snoozeCount: 0,
+    daysSince: null,
+    severity: "enforce" as const,
+  }),
+}));
+
+vi.mock("@/components/backup/backup-reminder-banner", () => ({
+  BackupReminderBanner: () => <div data-testid="backup-reminder-banner" />,
+}));
+
 // The layout mounts `<CommandPalette />`, which calls
 // `useRouter()` from `next/navigation`. The app-router
 // context is not available during `renderToStaticMarkup`
@@ -92,6 +109,7 @@ describe("RootLayout auth-aware chrome", () => {
     });
     const html = await renderLayout();
     expect(html).toMatch(/data-testid="top-nav"/);
+    expect(html).toMatch(/data-testid="backup-reminder-banner"/);
     expect(html).toMatch(/data-testid="app-footer"/);
   });
 

@@ -70,8 +70,7 @@ describe("auditLogs.create", () => {
     const row = db
       .prepare("SELECT action, entity_id, success FROM audit_logs WHERE id = ?")
       .get(result.lastInsertRowid) as
-      | { action: string; entity_id: string; success: number }
-      | undefined;
+      { action: string; entity_id: string; success: number } | undefined;
 
     expect(row?.action).toBe("content_item.create");
     expect(row?.entity_id).toBe("abc");

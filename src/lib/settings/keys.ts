@@ -86,6 +86,15 @@ export const SETTINGS_KEY_DEFS: Record<string, SettingsKeyDef> = {
     schema: z.string(),
     readOnly: true,
   },
+  // Consecutive snoozes at the 14+ day backup severity. Reset to 0 by the
+  // "Mark as backed up" action. Read-only here so the generic settings PATCH
+  // can't set it — only the dedicated /api/backup routes mutate it. Stored as
+  // a string (the settings table is TEXT) and parsed to an int on read.
+  backup_snooze_count: {
+    secret: false,
+    schema: z.string(),
+    readOnly: true,
+  },
 };
 
 export type SettingsKey = keyof typeof SETTINGS_KEY_DEFS;
