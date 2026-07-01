@@ -28,6 +28,7 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "./login-form";
 import { getEnv } from "@/lib/env";
 import { isSessionCookieValid } from "@/lib/auth/session";
+import { CelestialBackdrop } from "@/components/visual/celestial-backdrop";
 
 export const metadata = {
   title: "Sign in — ShadowBrain",
@@ -74,9 +75,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <main
       id="main-content"
-      className="flex flex-1 items-center justify-center px-4 py-16 sm:py-24"
+      className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-16 sm:py-24"
     >
-      <div className="border-border bg-surface-elevated flex w-full max-w-sm flex-col gap-8 border p-8">
+      <CelestialBackdrop />
+      <div className="border-border bg-surface-elevated relative z-10 flex w-full max-w-sm flex-col gap-8 border p-8">
         <header className="flex flex-col items-center gap-4 text-center">
           {/* Brand mark. The logo is 1.5× the size used in the
               top nav so the user lands on a page that visibly
