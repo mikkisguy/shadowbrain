@@ -169,7 +169,7 @@ function fieldStar(
   color: string;
 } {
   const r = 0.5 + (((x * 13 + y * 7) % 10) / 10) * 1.3; // 0.5 … 1.8
-  const opacity = 0.25 + (((x * 7 + y * 3) % 10) / 10) * 0.5; // 0.25 … 0.75
+  const opacity = 0.15 + (((x * 7 + y * 3) % 10) / 10) * 0.35; // 0.15 … 0.5
   const color = STAR_COLORS[(x + y) % STAR_COLORS.length]!;
   return { r, opacity, color };
 }
@@ -199,11 +199,11 @@ export function CelestialBackdrop({
           {/* Nebula wash — continues the body's top vignette so the sky
            * reads as one piece rather than a pasted-on layer. */}
           <radialGradient id="cb-nebula" cx="50%" cy="12%" r="65%">
-            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.1" />
+            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.06" />
             <stop
               offset="55%"
               stopColor="var(--accent-violet)"
-              stopOpacity="0.035"
+              stopOpacity="0.02"
             />
             <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
           </radialGradient>
@@ -218,19 +218,19 @@ export function CelestialBackdrop({
           r="540"
           fill="none"
           stroke="var(--primary)"
-          strokeOpacity="0.06"
+          strokeOpacity="0.04"
           strokeWidth="1"
         />
         <path
           d={ECLIPTIC_D}
           fill="none"
           stroke="var(--primary)"
-          strokeOpacity="0.12"
+          strokeOpacity="0.08"
           strokeWidth="1"
         />
 
         {/* Graduation ticks — alternate major/minor like a real arc. */}
-        <g stroke="var(--accent-cyan)" strokeOpacity="0.2" strokeWidth="1">
+        <g stroke="var(--accent-cyan)" strokeOpacity="0.12" strokeWidth="1">
           {TICKS.map(([x, y], i) => (
             <line
               key={`tk-${i}`}
@@ -247,21 +247,21 @@ export function CelestialBackdrop({
           d={linkPath(ZODIAC)}
           fill="none"
           stroke="var(--primary)"
-          strokeOpacity="0.16"
+          strokeOpacity="0.1"
           strokeWidth="1"
         />
         <path
           d={linkPath(CORNER_LEFT)}
           fill="none"
           stroke="var(--primary)"
-          strokeOpacity="0.12"
+          strokeOpacity="0.08"
           strokeWidth="1"
         />
         <path
           d={linkPath(CORNER_RIGHT)}
           fill="none"
           stroke="var(--primary)"
-          strokeOpacity="0.12"
+          strokeOpacity="0.08"
           strokeWidth="1"
         />
 
@@ -273,12 +273,12 @@ export function CelestialBackdrop({
             cy={y}
             r="4"
             fill="var(--primary)"
-            fillOpacity="0.08"
+            fillOpacity="0.05"
           />
         ))}
 
         {/* Diffraction spikes on the brightest zodiac stars. */}
-        <g stroke="var(--foreground)" strokeOpacity="0.3" strokeWidth="1">
+        <g stroke="var(--foreground)" strokeOpacity="0.2" strokeWidth="1">
           {ZODIAC.filter(([x, y]) => SPIKED.has(`${x}-${y}`)).map(([x, y]) => (
             <g key={`spike-${x}-${y}`}>
               <line x1={x} y1={y - 9} x2={x} y2={y + 9} />
@@ -297,7 +297,7 @@ export function CelestialBackdrop({
             fill={
               i < ZODIAC.length ? "var(--foreground)" : "var(--accent-cyan)"
             }
-            fillOpacity={i < ZODIAC.length ? 0.85 : 0.6}
+            fillOpacity={i < ZODIAC.length ? 0.6 : 0.45}
           />
         ))}
 
