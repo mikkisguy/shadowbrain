@@ -37,6 +37,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CelestialCluster } from "@/components/visual/celestial-motif";
 import { ContentCard } from "./content-card";
 import type { BrowseItem, BrowseView } from "./types";
 
@@ -237,6 +238,7 @@ export function ContentFeed({
         data-testid="feed-empty"
         className="border-border bg-surface-elevated/40 flex flex-col gap-2 rounded-sm border border-dashed p-8 text-center"
       >
+        <CelestialCluster className="mb-1 opacity-70" />
         <p className="text-foreground font-sans text-base font-medium">
           {hasActiveFilters
             ? "No items match these filters"

@@ -1,3 +1,4 @@
+import { fieldStar, linkPath } from "@/components/visual/celestial-shared";
 import { cn } from "@/lib/utils";
 
 /**
@@ -19,8 +20,9 @@ import { cn } from "@/lib/utils";
  * in `mix-blend-mode: screen` so the dark engraving substrate vanishes
  * into the near-black canvas (`#0a0a0a`) and only the luminous
  * hairlines and stars read against it. It is a pure presentational
- * server component (no hooks, no client JS) so it adds zero client
- * bundle and hydrates nothing.
+ * component (no hooks, no event handlers) that renders as static SVG
+ * markup; it has no `"use client"` directive of its own, though it
+ * travels in a client bundle when imported by a client page.
  *
  * Composition:
  *   - a faint nebula wash that continues the body's existing top vignette
@@ -35,16 +37,12 @@ import { cn } from "@/lib/utils";
  * Reuse: the empty-state, `/graph`, and type-specific item-hero
  * placements described in the imagery plan can mount this same component
  * with a different `className` (opacity, positioning) rather than each
- * rolling its own art.
+ * rolling its own art. The tags list mounts it full-bleed at reduced
+ * opacity (`opacity-60`) — the tag grid is sparse enough that the
+ * line-work frames rather than fights the content, which is why a full
+ * backdrop is acceptable there but not behind a dense feed (those use
+ * `CelestialHeader` / `CelestialCluster` instead).
  */
-
-/** Brand-spectrum star colours (cool accents + cream for the brightest). */
-const STAR_COLORS = [
-  "var(--accent-cyan)",
-  "var(--primary)",
-  "var(--accent-violet)",
-  "var(--foreground)",
-] as const;
 
 /** Ecliptic arc — apex above the centered card so it frames, not crosses. */
 const ECLIPTIC_D = "M -120 520 Q 720 -180 1560 280";
@@ -148,31 +146,6 @@ const TICKS: ReadonlyArray<readonly [number, number]> = [
   [1224, 142],
   [1392, 200],
 ];
-
-/** Build an SVG polyline path (`M x y L x y …`) from a list of points. */
-function linkPath(pts: ReadonlyArray<readonly [number, number]>): string {
-  return "M " + pts.map(([x, y]) => `${x} ${y}`).join(" L ");
-}
-
-/**
- * Deterministically derive radius / opacity / colour for a field star from
- * its coordinates. No randomness — the result is identical on the server
- * and the client, so there is no hydration mismatch, and the field still
- * looks organically varied.
- */
-function fieldStar(
-  x: number,
-  y: number
-): {
-  r: number;
-  opacity: number;
-  color: string;
-} {
-  const r = 0.5 + (((x * 13 + y * 7) % 10) / 10) * 1.3; // 0.5 … 1.8
-  const opacity = 0.15 + (((x * 7 + y * 3) % 10) / 10) * 0.35; // 0.15 … 0.5
-  const color = STAR_COLORS[(x + y) % STAR_COLORS.length]!;
-  return { r, opacity, color };
-}
 
 export interface CelestialBackdropProps {
   /** Extra classes for the wrapper (opacity, positioning, blend tweaks). */

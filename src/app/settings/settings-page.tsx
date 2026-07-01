@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { CelestialHeader } from "@/components/visual/celestial-motif";
 import { AiFeaturesSection } from "./ai-features-section";
 import { saveSettings } from "./api";
 import { ChatProvidersSection } from "./chat-providers-section";
@@ -210,11 +211,12 @@ export function SettingsPage() {
       data-testid="settings-page"
       className="mx-auto flex w-full max-w-screen-md flex-col gap-8 px-4 py-8 sm:px-6 sm:py-12"
     >
-      <header className="flex flex-col gap-3 pb-2">
-        <p className="text-muted-foreground font-mono text-[0.7rem] font-medium tracking-[0.16em] uppercase">
+      <header className="relative flex flex-col gap-3 overflow-hidden pb-2">
+        <CelestialHeader headerShift={-15} />
+        <p className="text-muted-foreground relative z-10 font-mono text-[0.7rem] font-medium tracking-[0.16em] uppercase">
           Configuration
         </p>
-        <h1 className="text-foreground font-serif text-3xl font-semibold tracking-[-0.01em] sm:text-4xl">
+        <h1 className="text-foreground relative z-10 font-serif text-3xl font-semibold tracking-[-0.01em] sm:text-4xl">
           Settings
         </h1>
       </header>

@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { CelestialCluster } from "@/components/visual/celestial-motif";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -123,7 +125,7 @@ export function TagsPage() {
     <main
       id="main-content"
       data-testid="tags-page"
-      className="mx-auto flex w-full max-w-screen-md flex-col gap-8 px-4 py-8 sm:px-6 sm:py-12"
+      className="relative z-10 mx-auto flex w-full max-w-screen-md flex-col gap-8 px-4 py-8 sm:px-6 sm:py-12"
     >
       <header className="flex flex-col gap-3 pb-2">
         <p className="text-muted-foreground font-mono text-[0.7rem] font-medium tracking-[0.16em] uppercase">
@@ -435,6 +437,7 @@ function TagsList({
         data-testid="tags-empty"
         className="border-border bg-surface-elevated/40 flex flex-col gap-2 rounded-sm border border-dashed p-8 text-center"
       >
+        <CelestialCluster className="mb-1 opacity-70" />
         <p className="text-foreground font-sans text-base font-medium">
           No tags yet
         </p>
