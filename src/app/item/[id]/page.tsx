@@ -188,11 +188,12 @@ export default async function ItemDetailPage({
     >
       <header className="flex flex-col gap-3">
         {/* Coloured type badge — the chip background is the type's
-            design-system token; near-black text (text-background)
-            reads cleanly on the saturated type colours. */}
+            design-system token; the near-black inverted foreground
+            (text-foreground-inverted) reads cleanly on the saturated
+            type colours. */}
         <span
           data-testid="item-type-badge"
-          className={`${badgeColor} text-background inline-flex w-fit items-center rounded-sm px-2 py-0.5 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase`}
+          className={`${badgeColor} text-foreground-inverted inline-flex w-fit items-center rounded-sm px-2 py-0.5 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase`}
         >
           {badgeLabel}
         </span>

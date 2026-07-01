@@ -223,7 +223,7 @@ export function AdvancedFilters({
                 type="button"
                 aria-label={`Remove tag ${tag}`}
                 onClick={() => removeTag(tag)}
-                className="hover:text-foreground -mr-0.5 inline-flex size-3.5 items-center justify-center"
+                className="hover:text-foreground -mr-0.5 inline-flex size-3.5 items-center justify-center transition-colors"
                 data-testid={`tag-remove-${tag}`}
               >
                 <X className="size-3" />
@@ -258,14 +258,14 @@ export function AdvancedFilters({
         </div>
         {suggestions.length > 0 ? (
           <ul
-            className="bg-popover text-popover-foreground border-border z-10 flex flex-col overflow-hidden rounded-md border shadow-md"
+            className="bg-popover text-popover-foreground border-border z-10 flex flex-col overflow-hidden rounded-md border"
             data-testid="tag-suggestions"
           >
             {suggestions.map((name) => (
               <li key={name}>
                 <button
                   type="button"
-                  className="hover:bg-muted hover:text-foreground w-full px-2.5 py-1 text-left text-sm"
+                  className="hover:bg-muted hover:text-foreground w-full px-2.5 py-1 text-left text-sm transition-colors"
                   onClick={() => {
                     addTag(name);
                     tagInputRef.current?.focus();

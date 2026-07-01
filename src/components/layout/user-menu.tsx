@@ -25,7 +25,7 @@ export function UserMenu() {
       <button
         type="submit"
         aria-label="Sign out"
-        className="border-border bg-surface-elevated text-muted-foreground hover:border-border-strong hover:bg-surface-muted hover:text-foreground inline-flex size-8 cursor-pointer items-center justify-center rounded-sm border transition-colors"
+        className="border-border bg-surface-elevated text-muted-foreground hover:border-border-strong hover:bg-surface-muted hover:text-foreground inline-flex size-8 cursor-pointer items-center justify-center rounded-sm border transition-colors max-md:size-11"
       >
         <CircleUser aria-hidden="true" className="size-4" strokeWidth={1.5} />
       </button>
