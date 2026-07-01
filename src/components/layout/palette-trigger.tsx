@@ -68,7 +68,7 @@ export function PaletteTrigger() {
         onClick={open}
         aria-label="Open command palette"
         className={cn(
-          "border-border bg-surface-elevated inline-flex size-8 items-center justify-center rounded-sm border",
+          "border-border bg-surface-elevated inline-flex size-11 items-center justify-center rounded-sm border",
           "text-muted-foreground transition-colors outline-none",
           "hover:border-border-strong hover:bg-surface-muted hover:text-foreground",
           "focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-1",

@@ -67,7 +67,7 @@ export function TypeTabs({ active, onChange, disabled }: TypeTabsProps) {
               // Layout: pill-button with hairline border. The
               // 2px radius is the design-system default; Tailwind's
               // `rounded-sm` collapses to it.
-              "inline-flex items-center gap-2 rounded-sm border px-3 py-1.5",
+              "inline-flex min-h-11 items-center gap-2 rounded-sm border px-3 py-1.5",
               "font-sans text-xs font-medium tracking-[0.04em] uppercase",
               "focus-visible:ring-ring transition-colors focus-visible:ring-2 focus-visible:outline-none",
               "disabled:cursor-not-allowed disabled:opacity-50",

@@ -166,6 +166,43 @@ describe("ContentFeed", () => {
     expect(list.className).toMatch(/flex-col/);
   });
 
+  it("derives the column count once items arrive (not stuck at the default)", () => {
+    // Regression: the feed's first render is the null path (status
+    // "idle", items empty), so the grid node is absent at mount. The
+    // column-count observer must (re)bind when the grid appears, or
+    // the count stays pinned at its 3-column default on every screen
+    // — the "always 3 in a row" bug.
+    const items = [
+      { ...item, id: "1" },
+      { ...item, id: "2" },
+      { ...item, id: "3" },
+    ];
+    const { rerender } = render(
+      <ContentFeed
+        items={null}
+        status="idle"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+      />
+    );
+    rerender(
+      <ContentFeed
+        items={items}
+        status="success"
+        error={null}
+        onRetry={() => undefined}
+        hasActiveFilters={false}
+        {...defaultProps}
+      />
+    );
+    const feed = screen.getByTestId("feed");
+    // jsdom reports clientWidth 0 → 1 column. The old bug left the
+    // count at its 3-column default → 3 masonry column divs.
+    expect(feed.children).toHaveLength(1);
+  });
+
   it("renders the load-more affordance when hasMore is true", () => {
     const onLoadMore = vi.fn();
     render(

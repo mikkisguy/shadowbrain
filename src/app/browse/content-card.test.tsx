@@ -22,6 +22,7 @@ import type { BrowseItem } from "./types";
  *   - the content preview is line-clamped and word-bounded
  *   - the timestamp is rendered as a relative phrase
  *   - the tag strip lists up to four tags
+ *   - the card collapses to a compact mobile layout (single-line title/preview, tag count)
  *
  * The relative-time helper is a pure function so we can pin the
  * exact output for known intervals without a clock dependency.
@@ -66,7 +67,7 @@ describe("ContentCard", () => {
     render(<ContentCard item={baseItem} />);
     const preview = screen.getByText(/Bridge networks/);
     expect(preview.tagName).toBe("P");
-    expect(preview.className).toMatch(/line-clamp-3/);
+    expect(preview.className).toMatch(/md:line-clamp-3/);
   });
 
   it("omits the heading when the item has no title", () => {
@@ -83,10 +84,33 @@ describe("ContentCard", () => {
       />
     );
     const tagList = screen.getByRole("list", { name: /tags/i });
-    expect(tagList.children).toHaveLength(4);
+    // Up to four tag pills are rendered (the strip is capped at 4);
+    // the mobile compact count is a separate affordance.
+    expect(screen.getAllByTestId("content-card-tag")).toHaveLength(4);
     expect(tagList).toHaveTextContent("#docker");
     // The fifth tag is dropped — the strip is capped at 4.
     expect(tagList).not.toHaveTextContent("#core");
+  });
+
+  it("clamps the title to one line on mobile and frees it at md+", () => {
+    render(<ContentCard item={baseItem} />);
+    const title = screen.getByRole("heading", { level: 3 });
+    expect(title.className).toMatch(/max-md:line-clamp-1/);
+  });
+
+  it("clamps the preview to one line on mobile and three lines at md+", () => {
+    render(<ContentCard item={baseItem} />);
+    const preview = screen.getByText(/Bridge networks/);
+    expect(preview.className).toMatch(/line-clamp-1/);
+    expect(preview.className).toMatch(/md:line-clamp-3/);
+  });
+
+  it("renders a compact 'N tags' count for the mobile card", () => {
+    render(<ContentCard item={baseItem} tags={["docker", "infra", "linux"]} />);
+    const tagList = screen.getByRole("list", { name: /tags/i });
+    // Mobile compact mode shows an "N tags" summary in place of the
+    // pill strip (the pills return at md+ where the card has room).
+    expect(tagList).toHaveTextContent(/3 tags/i);
   });
 
   it("renders tags from item.tags when no tags prop is passed", () => {
@@ -221,9 +245,9 @@ describe("ContentCard", () => {
     const pill = screen.getByTestId("content-card-pill");
     expect(pill).toHaveTextContent(/note/i);
     // The pill background uses the type token; the foreground is
-    // the surface colour for contrast.
+    // the inverted (dark) token for contrast on the saturated fill.
     expect(pill.className).toMatch(/bg-type-note/);
-    expect(pill.className).toMatch(/text-background/);
+    expect(pill.className).toMatch(/text-foreground-inverted/);
     // No standalone dot is rendered in the pill variant — the
     // chip itself is the indicator.
     const card = screen.getByTestId("content-card");
@@ -275,7 +299,7 @@ describe("ContentCard", () => {
     const item: BrowseItem = { ...baseItem, snippet: "a <mark>b</mark> c" };
     render(<ContentCard item={item} />);
     expect(screen.getByTestId("content-card-snippet").className).toMatch(
-      /line-clamp-3/
+      /md:line-clamp-3/
     );
   });
 

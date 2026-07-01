@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -40,6 +40,7 @@ afterEach(() => {
   router.push.mockReset();
   router.replace.mockReset();
   router.refresh.mockReset();
+  sessionStorage.clear();
 });
 
 type MockLinks = {
@@ -82,6 +83,27 @@ function mockItem(
       inbound: links.inbound ?? [],
     },
   });
+}
+
+/**
+ * Override `window.matchMedia` to report desktop (≥ 1024 px) so the
+ * inline aside renders and the sidebar content is queryable in tests
+ * that don't exercise the mobile sheet.
+ */
+function mockDesktopViewport() {
+  return vi.spyOn(window, "matchMedia").mockImplementation(
+    (query: string): MediaQueryList =>
+      ({
+        matches: query === "(min-width: 1024px)",
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList
+  );
 }
 
 describe("ItemDetailPage metadata rendering (issue #103)", () => {
@@ -279,6 +301,7 @@ describe("ItemDetailPage foundation (issue #25)", () => {
 
 describe("ItemDetailPage links sidebar (issue #26)", () => {
   it("renders empty states when there are no links or backlinks", async () => {
+    const desktopSpy = mockDesktopViewport();
     mockItem("note", null);
 
     render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
@@ -289,9 +312,12 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("No outbound links yet.")).toBeInTheDocument();
     expect(screen.getByText("No backlinks yet.")).toBeInTheDocument();
+
+    desktopSpy.mockRestore();
   });
 
   it("renders outbound links with title, link type, and a link to the item", async () => {
+    const desktopSpy = mockDesktopViewport();
     mockItem("note", null, "content", {
       outbound: [
         {
@@ -308,9 +334,12 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
     expect(link).toHaveAttribute("href", "/item/42");
     // kebab-case link type is shown as spaced words.
     expect(screen.getByText("depends on")).toBeInTheDocument();
+
+    desktopSpy.mockRestore();
   });
 
   it("renders backlinks pointing at the source item", async () => {
+    const desktopSpy = mockDesktopViewport();
     mockItem("note", null, "content", {
       inbound: [
         {
@@ -325,9 +354,12 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
 
     const link = screen.getByRole("link", { name: /Referring note/ });
     expect(link).toHaveAttribute("href", "/item/7");
+
+    desktopSpy.mockRestore();
   });
 
   it("falls back to 'Untitled' for a linked item with no title", async () => {
+    const desktopSpy = mockDesktopViewport();
     mockItem("note", null, "content", {
       outbound: [
         {
@@ -341,10 +373,46 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
     render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
 
     expect(screen.getByText("Untitled")).toBeInTheDocument();
+
+    desktopSpy.mockRestore();
   });
 
-  it("toggles the sidebar open and closed", async () => {
+  it("opens the mobile sheet on toggle and closes it", async () => {
     const user = userEvent.setup();
+    mockItem("note", null);
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    // matchMedia stub reports mobile → no inline aside rendered.
+    expect(screen.queryByTestId("item-sidebar")).not.toBeInTheDocument();
+
+    const toggle = screen.getByTestId("sidebar-toggle");
+    expect(toggle).toHaveTextContent("Show links");
+    expect(toggle).toHaveAttribute("aria-haspopup", "dialog");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    // Clicking the toggle on mobile opens the sheet.
+    await user.click(toggle);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    // The sidebar content appears inside the sheet.
+    expect(
+      within(dialog).getByTestId("item-sidebar-content")
+    ).toBeInTheDocument();
+
+    // Closing the sheet via the close button hides the content.
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(
+      screen.queryByTestId("item-sidebar-content")
+    ).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("toggles the inline sidebar on desktop", async () => {
+    const user = userEvent.setup();
+    const desktopSpy = mockDesktopViewport();
     mockItem("note", null);
 
     render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
@@ -352,25 +420,35 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
     const toggle = screen.getByTestId("sidebar-toggle");
     const sidebar = screen.getByTestId("item-sidebar");
 
-    // matchMedia stub reports "no match" (mobile) → closed by default.
-    expect(sidebar.className).toContain("hidden");
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-
-    await user.click(toggle);
+    // Desktop: sidebar visible by default after hydration.
     expect(sidebar.className).not.toContain("hidden");
+    expect(toggle).toHaveTextContent("Hide links");
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
     await user.click(toggle);
     expect(sidebar.className).toContain("hidden");
+    expect(toggle).toHaveTextContent("Show links");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(toggle);
+    expect(sidebar.className).not.toContain("hidden");
+    expect(toggle).toHaveTextContent("Hide links");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    desktopSpy.mockRestore();
   });
 
-  it("persists the open state to sessionStorage", async () => {
+  it("persists the desktop inline state to sessionStorage", async () => {
     const user = userEvent.setup();
+    const desktopSpy = mockDesktopViewport();
     mockItem("note", null);
 
     render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
 
+    // Desktop default is open; toggle it closed.
     await user.click(screen.getByTestId("sidebar-toggle"));
-    expect(sessionStorage.getItem("item.sidebarOpen")).toBe("true");
+    expect(sessionStorage.getItem("item.sidebarOpen")).toBe("false");
+
+    desktopSpy.mockRestore();
   });
 });

@@ -33,6 +33,8 @@ describe("design system — globals.css tokens", () => {
     expect(css).toMatch(
       /--muted-foreground:\s*rgba\(228,\s*220,\s*200,\s*0\.65\)/i
     );
+    // Modal/dialog overlay scrim (raw black at 0.65 over the canvas).
+    expect(css).toMatch(/--scrim:\s*rgba\(0,\s*0,\s*0,\s*0\.65\)/i);
   });
 
   it("declares the warm surface tokens", () => {
@@ -41,8 +43,11 @@ describe("design system — globals.css tokens", () => {
   });
 
   it("declares the cool accent tokens", () => {
-    expect(css).toMatch(/--primary:\s*#3d6bff/i);
+    expect(css).toMatch(/--primary:\s*#406eff/i);
     expect(css).toMatch(/--primary-foreground:\s*#e4dcc8/i);
+    // Higher-contrast fill for primary buttons (cream label reaches
+    // WCAG AA on this darker blue; --primary stays the link/accent).
+    expect(css).toMatch(/--primary-strong:\s*#2f50d6/i);
     expect(css).toMatch(/--accent-cyan:\s*#4fcfff/i);
     expect(css).toMatch(/--accent-violet:\s*#7b6aff/i);
   });
@@ -51,7 +56,7 @@ describe("design system — globals.css tokens", () => {
     expect(css).toMatch(/--success:\s*#22c55e/i);
     expect(css).toMatch(/--error:\s*#ef4444/i);
     expect(css).toMatch(/--warning:\s*#f59e0b/i);
-    expect(css).toMatch(/--info:\s*#3d6bff/i);
+    expect(css).toMatch(/--info:\s*#406eff/i);
   });
 
   it("declares all ten type-color tokens", () => {
@@ -64,7 +69,7 @@ describe("design system — globals.css tokens", () => {
       ["--type-person", "#0ea5e9"],
       ["--type-event", "#f97316"],
       ["--type-dream", "#d946ef"],
-      ["--type-raw", "#6b7280"],
+      ["--type-raw", "#7b8290"],
       ["--type-image", "#84cc16"],
     ];
     for (const [token, value] of expected) {
