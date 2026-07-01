@@ -47,7 +47,11 @@ function SheetOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
     <DialogPrimitive.Backdrop
       data-slot="sheet-overlay"
       className={cn(
-        "data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 bg-scrim fixed inset-0 isolate z-50 duration-100 supports-backdrop-filter:backdrop-blur-xs",
+        // Duration matches the panel's (200ms) so the scrim + blur
+        // fade out in lockstep with the slide — a shorter overlay
+        // duration makes the backdrop vanish mid-close while the
+        // panel is still sliding, which reads as a blur "flash".
+        "data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 bg-scrim fixed inset-0 isolate z-50 duration-200 supports-backdrop-filter:backdrop-blur-xs",
         className
       )}
       {...props}
