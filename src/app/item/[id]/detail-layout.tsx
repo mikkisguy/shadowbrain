@@ -21,7 +21,7 @@
  *     default.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -40,6 +40,7 @@ export function DetailLayout({ children, sidebar }: DetailLayoutProps) {
   // markup matches. The mount effect below resolves the real default.
   const [open, setOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const sidebarRef = useRef<HTMLElement | null>(null);
 
   // Resolve the real default after mount: a stored choice wins,
   // otherwise open on desktop and stay closed on mobile. This runs in
@@ -76,6 +77,21 @@ export function DetailLayout({ children, sidebar }: DetailLayoutProps) {
     }
   }, [open, hydrated]);
 
+  // On narrow screens the sidebar renders *below* the (often long)
+  // markdown body, so opening it lands out of view — to the user
+  // "nothing seems to change". Bring it into view when it opens so
+  // the toggle has an immediate, visible effect. Desktop shows the
+  // sidebar inline (to the right), so it skips the scroll there.
+  useEffect(() => {
+    if (!open) return;
+    const isDesktop =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(DESKTOP_QUERY).matches;
+    if (!isDesktop && sidebarRef.current) {
+      sidebarRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [open]);
+
   const Icon = open ? PanelRightClose : PanelRightOpen;
 
   return (
@@ -111,6 +127,7 @@ export function DetailLayout({ children, sidebar }: DetailLayoutProps) {
           id="item-sidebar"
           data-testid="item-sidebar"
           aria-label="Linked items"
+          ref={sidebarRef}
           className={cn(
             "w-full shrink-0 lg:w-[30%] lg:max-w-xs",
             open ? "block" : "hidden"

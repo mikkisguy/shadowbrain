@@ -106,21 +106,30 @@ export function ContentFeed({
   infiniteScroll = true,
 }: ContentFeedProps) {
   // ---- Column-count derivation for the masonry grid -----------
-  // We watch the container width (via ResizeObserver) and derive
-  // the column count from it. This avoids a second render pass
-  // and keeps the column count in sync with CSS breakpoints.
-  const gridRef = useRef<HTMLDivElement | null>(null);
-  const [gridColumnCount, setGridColumnCount] = useState(3);
+  // The grid node is absent on the first render — the feed returns
+  // `null` (status "idle", items empty) until the first page
+  // arrives, so a one-shot mount effect can't measure it (the ref is
+  // null at mount and the `[]`-dep effect bails, leaving the count
+  // stuck at its default — the "always 3 columns" bug). We track the
+  // node via a callback ref and (re)bind the ResizeObserver whenever
+  // it actually mounts, and seed the count from the viewport width so
+  // the grid's first appearance is already at the right column count
+  // (no 3-column flash on mobile). The grid is never part of the SSR
+  // HTML (items are empty on the server), so reading `window.innerWidth`
+  // in the initializer is hydration-safe.
+  const [gridEl, setGridEl] = useState<HTMLDivElement | null>(null);
+  const [gridColumnCount, setGridColumnCount] = useState(() =>
+    typeof window === "undefined" ? 3 : columnCountForWidth(window.innerWidth)
+  );
   useEffect(() => {
-    const node = gridRef.current;
-    if (!node) return;
+    if (!gridEl) return;
     const update = () =>
-      setGridColumnCount(columnCountForWidth(node.clientWidth));
+      setGridColumnCount(columnCountForWidth(gridEl.clientWidth));
     update();
     const observer = new ResizeObserver(update);
-    observer.observe(node);
+    observer.observe(gridEl);
     return () => observer.disconnect();
-  }, []);
+  }, [gridEl]);
 
   // ---- Masonry columns for the grid view ----------------------
   // Items are split round-robin so item ordering is L-to-R
@@ -190,7 +199,7 @@ export function ContentFeed({
         data-testid="feed-loading"
         role="status"
         aria-label="Loading items"
-        ref={gridRef}
+        ref={setGridEl}
         className="flex gap-3"
       >
         {skelCols.map((bucket, ci) => (
@@ -251,7 +260,7 @@ export function ContentFeed({
     return (
       <div className="flex flex-col gap-6">
         <div
-          ref={gridRef}
+          ref={setGridEl}
           data-testid="feed"
           data-view="grid"
           aria-label="Browse feed"
