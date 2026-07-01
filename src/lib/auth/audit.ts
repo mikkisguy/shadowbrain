@@ -19,9 +19,7 @@
 import { getDb, auditLogs } from "@/db/index";
 
 export type AuthEventAction =
-  | "auth.login.success"
-  | "auth.login.failure"
-  | "auth.logout";
+  "auth.login.success" | "auth.login.failure" | "auth.logout";
 
 export interface LogAuthEventInput {
   action: AuthEventAction;
