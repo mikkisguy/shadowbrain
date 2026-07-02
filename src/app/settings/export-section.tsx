@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { ArrowRight, Download } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { exportUrl } from "./api";
@@ -14,7 +14,7 @@ export function ExportSection() {
     >
       <header className="flex flex-col gap-1">
         <h2 className="text-foreground font-serif text-xl font-semibold">
-          Export &amp; backup
+          Export
         </h2>
         <p className="text-muted-foreground font-sans text-sm">
           Download all content items from your database.
@@ -37,6 +37,20 @@ export function ExportSection() {
         >
           <Download className="size-4" />
           Export as JSON
+        </a>
+      </div>
+
+      <div className="border-border border-t pt-4">
+        <a
+          href="/backup"
+          className={cn(
+            buttonVariants({ variant: "ghost" }),
+            "text-muted-foreground hover:text-foreground w-full justify-start"
+          )}
+          data-testid="backup-link"
+        >
+          View backup guide
+          <ArrowRight className="ml-auto size-4" />
         </a>
       </div>
     </section>
