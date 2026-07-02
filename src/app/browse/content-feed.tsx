@@ -4,37 +4,20 @@
  * Browse feed.
  *
  * Renders the four visual states the Browse page can be in:
- *   - **loading** (first paint, no data yet) — a neutral skeleton
- *     so the layout reserves space
- *   - **error** — a one-line message and a "Try again" button
- *   - **empty** — a friendly "no results" line tuned to the active
- *     filter set (e.g. "No journal entries match these filters" vs
- *     "Your second brain is empty")
- *   - **success** — the card list, with an `IntersectionObserver`
- *     sentinel at the bottom that triggers `loadMore` when the
- *     viewport reaches the end of the list
+ *   - **loading** — a neutral skeleton
+ *   - **error** — a one-line message and "Try again"
+ *   - **empty** — filter-aware "no results" copy
+ *   - **success** — virtualized cards via `react-virtuoso`
  *
- * The feed supports two views via a simple flex-column masonry:
- *   - `grid` (default) — items are split round-robin into N
- *     columns (N derived from the container width). Each column
- *     is an independent flex column so cards sit with their
- *     natural height and pack vertically — cards keep varying
- *     heights and stack flush, like a Pinterest wall. Ordering is
- *     left-to-right (item 0 → column 0, item 1 → column 1, …),
- *     which keeps the chronological timestamp order intact.
- *
- *     Each column carries `min-w-0`. Without it, a flex item's
- *     default `min-width: auto` resolves to its widest card's
- *     min-content (a long unbreakable token or a wide image), so
- *     one column would balloon to ~40% while the others shrank —
- *     the "messed-up columns" bug. `min-w-0` lets `flex-1` hold
- *     every column at an equal 1/N share; the card itself breaks
- *     long tokens with `break-words`, so nothing overflows.
- *   - `list` — single-column wide row.
+ * Two views:
+ *   - `grid` — items split round-robin into N columns. Each column
+ *     is independently virtualized so only visible cards render.
+ *   - `list` — single-column, fully virtualized.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { Virtuoso } from "react-virtuoso";
 
 import { Button } from "@/components/ui/button";
 import { CelestialCluster } from "@/components/visual/celestial-motif";
@@ -51,38 +34,19 @@ export interface ContentFeedProps {
   isLoadingMore: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
-  /** Per-card type-indicator treatment. The feed passes this
-   *  straight through to every `ContentCard` it renders. The
-   *  default (`"larger-dot"`) keeps the editorial dot, just
-   *  bumped to 2.5 px; `"pill"` turns the header into a filled
-   *  coloured chip. */
   cardVariant?: "pill" | "larger-dot";
-  /** Called when a card's tag pill is clicked. The page wires this
-   *  to `setFilters({ tag })` so a click narrows the feed and the
-   *  URL picks up `?tag=…`. */
   onTagClick?: (tag: string) => void;
-  /** Whether the scroll-triggered auto-load (the IntersectionObserver
-   *  on the sentinel) is active. Disabled during an active search so
-   *  results appear as a finite set "replacing infinite scroll" (issue
-   *  #24); a manual "Load more" button still paginates if `hasMore`.
-   *  Defaults to `true` (the normal browse feed). */
   infiniteScroll?: boolean;
 }
 
 const SKELETON_CARD_COUNT = 6;
 
-/** Breakpoints for column count — mirrors the tailwind `md:` and
- *  `lg:` thresholds the rest of the design system uses. Mobile stays
- *  a single column up to 768px (md) per the responsive spec. */
 function columnCountForWidth(width: number): number {
   if (width < 768) return 1;
   if (width < 1024) return 2;
   return 3;
 }
 
-/** Split an array round-robin into `n` buckets. Item 0 → bucket 0,
- *  item 1 → bucket 1, …, item n → bucket 0, etc. This preserves
- *  the original chronological order left-to-right across columns. */
 function roundRobin<T>(arr: readonly T[], n: number): T[][] {
   if (n <= 1) return [arr.slice()];
   const buckets: T[][] = Array.from({ length: n }, () => []);
@@ -106,18 +70,13 @@ export function ContentFeed({
   onTagClick,
   infiniteScroll = true,
 }: ContentFeedProps) {
-  // ---- Column-count derivation for the masonry grid -----------
-  // The grid node is absent on the first render — the feed returns
-  // `null` (status "idle", items empty) until the first page
-  // arrives, so a one-shot mount effect can't measure it (the ref is
-  // null at mount and the `[]`-dep effect bails, leaving the count
-  // stuck at its default — the "always 3 columns" bug). We track the
-  // node via a callback ref and (re)bind the ResizeObserver whenever
-  // it actually mounts, and seed the count from the viewport width so
-  // the grid's first appearance is already at the right column count
-  // (no 3-column flash on mobile). The grid is never part of the SSR
-  // HTML (items are empty on the server), so reading `window.innerWidth`
-  // in the initializer is hydration-safe.
+  const handleEndReached = useCallback(() => {
+    if (infiniteScroll && hasMore && !isLoadingMore) {
+      onLoadMore();
+    }
+  }, [infiniteScroll, hasMore, isLoadingMore, onLoadMore]);
+
+  // ---- Column-count derivation for the grid view -----------
   const [gridEl, setGridEl] = useState<HTMLDivElement | null>(null);
   const [gridColumnCount, setGridColumnCount] = useState(() =>
     typeof window === "undefined" ? 3 : columnCountForWidth(window.innerWidth)
@@ -132,39 +91,10 @@ export function ContentFeed({
     return () => observer.disconnect();
   }, [gridEl]);
 
-  // ---- Masonry columns for the grid view ----------------------
-  // Items are split round-robin so item ordering is L-to-R
-  // (first item → left column, second item → middle column, …).
-  // Each column is an independent flex column — cards sit with
-  // their natural height and pack vertically.
-  const masonryColumns = useMemo(() => {
+  const gridColumns = useMemo(() => {
     if (!items || view !== "grid") return null;
     return roundRobin(items, gridColumnCount);
   }, [items, view, gridColumnCount]);
-
-  // ---- Infinite-scroll sentinel -------------------------------
-  // Disabled during an active search (`infiniteScroll === false`):
-  // the observer is not attached, so scrolling to the bottom does
-  // not auto-fetch the next page. A manual "Load more" button below
-  // still paginates, so search results are never cut off — only the
-  // scroll-triggered auto-load (the "infinite scroll") is suspended.
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!infiniteScroll) return;
-    const node = sentinelRef.current;
-    if (!node) return;
-    if (typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) onLoadMore();
-        }
-      },
-      { rootMargin: "200px" }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [onLoadMore, infiniteScroll]);
 
   if (status === "error") {
     return (
@@ -189,23 +119,17 @@ export function ContentFeed({
   }
 
   if (status === "loading" && (!items || items.length === 0)) {
-    // Loading skeleton: same visual columns as the grid view so
-    // the layout reserves the right space.
-    const skelCols = roundRobin(
-      Array.from({ length: SKELETON_CARD_COUNT }, (_, i) => i),
-      gridColumnCount
-    );
     return (
       <div
         data-testid="feed-loading"
         role="status"
         aria-label="Loading items"
-        ref={setGridEl}
         className="flex gap-3"
       >
-        {skelCols.map((bucket, ci) => (
-          // `min-w-0` keeps the skeleton columns at an equal 1/N
-          // width, matching the success-state masonry below.
+        {roundRobin(
+          Array.from({ length: SKELETON_CARD_COUNT }, (_, i) => i),
+          gridColumnCount
+        ).map((bucket, ci) => (
           <div key={ci} className="flex min-w-0 flex-1 flex-col gap-3">
             {bucket.map((i) => (
               <div
@@ -257,8 +181,19 @@ export function ContentFeed({
     return null;
   }
 
-  // ---- Grid view: masonry columns (flex) ----------------------
-  if (view === "grid" && masonryColumns) {
+  // ---- Success: virtualized grid or list ---------------------
+
+  const cardRenderer = (item: BrowseItem) => (
+    <ContentCard
+      key={item.id}
+      item={item}
+      tags={item.tags}
+      variant={cardVariant}
+      onTagClick={onTagClick}
+    />
+  );
+
+  if (view === "grid" && gridColumns) {
     return (
       <div className="flex flex-col gap-6">
         <div
@@ -268,28 +203,31 @@ export function ContentFeed({
           aria-label="Browse feed"
           className="flex gap-3"
         >
-          {masonryColumns.map((col, ci) => (
-            <div key={ci} className="flex min-w-0 flex-1 flex-col gap-3">
-              {col.map((item) => (
-                <ContentCard
-                  key={item.id}
-                  item={item}
-                  tags={item.tags}
-                  variant={cardVariant}
-                  onTagClick={onTagClick}
-                />
-              ))}
+          {gridColumns.map((col, ci) => (
+            <div key={ci} className="flex min-w-0 flex-1">
+              <Virtuoso
+                data={col}
+                useWindowScroll
+                endReached={handleEndReached}
+                itemContent={(_index, item) => cardRenderer(item)}
+                components={{
+                  List: ({ style, children, ...props }) => (
+                    <div
+                      {...props}
+                      className="flex w-full flex-col gap-3"
+                      style={style}
+                    >
+                      {children}
+                    </div>
+                  ),
+                }}
+              />
             </div>
           ))}
         </div>
 
-        {/* Infinite-scroll sentinel + load-more affordance */}
-        <div
-          ref={sentinelRef}
-          data-testid="feed-sentinel"
-          aria-hidden
-          className="h-px w-full"
-        />
+        {/* Load-more affordance (for search / manual mode) */}
+        <div data-testid="feed-sentinel" aria-hidden className="h-px w-full" />
         <div
           data-testid="feed-load-more"
           className="text-muted-foreground flex flex-col items-center gap-1 py-4 font-sans text-xs"
@@ -316,33 +254,31 @@ export function ContentFeed({
     );
   }
 
-  // ---- List view: single-column list --------------------------
+  // ---- List view: single-column virtualized list -------------
   return (
     <div className="flex flex-col gap-6">
-      <ul
-        data-testid="feed"
-        data-view="list"
-        aria-label="Browse feed"
-        className="flex flex-col gap-3"
-      >
-        {items.map((item) => (
-          <li key={item.id}>
-            <ContentCard
-              item={item}
-              tags={item.tags}
-              variant={cardVariant}
-              onTagClick={onTagClick}
-            />
-          </li>
-        ))}
-      </ul>
-
-      <div
-        ref={sentinelRef}
-        data-testid="feed-sentinel"
-        aria-hidden
-        className="h-px w-full"
+      <Virtuoso
+        data={items}
+        useWindowScroll
+        endReached={handleEndReached}
+        components={{
+          List: ({ style, children, ...props }) => (
+            <div
+              {...props}
+              data-testid="feed"
+              data-view="list"
+              aria-label="Browse feed"
+              className="flex flex-col gap-3"
+              style={style}
+            >
+              {children}
+            </div>
+          ),
+        }}
+        itemContent={(_index, item) => cardRenderer(item)}
       />
+
+      <div data-testid="feed-sentinel" aria-hidden className="h-px w-full" />
       <div
         data-testid="feed-load-more"
         className="text-muted-foreground flex flex-col items-center gap-1 py-4 font-sans text-xs"
@@ -357,7 +293,7 @@ export function ContentFeed({
             type="button"
             onClick={onLoadMore}
             data-testid="feed-load-more-button"
-            className="hover:text-foreground focus-visible:ring-ring rounded-sm px-3 py-1 focus-visible:ring-2 focus-visible:outline-none"
+            className="hover:text-foreground focus-visible:ring-ring rounded-sm px-3 py-1 transition-colors focus-visible:ring-2 focus-visible:outline-none"
           >
             Load more
           </button>
