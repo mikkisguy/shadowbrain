@@ -81,14 +81,14 @@ export function CommandPalette() {
           data-slot="dialog-content"
           data-testid="command-palette"
           className={cn(
-            // Desktop: a centered, top-third modal. The
-            // command palette sits ~30% from the top so the
-            // results list is in the user's eye line.
+            // Desktop: a centered modal sized to fit all
+            // three groups (Pages, Content, Utilities)
+            // comfortably.
             // Mobile: full-screen. The `md:` breakpoint is
             // the same one the top nav uses.
             "bg-popover text-popover-foreground border-border fixed z-50 flex flex-col overflow-hidden border outline-none",
             "top-0 right-0 bottom-0 left-0 rounded-none",
-            "md:top-[20%] md:right-auto md:bottom-auto md:left-1/2 md:max-h-[60vh] md:w-[min(32rem,calc(100%-2rem))] md:-translate-x-1/2 md:rounded-md"
+            "md:top-[20%] md:right-auto md:bottom-auto md:left-1/2 md:max-h-[72vh] md:w-[min(40rem,calc(100%-3rem))] md:-translate-x-1/2 md:rounded-lg"
           )}
         >
           <DialogPrimitive.Title className="sr-only">
