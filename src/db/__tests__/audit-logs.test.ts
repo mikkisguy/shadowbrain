@@ -30,8 +30,7 @@ describe("auditLogs.create", () => {
         "SELECT action, entity_id, success FROM audit_logs WHERE entity_id = ?"
       )
       .get(entityId) as
-      | { action: string; entity_id: string; success: number }
-      | undefined;
+      { action: string; entity_id: string; success: number } | undefined;
 
     expect(row?.action).toBe("content_item.create");
     expect(row?.entity_id).toBe(entityId);

@@ -164,8 +164,7 @@ export const contentItems = {
     `);
     return (
       (stmt.get(id, includeHidden ? 1 : 0, includePrivate ? 1 : 0) as
-        | ContentItem
-        | undefined) ?? null
+        ContentItem | undefined) ?? null
     );
   },
 

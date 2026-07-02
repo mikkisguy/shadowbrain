@@ -13,8 +13,7 @@ import { getSettingValue } from "@/lib/settings/public";
 export type ChatProvider = "hermes" | "opencode-go";
 
 export type ProviderConnectionResult =
-  | { ok: true; modelCount: number }
-  | { ok: false; reason: string };
+  { ok: true; modelCount: number } | { ok: false; reason: string };
 
 function normalizeBaseUrl(base: string): string {
   return base.replace(/\/+$/, "");

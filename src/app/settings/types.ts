@@ -53,9 +53,7 @@ export type TestConnectionResult = {
 };
 
 export type SecretField =
-  | "openrouter_api_key"
-  | "hermes_api_key"
-  | "opencode_go_api_key";
+  "openrouter_api_key" | "hermes_api_key" | "opencode_go_api_key";
 
 export type ModelField =
   | "ai_model"

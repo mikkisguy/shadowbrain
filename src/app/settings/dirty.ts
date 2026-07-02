@@ -40,9 +40,7 @@ export function isSettingsDirty(
   for (const key of DRAFT_KEYS) {
     if (SECRET_KEYS.has(key)) {
       const secretKey = key as
-        | "openrouter_api_key"
-        | "hermes_api_key"
-        | "opencode_go_api_key";
+        "openrouter_api_key" | "hermes_api_key" | "opencode_go_api_key";
       if (clearedSecrets.has(secretKey) && saved[secretIsSetKey(secretKey)]) {
         return true;
       }
@@ -74,9 +72,7 @@ export function buildSettingsPatch(
   for (const key of DRAFT_KEYS) {
     if (SECRET_KEYS.has(key)) {
       const secretKey = key as
-        | "openrouter_api_key"
-        | "hermes_api_key"
-        | "opencode_go_api_key";
+        "openrouter_api_key" | "hermes_api_key" | "opencode_go_api_key";
       if (clearedSecrets.has(secretKey)) {
         (patch as Record<string, string | null>)[secretKey] = null;
         continue;

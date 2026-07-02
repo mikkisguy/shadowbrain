@@ -6,10 +6,13 @@ import { Toaster } from "sonner";
 import { SkipToContent } from "@/components/layout/skip-to-content";
 import { TopNav } from "@/components/layout/top-nav";
 import { Footer } from "@/components/layout/footer";
+import { BackupReminderBanner } from "@/components/backup/backup-reminder-banner";
 import { CommandPaletteRoot } from "@/components/command-palette/command-palette-root";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { getDb } from "@/db/index";
 import { getEnv } from "@/lib/env";
 import { isSessionCookieValid } from "@/lib/auth/session";
+import { readBackupStatus } from "@/lib/backup/reminder";
 
 import "./globals.css";
 
@@ -76,6 +79,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const isAuthenticated = await isRequestAuthenticated();
+  const backupStatus = isAuthenticated ? readBackupStatus(getDb()) : null;
   return (
     <html
       lang="en"
@@ -114,6 +118,11 @@ export default async function RootLayout({
               product framing.
             */}
             {isAuthenticated ? <TopNav /> : null}
+            {backupStatus ? (
+              <div className="mx-auto mt-4 w-full max-w-screen-xl px-4 sm:px-6">
+                <BackupReminderBanner initialStatus={backupStatus} />
+              </div>
+            ) : null}
             <div className="flex flex-1 flex-col">{children}</div>
             {isAuthenticated ? <Footer /> : null}
           </TooltipProvider>

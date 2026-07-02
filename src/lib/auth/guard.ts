@@ -26,8 +26,7 @@ import { getEnv } from "@/lib/env";
 import { readSessionFromRequest } from "./session";
 
 export type GuardResult =
-  | { ok: true; username: string }
-  | { ok: false; response: Response };
+  { ok: true; username: string } | { ok: false; response: Response };
 
 /** Verify that `request` carries a valid session cookie. Returns
  *  `{ ok: true, username }` on success, or `{ ok: false,
