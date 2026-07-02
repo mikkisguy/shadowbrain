@@ -203,9 +203,10 @@ describe("ContentCard", () => {
     expect(screen.queryByTestId("content-card-image")).not.toBeInTheDocument();
   });
 
-  it("renders the image at the top when image_url is set", () => {
+  it("renders the image at the top when image_url is set on an image-type card", () => {
     const withImage: BrowseItem = {
       ...baseItem,
+      type: "image",
       image_url: "/api/images/notes/docker.png",
     };
     render(<ContentCard item={withImage} />);
@@ -217,6 +218,39 @@ describe("ContentCard", () => {
     // the content body. We assert it comes before the type badge.
     const firstChildTag = card.firstElementChild?.tagName;
     expect(firstChildTag).toBe("DIV");
+  });
+
+  it("renders a background-fade image when image_url is set on a non-image-type card", () => {
+    const withImage: BrowseItem = {
+      ...baseItem,
+      type: "journal",
+      image_url: "/api/images/journals/travel.png",
+    };
+    render(<ContentCard item={withImage} />);
+    const card = screen.getByTestId("content-card");
+    expect(card).toHaveAttribute("data-has-image", "true");
+    // Should render the background image element
+    const bgImg = screen.getByTestId("content-card-bg-image");
+    expect(bgImg).toHaveAttribute("src", "/api/images/journals/travel.png");
+    // Should NOT render the top-banner image
+    expect(screen.queryByTestId("content-card-image")).not.toBeInTheDocument();
+    // Background element should be absolute positioned and fill the card
+    expect(bgImg.className).toMatch(/absolute inset-0/);
+  });
+
+  it("does not render background-fade on image-type cards with image_url", () => {
+    const withImage: BrowseItem = {
+      ...baseItem,
+      type: "image",
+      image_url: "/api/images/photos/flower.png",
+    };
+    render(<ContentCard item={withImage} />);
+    // Should NOT render the background image
+    expect(
+      screen.queryByTestId("content-card-bg-image")
+    ).not.toBeInTheDocument();
+    // Should render the top-banner image
+    expect(screen.getByTestId("content-card-image")).toBeInTheDocument();
   });
 
   it("the card has natural height — not forced to fill a grid row", () => {

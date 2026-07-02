@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   getDb: vi.fn(() => ({})),
 }));
 
+const coverMocks = vi.hoisted(() => ({
+  findCoverImagesBySourceIds: vi.fn(() => ({})),
+}));
+
 const router = vi.hoisted(() => ({
   back: vi.fn(),
   push: vi.fn(),
@@ -22,6 +26,9 @@ vi.mock("@/db/index", () => ({
   getDb: mocks.getDb,
   contentItems: {
     findWithRelations: mocks.findWithRelations,
+  },
+  contentLinks: {
+    findCoverImagesBySourceIds: coverMocks.findCoverImagesBySourceIds,
   },
 }));
 
@@ -36,6 +43,10 @@ vi.mock("next/navigation", () => ({
 afterEach(() => {
   mocks.findWithRelations.mockReset();
   mocks.getDb.mockClear();
+  // Reset and re-establish the default (no cover) so a test that sets
+  // a cover cannot leak into the next.
+  coverMocks.findCoverImagesBySourceIds.mockReset();
+  coverMocks.findCoverImagesBySourceIds.mockReturnValue({});
   router.back.mockReset();
   router.push.mockReset();
   router.replace.mockReset();
@@ -450,5 +461,28 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
     expect(sessionStorage.getItem("item.sidebarOpen")).toBe("false");
 
     desktopSpy.mockRestore();
+  });
+});
+
+describe("ItemDetailPage cover background", () => {
+  it("renders a fading cover background from the first linked image", async () => {
+    mockItem("journal", null);
+    coverMocks.findCoverImagesBySourceIds.mockReturnValue({
+      "1": "2026-05/abc.webp",
+    });
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    const bg = screen.getByTestId("item-cover-background");
+    const img = bg.querySelector("img");
+    expect(img).toHaveAttribute("src", "/api/images/2026-05/abc.webp");
+  });
+
+  it("renders no cover background when there is no linked image", async () => {
+    mockItem("note", null);
+
+    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+
+    expect(screen.queryByTestId("item-cover-background")).toBeNull();
   });
 });
