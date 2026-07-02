@@ -205,6 +205,11 @@ export function ContentCard({
   // not exist (the image capture pipeline hasn't created it yet),
   // so a soft fallback keeps the card wall looking intentional.
   const [imageError, setImageError] = useState(false);
+  const isImageType = item.type === "image";
+  const hasCover = Boolean(item.image_url) && !imageError;
+  /** Whether the dark scrim is active (background image behind text).
+   *  When true, text colors flip to light-on-dark regardless of theme. */
+  const hasCoverBg = !isImageType && hasCover;
 
   return (
     <article
@@ -218,16 +223,44 @@ export function ContentCard({
         "group-hover:border-border-strong transition-colors"
       )}
     >
-      {item.image_url && !imageError ? (
-        <div className="border-border bg-surface-muted pointer-events-none relative aspect-video w-full overflow-hidden border-b">
+      {/* Cover image as a fading card background (non-image types). */}
+      {!isImageType && hasCover ? (
+        <div className="pointer-events-none absolute inset-0" aria-hidden>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={item.image_url}
+            src={item.image_url!}
             alt=""
             loading="lazy"
             decoding="async"
             onError={() => setImageError(true)}
             className="absolute inset-0 size-full object-cover"
+            data-testid="content-card-bg-image"
+          />
+          {/* Strong scrim using the app's background color. The image
+              is only subtly visible at the top — the overlay starts at
+              ~40% opacity and builds quickly to near-opaque at the
+              bottom, matching the journal-shadows card treatment. */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(rgba(18,18,18,0.9) 0%, rgba(18,18,18,0.95) 30%, rgba(18,18,18,0.98) 60%, rgba(18,18,18,1) 100%)",
+            }}
+          />
+        </div>
+      ) : null}
+
+      {/* Image-type cards render a top banner (16:9) above the body. */}
+      {isImageType && item.image_url && !imageError ? (
+        <div className="border-border bg-surface-muted pointer-events-none relative aspect-video w-full overflow-hidden border-b">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={item.image_url!}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={() => setImageError(true)}
+            className="absolute inset-0 size-full object-cover brightness-50 transition-[filter] duration-200 group-hover:brightness-100"
             data-testid="content-card-image"
           />
         </div>
@@ -236,7 +269,7 @@ export function ContentCard({
       {/* Fallback for broken / missing images: a subtle placeholder
           so cards with and without images still feel like part of
           the same grid, rather than showing a browser broken-icon. */}
-      {item.image_url && imageError ? (
+      {isImageType && item.image_url && imageError ? (
         <div
           className="border-border bg-surface-muted pointer-events-none flex aspect-video w-full items-center justify-center border-b"
           data-testid="content-card-image-error"
@@ -274,7 +307,12 @@ export function ContentCard({
             // (2.5 px instead of 1.5 px) so the type identity
             // reads from across the feed. Keeps the editorial
             // whitespace.
-            <span className="text-muted-foreground inline-flex items-center gap-2 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase">
+            <span
+              className={cn(
+                "inline-flex items-center gap-2 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase",
+                hasCoverBg ? "text-white/70" : "text-muted-foreground"
+              )}
+            >
               <span
                 aria-hidden
                 className={cn("size-2.5 rounded-full", dotClass)}
@@ -287,7 +325,12 @@ export function ContentCard({
               render={
                 <time
                   dateTime={item.created_at}
-                  className="text-muted-foreground hover:text-foreground pointer-events-auto relative z-20 cursor-help font-mono text-[0.7rem] transition-colors"
+                  className={cn(
+                    "pointer-events-auto relative z-20 cursor-help font-mono text-[0.7rem] transition-colors",
+                    hasCoverBg
+                      ? "text-white/60 hover:text-white"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
                 />
               }
             >
@@ -298,7 +341,12 @@ export function ContentCard({
         </header>
 
         {item.title ? (
-          <h3 className="text-foreground font-serif text-base leading-snug font-semibold tracking-[-0.01em] break-words max-md:line-clamp-1 md:text-lg">
+          <h3
+            className={cn(
+              "font-serif text-base leading-snug font-semibold tracking-[-0.01em] break-words max-md:line-clamp-1 md:text-lg",
+              hasCoverBg ? "text-white" : "text-foreground"
+            )}
+          >
             {item.title}
           </h3>
         ) : null}
@@ -310,7 +358,10 @@ export function ContentCard({
           // is neutralised — see `parseSnippet`.
           <p
             data-testid="content-card-snippet"
-            className="text-muted-foreground line-clamp-1 font-sans text-sm leading-relaxed break-words md:line-clamp-3"
+            className={cn(
+              "line-clamp-1 font-sans text-sm leading-relaxed break-words md:line-clamp-3",
+              hasCoverBg ? "text-white/80" : "text-muted-foreground"
+            )}
           >
             {snippetParts.map((part, i) =>
               part.highlight ? (
@@ -321,7 +372,12 @@ export function ContentCard({
             )}
           </p>
         ) : (
-          <p className="text-muted-foreground line-clamp-1 font-sans text-sm leading-relaxed break-words md:line-clamp-3">
+          <p
+            className={cn(
+              "line-clamp-1 font-sans text-sm leading-relaxed break-words md:line-clamp-3",
+              hasCoverBg ? "text-white/80" : "text-muted-foreground"
+            )}
+          >
             {previewText(item.content)}
           </p>
         )}
@@ -329,7 +385,10 @@ export function ContentCard({
         {summary ? (
           <p
             data-testid="content-card-metadata-summary"
-            className="text-muted-foreground font-mono text-[0.7rem] tracking-wide"
+            className={cn(
+              "font-mono text-[0.7rem] tracking-wide",
+              hasCoverBg ? "text-white/60" : "text-muted-foreground"
+            )}
           >
             {summary}
           </p>
@@ -344,7 +403,12 @@ export function ContentCard({
                 dense row of tiny pills doesn't shrink already-small tap
                 targets on a narrow card. Pills return at md+ where the
                 card has room. */}
-            <li className="text-muted-foreground font-mono text-[0.65rem] tracking-wide md:hidden">
+            <li
+              className={cn(
+                "font-mono text-[0.65rem] tracking-wide md:hidden",
+                hasCoverBg ? "text-white/60" : "text-muted-foreground"
+              )}
+            >
               {tagsList.length} {tagsList.length === 1 ? "tag" : "tags"}
             </li>
             {tagsList.slice(0, 4).map((tag) => (
@@ -355,8 +419,11 @@ export function ContentCard({
                   onClick={() => onTagClick?.(tag)}
                   aria-label={`Filter by tag ${tag}`}
                   className={cn(
-                    "border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong pointer-events-auto relative z-20 rounded-sm border px-1.5 py-0.5 font-mono text-[0.65rem] tracking-wide transition-colors",
-                    "focus-visible:ring-ring focus-visible:rounded-sm focus-visible:ring-2 focus-visible:outline-none"
+                    "pointer-events-auto relative z-20 rounded-sm border px-1.5 py-0.5 font-mono text-[0.65rem] tracking-wide transition-colors",
+                    "focus-visible:ring-ring focus-visible:rounded-sm focus-visible:ring-2 focus-visible:outline-none",
+                    hasCoverBg
+                      ? "border-white/20 bg-black/30 text-white/80 hover:border-white/40 hover:text-white"
+                      : "border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong"
                   )}
                 >
                   #{tag}

@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 
-import { getDb, contentItems } from "@/db/index";
+import { getDb, contentItems, contentLinks } from "@/db/index";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
 
+import { CoverBackground } from "./cover-background";
 import { DetailLayout } from "./detail-layout";
 import { ItemSidebar } from "./item-sidebar";
 import { MarkdownContent } from "./markdown-content";
@@ -175,70 +176,115 @@ export default async function ItemDetailPage({
   const { item, tags, links } = result;
   const badgeColor = typeColorClass(item.type);
   const badgeLabel = typeLabel(item.type);
+  const isImageType = item.type === "image";
+
+  // Resolve the page's fading background image: the first linked
+  // image-type item (same "earliest linked image" rule as the browse
+  // card), else the item's own `image_path`. Both visibility opt-ins
+  // are forced on — the single admin is viewing their own brain.
+  // Image-type items skip the cover background — the image is shown
+  // inline in the content area instead.
+  const coverMap = contentLinks.findCoverImagesBySourceIds(db, [id], {
+    includeHidden: true,
+    includePrivate: true,
+  });
+  const coverImagePath = coverMap[id] ?? item.image_path;
+  const coverImageUrl =
+    !isImageType && coverImagePath
+      ? `/api/images/${coverImagePath.replace(/^\/+/, "")}`
+      : null;
+
+  // For image-type items, resolve the inline image URL.
+  const inlineImageUrl =
+    isImageType && item.image_path
+      ? `/api/images/${item.image_path.replace(/^\/+/, "")}`
+      : null;
 
   return (
-    <DetailLayout
-      sidebar={
-        <ItemSidebar
-          tags={tags}
-          outbound={links.outbound}
-          inbound={links.inbound}
-        />
-      }
-    >
-      <header className="flex flex-col gap-3">
-        {/* Coloured type badge — the chip background is the type's
+    <>
+      {coverImageUrl ? <CoverBackground imageUrl={coverImageUrl} /> : null}
+      <div className="relative z-10">
+        <DetailLayout
+          sidebar={
+            <ItemSidebar
+              tags={tags}
+              outbound={links.outbound}
+              inbound={links.inbound}
+            />
+          }
+        >
+          <header className="flex flex-col gap-3">
+            {/* Coloured type badge — the chip background is the type's
             design-system token; the near-black inverted foreground
             (text-foreground-inverted) reads cleanly on the saturated
             type colours. */}
-        <span
-          data-testid="item-type-badge"
-          className={`${badgeColor} text-foreground-inverted inline-flex w-fit items-center rounded-sm px-2 py-0.5 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase`}
-        >
-          {badgeLabel}
-        </span>
-        {item.title ? (
-          <h1 className="text-foreground font-serif text-3xl font-semibold tracking-[-0.01em] sm:text-4xl">
-            {item.title}
-          </h1>
-        ) : null}
-        <dl className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs">
-          <div className="flex gap-1.5">
-            <dt>Created</dt>
-            <dd className="text-foreground">
-              {formatAbsolute(item.created_at)}
-            </dd>
-          </div>
-          <div className="flex gap-1.5">
-            <dt>Updated</dt>
-            <dd className="text-foreground">
-              {formatAbsolute(item.updated_at)}
-            </dd>
-          </div>
-          <div className="flex gap-1.5">
-            <dt>Source</dt>
-            <dd className="text-foreground">{item.source}</dd>
-          </div>
-        </dl>
-      </header>
+            <span
+              data-testid="item-type-badge"
+              className={`${badgeColor} text-foreground-inverted inline-flex w-fit items-center rounded-sm px-2 py-0.5 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase`}
+            >
+              {badgeLabel}
+            </span>
+            {item.title ? (
+              <h1 className="text-foreground font-serif text-3xl font-semibold tracking-[-0.01em] sm:text-4xl">
+                {item.title}
+              </h1>
+            ) : null}
+            <dl className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs">
+              <div className="flex gap-1.5">
+                <dt>Created</dt>
+                <dd className="text-foreground">
+                  {formatAbsolute(item.created_at)}
+                </dd>
+              </div>
+              <div className="flex gap-1.5">
+                <dt>Updated</dt>
+                <dd className="text-foreground">
+                  {formatAbsolute(item.updated_at)}
+                </dd>
+              </div>
+              <div className="flex gap-1.5">
+                <dt>Source</dt>
+                <dd className="text-foreground">{item.source}</dd>
+              </div>
+            </dl>
+          </header>
 
-      <MarkdownContent content={item.content} />
+          {/* Image-type items: show the image inline in the content area */}
+          {inlineImageUrl ? (
+            <figure className="flex flex-col gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={inlineImageUrl}
+                alt={item.title ?? ""}
+                className="border-border h-auto max-w-full rounded-sm border"
+              />
+              {item.content ? null : (
+                <figcaption className="text-muted-foreground font-mono text-xs">
+                  {item.title}
+                </figcaption>
+              )}
+            </figure>
+          ) : null}
 
-      {/* Type-specific metadata display (issue #103) */}
-      {renderMetadataSection(item.type, item.metadata)}
+          <MarkdownContent content={item.content} />
 
-      {item.source_url ? (
-        <p className="font-sans text-sm">
-          <a
-            href={item.source_url}
-            rel="noopener noreferrer"
-            target="_blank"
-            className="text-primary break-all hover:underline"
-          >
-            {item.source_url}
-          </a>
-        </p>
-      ) : null}
-    </DetailLayout>
+          {/* Type-specific metadata display (issue #103) */}
+          {renderMetadataSection(item.type, item.metadata)}
+
+          {item.source_url ? (
+            <p className="font-sans text-sm">
+              <a
+                href={item.source_url}
+                rel="noopener noreferrer"
+                target="_blank"
+                className="text-primary break-all hover:underline"
+              >
+                {item.source_url}
+              </a>
+            </p>
+          ) : null}
+        </DetailLayout>
+      </div>
+    </>
   );
 }
