@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { getDb, contentItems, contentTags, auditLogs } from "@/db/index";
+import {
+  getDb,
+  contentItems,
+  contentTags,
+  contentLinks,
+  auditLogs,
+} from "@/db/index";
 import {
   parsePagination,
   errorResponse,
@@ -256,12 +262,20 @@ export async function GET(request: Request) {
     // Attach each item's tag names via a single batched query so the
     // Browse card can render (and click) tags without an N+1. The
     // card only needs names; full tag rows live on `/api/items/[id]`.
-    const tagMap = contentTags.findNamesByContentIds(
-      db,
-      result.items.map((i) => i.id)
-    );
+    const ids = result.items.map((i) => i.id);
+    const tagMap = contentTags.findNamesByContentIds(db, ids);
+    // Resolve each item's cover image from its first linked image-type
+    // item (visibility-aware). Falls back to the row's own image_path,
+    // which is what powers image-type cards; non-image types get their
+    // cover from links. /api/search agrees on this so the browse card
+    // never branches on the data source.
+    const coverMap = contentLinks.findCoverImagesBySourceIds(db, ids, {
+      includeHidden,
+      includePrivate,
+    });
     const itemsWithTags = result.items.map((i) => ({
       ...i,
+      image_path: coverMap[i.id] ?? i.image_path,
       tags: tagMap[i.id] ?? [],
     }));
 

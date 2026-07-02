@@ -268,3 +268,106 @@ describe("GET /api/search", () => {
     expect(json.error.code).toBe("VALIDATION_ERROR");
   });
 });
+
+describe("GET /api/search cover-image resolution", () => {
+  beforeEach(() => {
+    cleanupTestDb();
+    createTestDb().close();
+  });
+
+  afterEach(() => {
+    cleanupTestDb();
+  });
+
+  it("overrides image_path with the cover from linked image in search results", async () => {
+    // Create a source note with no image_path
+    const noteReq = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "note",
+        title: "searchable note",
+        content: "this should be searchable",
+        source: "manual",
+      }),
+    });
+    const noteRes = await POST(noteReq);
+    const note = await noteRes.json();
+
+    // Create an image item
+    const imageReq = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "image",
+        content: "image content",
+        source: "manual",
+      }),
+    });
+    const imageRes = await POST(imageReq);
+    const image = await imageRes.json();
+
+    // Set the image_path directly (since POST doesn't accept it)
+    const db = getDb();
+    db.prepare("UPDATE content_items SET image_path = ? WHERE id = ?").run(
+      "/search-cover.jpg",
+      image.id
+    );
+
+    // Create a link from note to image
+    const linkId = crypto.randomUUID();
+    db.prepare(
+      `INSERT INTO content_links (id, source_id, target_id, link_type, created_at)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(linkId, note.id, image.id, "references", new Date().toISOString());
+
+    // Search for the note and verify cover resolution
+    const searchReq = await authedGet(
+      "http://localhost/api/search?q=searchable"
+    );
+    const searchRes = await GET(searchReq);
+    const json = await searchRes.json();
+
+    const noteResult = json.results.find(
+      (r: { id: string }) => r.id === note.id
+    );
+    expect(noteResult).toBeDefined();
+    expect(noteResult.image_path).toBe("/search-cover.jpg");
+  });
+
+  it("keeps the item's own image_path in search results when there is no linked image", async () => {
+    // Create a note
+    const noteReq = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "note",
+        title: "searchable note",
+        content: "this should be searchable",
+        source: "manual",
+      }),
+    });
+    const noteRes = await POST(noteReq);
+    const note = await noteRes.json();
+
+    // Set the image_path directly (since POST doesn't accept it)
+    const db = getDb();
+    db.prepare("UPDATE content_items SET image_path = ? WHERE id = ?").run(
+      "/own-search.jpg",
+      note.id
+    );
+
+    // Search for the note and verify own image_path is kept
+    const searchReq = await authedGet(
+      "http://localhost/api/search?q=searchable"
+    );
+    const searchRes = await GET(searchReq);
+    const json = await searchRes.json();
+
+    const noteResult = json.results.find(
+      (r: { id: string }) => r.id === note.id
+    );
+    expect(noteResult).toBeDefined();
+    expect(noteResult.image_path).toBe("/own-search.jpg");
+  });
+});

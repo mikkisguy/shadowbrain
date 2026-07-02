@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm } from "fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import { spawnSync } from "child_process";
 import Database from "better-sqlite3";
-import { getDbPath } from "@/db/index";
+import { getDbPath, getDb, closeDb } from "@/db/index";
 import { existsSync, unlinkSync } from "fs";
 
 /**
@@ -20,6 +20,8 @@ import { existsSync, unlinkSync } from "fs";
  * The test uses the project's test DB (NODE_ENV=test, set in
  * vitest.config.ts) as the dest, and resets it to a known state
  * between runs.
+ *
+ * This test also validates image file copying and content links creation.
  */
 const PROJECT_ROOT = join(__dirname, "..", "..", "..");
 const SCRIPT = join(PROJECT_ROOT, "scripts", "migrate-journal-shadows.ts");
@@ -44,10 +46,12 @@ function cleanTestDb(): void {
 
 interface LegacyFixture {
   sourcePath: string;
+  imagesDir: string;
 }
 
 async function writeLegacyFixture(workdir: string): Promise<LegacyFixture> {
   const sourcePath = join(workdir, "journal.db");
+  const imagesDir = join(workdir, "images");
   const db = new Database(sourcePath);
   db.pragma("journal_mode = WAL");
   // Mirror the journal-shadows schema (May 2026 snapshot).
@@ -135,7 +139,12 @@ async function writeLegacyFixture(workdir: string): Promise<LegacyFixture> {
   );
 
   db.close();
-  return { sourcePath };
+
+  // Create legacy images dir with a dummy image file.
+  await mkdir(join(imagesDir, "2026-01"), { recursive: true });
+  await writeFile(join(imagesDir, "2026-01", "abc.webp"), "dummy-image-bytes");
+
+  return { sourcePath, imagesDir };
 }
 
 function runScript(sourcePath: string): {
@@ -241,4 +250,127 @@ describe("migrate-journal-shadows E2E", () => {
     // Validation must still pass on the second run.
     expect(second.stdout).toMatch(/Validation: OK/);
   });
+
+  it("copies image files and creates content links between journal and raw entries", async () => {
+    const { sourcePath, imagesDir } = await writeLegacyFixture(workdir);
+
+    // Set DATA_DIR to a temp dir so getImagesDir() resolves under it.
+    const dataDir = join(workdir, "data");
+    await mkdir(dataDir, { recursive: true });
+
+    const result = runScriptWithEnv(sourcePath, {
+      ...process.env,
+      DATA_DIR: dataDir,
+      NODE_ENV: "test",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/journal items inserted:.*1 \/ 1/);
+    expect(result.stdout).toMatch(/raw items inserted:.*2 \/ 2/);
+    expect(result.stdout).toMatch(/content links inserted:.*4/); // 2 raws × bidirectional
+    expect(result.stdout).toMatch(/Images: copied 1, skipped 0/);
+
+    // Verify dest images dir contains the copied file.
+    const destImagesDir = join(dataDir, "images");
+    const destImagePath = join(destImagesDir, "2026-01", "abc.webp");
+    expect(existsSync(destImagePath)).toBe(true);
+
+    // Verify content_links table has 4 rows. The script ran with
+    // DATA_DIR=dataDir, so its DB lives under the temp dir — not at
+    // the default getDbPath("test"). Resolve the same filename the
+    // script wrote (mirrors getDbPath's test-env suffix) under the
+    // overridden data dir.
+    const workerId = process.env.VITEST_POOL_ID;
+    const suffix = workerId ? `.test.${workerId}` : ".test";
+    const destDbPath = join(dataDir, `shadowbrain${suffix}.db`);
+    const dest = new Database(destDbPath, { readonly: true });
+    try {
+      const linkCount = (
+        dest.prepare("SELECT COUNT(*) AS c FROM content_links").get() as {
+          c: number;
+        }
+      ).c;
+      expect(linkCount).toBe(4);
+
+      // Verify links are bidirectional references.
+      const links = dest.prepare("SELECT * FROM content_links").all() as Array<{
+        id: string;
+        source_id: string;
+        target_id: string;
+        link_type: string;
+      }>;
+
+      expect(links.every((l) => l.link_type === "references")).toBe(true);
+
+      // Journal → raw links
+      const journalToRaw = links.filter((l) => l.source_id === "je-1");
+      expect(journalToRaw).toHaveLength(2);
+      expect(journalToRaw.map((l) => l.target_id)).toEqual(
+        expect.arrayContaining(["r1", "r2"])
+      );
+
+      // Raw → journal links
+      const rawToJournal = links.filter((l) => l.target_id === "je-1");
+      expect(rawToJournal).toHaveLength(2);
+      expect(rawToJournal.map((l) => l.source_id)).toEqual(
+        expect.arrayContaining(["r1", "r2"])
+      );
+    } finally {
+      dest.close();
+    }
+  });
+
+  it("is idempotent for images and links on second run", async () => {
+    const { sourcePath, imagesDir } = await writeLegacyFixture(workdir);
+
+    // Set DATA_DIR to a temp dir so getImagesDir() resolves under it.
+    const dataDir = join(workdir, "data");
+    await mkdir(dataDir, { recursive: true });
+
+    const first = runScriptWithEnv(sourcePath, {
+      ...process.env,
+      DATA_DIR: dataDir,
+      NODE_ENV: "test",
+    });
+    expect(first.status).toBe(0);
+    expect(first.stdout).toMatch(/content links inserted:.*4/);
+    expect(first.stdout).toMatch(/Images: copied 1, skipped 0/);
+
+    const second = runScriptWithEnv(sourcePath, {
+      ...process.env,
+      DATA_DIR: dataDir,
+      NODE_ENV: "test",
+    });
+    expect(second.status).toBe(0);
+    // No new links or images should be inserted/copied.
+    expect(second.stdout).toMatch(/content links inserted:.*0/);
+    expect(second.stdout).toMatch(/Images: copied 0, skipped 1/); // Image already exists, so skipped
+  });
 });
+
+function runScriptWithEnv(
+  sourcePath: string,
+  envOverrides: Record<string, string>
+): {
+  stdout: string;
+  stderr: string;
+  status: number;
+} {
+  const result = spawnSync(
+    TSX,
+    [SCRIPT, "--source", sourcePath, "--validate"],
+    {
+      cwd: PROJECT_ROOT,
+      env: {
+        ...process.env,
+        ...envOverrides,
+      },
+      encoding: "utf-8",
+    }
+  );
+  return {
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+    status: result.status ?? -1,
+  };
+}
