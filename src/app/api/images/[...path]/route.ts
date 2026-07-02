@@ -3,7 +3,6 @@ import { promises as fs } from "fs";
 import { getImageFullPath, PathTraversalError } from "@/lib/storage";
 import { errorResponse, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
-import { requireAuthenticated } from "@/lib/auth/guard";
 
 // Maximum length of the joined relative path we will accept. A
 // legitimate monthly directory + UUID + extension fits well under
@@ -38,8 +37,6 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const auth = await requireAuthenticated(request);
-  if (!auth.ok) return auth.response;
   try {
     const { path: segments } = await params;
 

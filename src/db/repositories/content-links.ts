@@ -12,11 +12,15 @@ export interface ContentLink {
 
 /** A minimal reference to the content item on the other end of a link —
  *  just what the item-detail sidebar (issue #26) needs to render a row
- *  and link to it. */
+ *  and link to it. `image_path` is carried so a linked `image`-type
+ *  target can serve as a cover image without a second lookup (the item
+ *  detail page resolves the first linked image as its fading
+ *  background). Null for non-image items. */
 export interface LinkedItemRef {
   id: string;
   title: string | null;
   type: string;
+  image_path: string | null;
 }
 
 /** An outbound link (this item is the `source`) enriched with the
@@ -43,6 +47,7 @@ interface LinkJoinRow {
   item_id: string;
   item_title: string | null;
   item_type: string;
+  item_image_path: string | null;
 }
 
 export const contentLinks = {
@@ -59,6 +64,39 @@ export const contentLinks = {
   ) => {
     const stmt = db.prepare(`
       INSERT INTO content_links (id, source_id, target_id, link_type, context, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      link.id,
+      link.source_id,
+      link.target_id,
+      link.link_type ?? "reference",
+      link.context ?? null,
+      link.created_at
+    );
+  },
+
+  /**
+   * Idempotent insert — silently skip on an `id` collision. Used by
+   * the journal-shadows migrator, which generates *stable, deterministic*
+   * link ids (a hash of `journalId + rawId`) so a re-run is a no-op
+   * rather than throwing on the first PRIMARY KEY collision and
+   * rolling the whole transaction. Mirrors
+   * `contentItems.createOrIgnore`.
+   */
+  createOrIgnore: (
+    db: Database.Database,
+    link: {
+      id: string;
+      source_id: string;
+      target_id: string;
+      link_type?: string;
+      context?: string | null;
+      created_at: string;
+    }
+  ) => {
+    const stmt = db.prepare(`
+      INSERT OR IGNORE INTO content_links (id, source_id, target_id, link_type, context, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
     return stmt.run(
@@ -104,7 +142,8 @@ export const contentLinks = {
       SELECT
         cl.id, cl.source_id, cl.target_id, cl.link_type, cl.context,
         cl.created_at,
-        ci.id AS item_id, ci.title AS item_title, ci.type AS item_type
+        ci.id AS item_id, ci.title AS item_title, ci.type AS item_type,
+        ci.image_path AS item_image_path
       FROM content_links cl
       JOIN content_items ci ON ci.id = cl.target_id
       WHERE cl.source_id = ?
@@ -124,7 +163,12 @@ export const contentLinks = {
       link_type: r.link_type,
       context: r.context,
       created_at: r.created_at,
-      target: { id: r.item_id, title: r.item_title, type: r.item_type },
+      target: {
+        id: r.item_id,
+        title: r.item_title,
+        type: r.item_type,
+        image_path: r.item_image_path,
+      },
     }));
   },
 
@@ -144,7 +188,8 @@ export const contentLinks = {
       SELECT
         cl.id, cl.source_id, cl.target_id, cl.link_type, cl.context,
         cl.created_at,
-        ci.id AS item_id, ci.title AS item_title, ci.type AS item_type
+        ci.id AS item_id, ci.title AS item_title, ci.type AS item_type,
+        ci.image_path AS item_image_path
       FROM content_links cl
       JOIN content_items ci ON ci.id = cl.source_id
       WHERE cl.target_id = ?
@@ -164,8 +209,67 @@ export const contentLinks = {
       link_type: r.link_type,
       context: r.context,
       created_at: r.created_at,
-      source: { id: r.item_id, title: r.item_title, type: r.item_type },
+      source: {
+        id: r.item_id,
+        title: r.item_title,
+        type: r.item_type,
+        image_path: r.item_image_path,
+      },
     }));
+  },
+
+  /**
+   * Batched cover-image lookup for a set of content ids. Returns a
+   * `Record<sourceId, imagePath>` mapping each id to the
+   * `image_path` of its **first linked `image`-type target** — the
+   * "main image" used by the browse card background and the item-page
+   * fading background.
+   *
+   * "First" is the earliest-linked image: rows are ordered by
+   * `created_at, id` (matching the sidebar ordering) and only the
+   * first row per source is kept, so the migrator's convention of
+   * stamping each journal→raw link with the raw's `created_at` makes
+   * the cover the chronologically first photo of the day.
+   *
+   * One query for a whole page — mirrors
+   * `contentTags.findNamesByContentIds` (no N+1). Items with no
+   * linked image are absent from the map; callers fall back to the
+   * item's own `image_path` (which is what powers `image`-type
+   * cards). Visibility flags default to `false`, mirroring the
+   * content-item read helpers, so a hidden / private linked image is
+   * only resolved when the caller opts in.
+   */
+  findCoverImagesBySourceIds: (
+    db: Database.Database,
+    sourceIds: readonly string[],
+    options: VisibilityOptions = {}
+  ): Record<string, string> => {
+    if (sourceIds.length === 0) return {};
+    const includeHidden = options.includeHidden ? 1 : 0;
+    const includePrivate = options.includePrivate ? 1 : 0;
+    const placeholders = sourceIds.map(() => "?").join(", ");
+    const stmt = db.prepare(`
+      SELECT cl.source_id AS sourceId, ci.image_path AS imagePath
+      FROM content_links cl
+      JOIN content_items ci ON ci.id = cl.target_id
+      WHERE cl.source_id IN (${placeholders})
+        AND ci.type = 'image'
+        AND ci.image_path IS NOT NULL
+        AND (ci.is_hidden = 0 OR ?)
+        AND (ci.is_private = 0 OR ?)
+      ORDER BY cl.created_at ASC, cl.id ASC
+    `);
+    const rows = stmt.all(
+      ...sourceIds,
+      includeHidden,
+      includePrivate
+    ) as Array<{ sourceId: string; imagePath: string }>;
+    const map: Record<string, string> = {};
+    for (const row of rows) {
+      // Ordered query — keep only the first (earliest) image per source.
+      if (!(row.sourceId in map)) map[row.sourceId] = row.imagePath;
+    }
+    return map;
   },
 
   /**

@@ -22,12 +22,13 @@ function seedItem(
     type?: string;
     isHidden?: 0 | 1;
     isPrivate?: 0 | 1;
+    imagePath?: string | null;
   } = {}
 ) {
   db.prepare(
     `INSERT INTO content_items
-       (id, type, title, content, source, is_private, is_hidden, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, type, title, content, source, is_private, is_hidden, image_path, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     opts.type ?? "note",
@@ -36,6 +37,7 @@ function seedItem(
     "manual",
     opts.isPrivate ?? 0,
     opts.isHidden ?? 0,
+    opts.imagePath ?? null,
     NOW,
     NOW
   );
@@ -70,6 +72,7 @@ describe("contentLinks.findOutboundWithItems", () => {
       id: "b",
       title: "Target",
       type: "project",
+      image_path: null,
     });
     db.close();
   });
@@ -149,6 +152,7 @@ describe("contentLinks.findInboundWithItems", () => {
       id: "b",
       title: "Referrer",
       type: "note",
+      image_path: null,
     });
     db.close();
   });
@@ -179,6 +183,241 @@ describe("contentLinks.findInboundWithItems", () => {
 
     const result = contentLinks.findInboundWithItems(db, "a");
     expect(result[0].source.title).toBeNull();
+    db.close();
+  });
+});
+
+describe("contentLinks.findCoverImagesBySourceIds", () => {
+  it("returns the earliest image's path when a source has two linked image targets", () => {
+    const db = createTestDb();
+    seedItem(db, "source");
+    seedItem(db, "img1", { type: "image", imagePath: "/path1.jpg" });
+    seedItem(db, "img2", { type: "image", imagePath: "/path2.jpg" });
+    seedLink(
+      db,
+      "l1",
+      "source",
+      "img1",
+      "references",
+      "2024-01-01T00:00:00.000Z"
+    );
+    seedLink(
+      db,
+      "l2",
+      "source",
+      "img2",
+      "references",
+      "2024-02-01T00:00:00.000Z"
+    );
+
+    const result = contentLinks.findCoverImagesBySourceIds(db, ["source"]);
+    expect(result).toEqual({ source: "/path1.jpg" });
+    db.close();
+  });
+
+  it("omits a source that only has links to non-image targets", () => {
+    const db = createTestDb();
+    seedItem(db, "source");
+    seedItem(db, "note1", { type: "note" });
+    seedLink(db, "l1", "source", "note1");
+
+    const result = contentLinks.findCoverImagesBySourceIds(db, ["source"]);
+    expect(result).toEqual({});
+    db.close();
+  });
+
+  it("returns an empty map for an empty input array", () => {
+    const db = createTestDb();
+    const result = contentLinks.findCoverImagesBySourceIds(db, []);
+    expect(result).toEqual({});
+    db.close();
+  });
+
+  it("excludes hidden linked images by default, includes them with includeHidden:true", () => {
+    const db = createTestDb();
+    seedItem(db, "source");
+    seedItem(db, "hiddenImg", {
+      type: "image",
+      imagePath: "/hidden.jpg",
+      isHidden: 1,
+    });
+    seedItem(db, "visibleImg", { type: "image", imagePath: "/visible.jpg" });
+    seedLink(db, "l1", "source", "hiddenImg");
+    seedLink(db, "l2", "source", "visibleImg");
+
+    expect(contentLinks.findCoverImagesBySourceIds(db, ["source"])).toEqual({
+      source: "/visible.jpg",
+    });
+    expect(
+      contentLinks.findCoverImagesBySourceIds(db, ["source"], {
+        includeHidden: true,
+      })
+    ).toEqual({
+      source: "/hidden.jpg",
+    });
+    db.close();
+  });
+
+  it("excludes linked images with image_path IS NULL", () => {
+    const db = createTestDb();
+    seedItem(db, "source");
+    seedItem(db, "noPathImg", { type: "image", imagePath: null });
+    seedItem(db, "hasPathImg", { type: "image", imagePath: "/has.jpg" });
+    seedLink(
+      db,
+      "l1",
+      "source",
+      "noPathImg",
+      "references",
+      "2024-01-01T00:00:00.000Z"
+    );
+    seedLink(
+      db,
+      "l2",
+      "source",
+      "hasPathImg",
+      "references",
+      "2024-02-01T00:00:00.000Z"
+    );
+
+    const result = contentLinks.findCoverImagesBySourceIds(db, ["source"]);
+    expect(result).toEqual({ source: "/has.jpg" });
+    db.close();
+  });
+
+  it("handles multiple source ids in a single query", () => {
+    const db = createTestDb();
+    seedItem(db, "source1");
+    seedItem(db, "source2");
+    seedItem(db, "img1", { type: "image", imagePath: "/img1.jpg" });
+    seedItem(db, "img2", { type: "image", imagePath: "/img2.jpg" });
+    seedLink(db, "l1", "source1", "img1");
+    seedLink(db, "l2", "source2", "img2");
+
+    const result = contentLinks.findCoverImagesBySourceIds(db, [
+      "source1",
+      "source2",
+    ]);
+    expect(result).toEqual({
+      source1: "/img1.jpg",
+      source2: "/img2.jpg",
+    });
+    db.close();
+  });
+
+  it("excludes private linked images by default, includes them with includePrivate:true", () => {
+    const db = createTestDb();
+    seedItem(db, "source");
+    seedItem(db, "privateImg", {
+      type: "image",
+      imagePath: "/private.jpg",
+      isPrivate: 1,
+    });
+    seedItem(db, "visibleImg", { type: "image", imagePath: "/visible.jpg" });
+    seedLink(db, "l1", "source", "privateImg");
+    seedLink(db, "l2", "source", "visibleImg");
+
+    expect(contentLinks.findCoverImagesBySourceIds(db, ["source"])).toEqual({
+      source: "/visible.jpg",
+    });
+    expect(
+      contentLinks.findCoverImagesBySourceIds(db, ["source"], {
+        includePrivate: true,
+      })
+    ).toEqual({
+      source: "/private.jpg",
+    });
+    db.close();
+  });
+});
+
+describe("contentLinks.createOrIgnore", () => {
+  it("inserts a link on the first call and returns changes: 1", () => {
+    const db = createTestDb();
+    seedItem(db, "a");
+    seedItem(db, "b");
+
+    const result = contentLinks.createOrIgnore(db, {
+      id: "l1",
+      source_id: "a",
+      target_id: "b",
+      link_type: "references",
+      created_at: NOW,
+    });
+
+    expect(result.changes).toBe(1);
+
+    const links = db.prepare("SELECT * FROM content_links").all();
+    expect(links).toHaveLength(1);
+    db.close();
+  });
+
+  it("is idempotent: second insert with same id is a no-op (changes: 0)", () => {
+    const db = createTestDb();
+    seedItem(db, "a");
+    seedItem(db, "b");
+
+    const first = contentLinks.createOrIgnore(db, {
+      id: "l1",
+      source_id: "a",
+      target_id: "b",
+      link_type: "references",
+      created_at: NOW,
+    });
+
+    const second = contentLinks.createOrIgnore(db, {
+      id: "l1",
+      source_id: "a",
+      target_id: "b",
+      link_type: "references",
+      created_at: NOW,
+    });
+
+    expect(first.changes).toBe(1);
+    expect(second.changes).toBe(0);
+
+    const links = db.prepare("SELECT * FROM content_links").all();
+    expect(links).toHaveLength(1);
+    db.close();
+  });
+
+  it("does not throw when the id already exists", () => {
+    const db = createTestDb();
+    seedItem(db, "a");
+    seedItem(db, "b");
+
+    contentLinks.createOrIgnore(db, {
+      id: "l1",
+      source_id: "a",
+      target_id: "b",
+      link_type: "references",
+      created_at: NOW,
+    });
+
+    expect(() => {
+      contentLinks.createOrIgnore(db, {
+        id: "l1",
+        source_id: "a",
+        target_id: "b",
+        link_type: "references",
+        created_at: NOW,
+      });
+    }).not.toThrow();
+
+    db.close();
+  });
+});
+
+describe("contentLinks.findOutboundWithItems image_path enrichment", () => {
+  it("carries the target's image_path in the enriched result", () => {
+    const db = createTestDb();
+    seedItem(db, "a");
+    seedItem(db, "b", { type: "image", imagePath: "/img.jpg" });
+    seedLink(db, "l1", "a", "b");
+
+    const result = contentLinks.findOutboundWithItems(db, "a");
+    expect(result).toHaveLength(1);
+    expect(result[0].target.image_path).toBe("/img.jpg");
     db.close();
   });
 });

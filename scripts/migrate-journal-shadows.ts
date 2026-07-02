@@ -28,7 +28,8 @@
  *   --help, -h    Show this help text.
  */
 import { existsSync } from "fs";
-import { resolve, isAbsolute } from "path";
+import { promises as fs, constants as fsConstants } from "fs";
+import { resolve, isAbsolute, dirname, join } from "path";
 import Database from "better-sqlite3";
 import {
   getDb,
@@ -37,12 +38,14 @@ import {
   journalPeriods,
   settings as settingsRepo,
   auditLogs,
+  contentLinks,
 } from "@/db/index";
 import {
   mapJournalEntry,
   mapRawEntry,
   mapNoteName,
   mapJournalPeriod,
+  mapJournalRawLinks,
   mapSettings,
   type LegacyJournalEntry,
   type LegacyRawEntry,
@@ -51,11 +54,13 @@ import {
   LEGACY_SOURCE,
 } from "@/lib/journal-shadows-migrator";
 import { log } from "@/lib/logger";
+import { getImagesDir } from "@/lib/storage";
 
 interface CliArgs {
   source: string;
   dryRun: boolean;
   validate: boolean;
+  imagesDir: string | null;
 }
 
 interface Counts {
@@ -74,6 +79,7 @@ interface ImportTotals {
   noteItems: number;
   settingsKept: number;
   settingsDropped: number;
+  linksCreated: number;
   sourceCounts: Counts;
 }
 
@@ -89,6 +95,7 @@ function parseArgs(argv: string[]): CliArgs {
   let source: string | null = null;
   let dryRun = false;
   let validate = false;
+  let imagesDir: string | null = null;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--source" || arg === "-s") {
@@ -104,6 +111,15 @@ function parseArgs(argv: string[]): CliArgs {
       dryRun = true;
     } else if (arg === "--validate") {
       validate = true;
+    } else if (arg === "--images-dir") {
+      const next = argv[i + 1];
+      if (!next) {
+        throw new Error("--images-dir requires a path argument");
+      }
+      imagesDir = next;
+      i += 1;
+    } else if (arg.startsWith("--images-dir=")) {
+      imagesDir = arg.slice("--images-dir=".length);
     } else if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -115,6 +131,7 @@ function parseArgs(argv: string[]): CliArgs {
     source: source ?? defaultSourcePath(),
     dryRun,
     validate,
+    imagesDir,
   };
 }
 
@@ -128,9 +145,12 @@ Options:
   -s, --source <path>  Path to the legacy journal.db
                        (default: $JOURNAL_SHADOWS_DB or
                         ../journal-shadows/data/journal.db)
-      --dry-run        Read and count only. Exits 0 on a clean read.
-      --validate       After insert, compare dest counts to source counts
-                       and exit non-zero on a mismatch.
+      --images-dir <path>
+                       Path to the legacy images directory
+                       (default: <source-dir>/images)
+       --dry-run        Read and count only. Exits 0 on a clean read.
+       --validate       After insert, compare dest counts to source counts
+                        and exit non-zero on a mismatch.
   -h, --help           Show this help
 
 The migration is idempotent — every insert is keyed on the source id
@@ -225,6 +245,7 @@ function formatTotals(t: ImportTotals): string {
     `  journal periods inserted:  ${t.journalPeriods}`,
     `  raw items inserted:        ${t.rawItems} / ${t.sourceCounts.raw_entries}`,
     `  note items inserted:       ${t.noteItems} / ${t.sourceCounts.note_names}`,
+    `  content links inserted:    ${t.linksCreated}`,
     `  settings kept:             ${t.settingsKept}`,
     `  settings dropped (secrets/stale): ${t.settingsDropped}`,
   ].join("\n");
@@ -265,6 +286,7 @@ function importAll(
     noteItems: 0,
     settingsKept: 0,
     settingsDropped: 0,
+    linksCreated: 0,
     sourceCounts,
   };
 
@@ -303,7 +325,16 @@ function importAll(
       if (inserted.changes > 0) totals.rawItems += 1;
     }
 
-    // 3) Note names (display name + path only — body lives in .md
+    // 3) Content links between journal entries and their raw entries.
+    for (const journalRow of rows.journalEntries) {
+      const links = mapJournalRawLinks(journalRow, rows.rawEntries);
+      for (const link of links) {
+        const inserted = contentLinks.createOrIgnore(dest, link);
+        if (inserted.changes > 0) totals.linksCreated += 1;
+      }
+    }
+
+    // 4) Note names (display name + path only — body lives in .md
     // files and is loaded by the markdown importer, not here).
     for (const row of rows.noteNames) {
       const mapped = mapNoteName(row);
@@ -314,7 +345,7 @@ function importAll(
       if (inserted.changes > 0) totals.noteItems += 1;
     }
 
-    // 4) Settings — blocklist already applied by the pure mapper.
+    // 5) Settings — blocklist already applied by the pure mapper.
     // Use createOrIgnore so a re-run of the script (after the user
     // has since changed `ai_model` in the new app) doesn't
     // silently clobber the newer value. Mirrors the contract used
@@ -449,6 +480,66 @@ function validate(
   return { ok: mismatches.length === 0, mismatches };
 }
 
+async function copyImages(
+  sourceDir: string,
+  destDir: string
+): Promise<{ copied: number; skipped: number; missing: boolean }> {
+  let sourceExists = false;
+  let accessError: Error | null = null;
+  try {
+    await fs.access(sourceDir);
+    sourceExists = true;
+  } catch (err: unknown) {
+    accessError = err instanceof Error ? err : new Error(String(err));
+    sourceExists = false;
+  }
+
+  if (!sourceExists) {
+    log("info", "legacy images dir not found", {
+      sourceDir,
+      error: accessError?.message,
+    });
+    return { copied: 0, skipped: 0, missing: true };
+  }
+
+  let copied = 0;
+  let skipped = 0;
+
+  async function walk(dir: string, relativePath: string): Promise<void> {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      const relPath = join(relativePath, entry.name);
+
+      if (entry.isDirectory()) {
+        await walk(fullPath, relPath);
+      } else if (entry.isFile()) {
+        const destPath = join(destDir, relPath);
+        const destParent = dirname(destPath);
+        await fs.mkdir(destParent, { recursive: true });
+
+        try {
+          await fs.copyFile(fullPath, destPath, fsConstants.COPYFILE_EXCL);
+          copied += 1;
+        } catch (err: unknown) {
+          if (
+            err instanceof Error &&
+            "code" in err &&
+            (err as NodeJS.ErrnoException).code === "EEXIST"
+          ) {
+            skipped += 1;
+          } else {
+            throw err;
+          }
+        }
+      }
+    }
+  }
+
+  await walk(sourceDir, "");
+  return { copied, skipped, missing: false };
+}
+
 async function main(): Promise<void> {
   let args: CliArgs;
   try {
@@ -520,6 +611,29 @@ async function main(): Promise<void> {
       source: sourcePath,
       ...totals,
     });
+
+    // Copy image files (outside the transaction, since it's filesystem I/O).
+    const imagesSource = args.imagesDir ?? join(dirname(sourcePath), "images");
+    const imagesDest = getImagesDir();
+
+    if (!args.dryRun) {
+      const imageResult = await copyImages(imagesSource, imagesDest);
+      console.log(
+        `Images: copied ${imageResult.copied}, skipped ${imageResult.skipped}${imageResult.missing ? " (source dir not found)" : ""}`
+      );
+      log("info", "journal-shadows migration images copied", {
+        event: "migration.images_copied",
+        sourceDir: imagesSource,
+        destDir: imagesDest,
+        copied: imageResult.copied,
+        skipped: imageResult.skipped,
+        missing: imageResult.missing,
+      });
+    } else {
+      console.log(
+        `\n--dry-run set; skipping image copy from ${imagesSource} to ${imagesDest}`
+      );
+    }
 
     if (args.validate) {
       const v = validate(dest, sourceCounts);

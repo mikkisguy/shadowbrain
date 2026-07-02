@@ -98,6 +98,14 @@ export interface MappedSetting {
   value: string;
 }
 
+export interface MappedContentLink {
+  id: string;
+  source_id: string;
+  target_id: string;
+  link_type: string;
+  created_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Constants — keep all magic strings/numbers here so a one-line change
 // re-labels every migrated row.
@@ -245,6 +253,33 @@ export function noteIdForPath(path: string): string {
 }
 
 /**
+ * Stable, deterministic id generator for a directional link between two content items.
+ * Uses a SHA-256 hash of `a|b` so the same pair always produces the same id.
+ */
+function stableLinkId(a: string, b: string): string {
+  return `link-${createHash("sha256").update(`${a}|${b}`).digest("hex").slice(0, 32)}`;
+}
+
+/**
+ * Filter raw entries whose `created_at` falls inside the given period (inclusive).
+ * Both bounds and each raw's `created_at` are normalized to UTC ISO so the comparison
+ * is timezone-independent.
+ */
+function rawEntriesInPeriod(
+  periodStart: string,
+  periodEnd: string,
+  rawEntries: ReadonlyArray<LegacyRawEntry>
+): LegacyRawEntry[] {
+  const start = Date.parse(normalizeToUtcIso(periodStart));
+  const end = Date.parse(normalizeToUtcIso(periodEnd));
+  return rawEntries.filter((r) => {
+    const t = Date.parse(normalizeToUtcIso(r.created_at));
+    if (Number.isNaN(t)) return false;
+    return t >= start && t <= end;
+  });
+}
+
+/**
  * Normalize a legacy journal-shadows timestamp to UTC ISO 8601 with
  * a trailing `Z`. The legacy app wrote DATETIME values inconsistently
  * — some with a `Z` suffix and some without, but in all observed
@@ -289,27 +324,66 @@ export function mapJournalPeriod(
   periodEnd: string,
   rawEntries: ReadonlyArray<LegacyRawEntry>
 ): MappedJournalPeriod {
-  // Normalise both ends AND every raw's `created_at` to UTC ISO so
-  // the comparison is timezone-independent. The legacy app wrote
-  // these as UTC (sometimes with a `Z`, sometimes without), and
-  // passing them to `Date.parse` directly makes Node interpret
-  // no-TZ strings as local time — which silently miscounts raws
-  // in any non-UTC container.
-  const start = Date.parse(normalizeToUtcIso(periodStart));
-  const end = Date.parse(normalizeToUtcIso(periodEnd));
-  const raw_count = rawEntries.filter((r) => {
-    const t = Date.parse(normalizeToUtcIso(r.created_at));
-    if (Number.isNaN(t)) return false;
-    return t >= start && t <= end;
-  }).length;
+  const inPeriod = rawEntriesInPeriod(periodStart, periodEnd, rawEntries);
 
   return {
     content_id: journalId,
     period_start: normalizeToUtcIso(periodStart),
     period_end: normalizeToUtcIso(periodEnd),
-    raw_count,
+    raw_count: inPeriod.length,
     model_used: null,
   };
+}
+
+/**
+ * For a journal entry with a period, return bidirectional `references`
+ * links to every raw entry whose `created_at` falls inside
+ * [period_start, period_end] (inclusive). `created_at` is the RAW's
+ * timestamp (normalized to UTC) so the cover resolver's "first linked
+ * image" = the chronologically earliest photo of the day. Stable,
+ * directional ids make re-runs a no-op via createOrIgnore. Returns []
+ * when the journal has no period bounds.
+ */
+export function mapJournalRawLinks(
+  journal: LegacyJournalEntry,
+  rawEntries: ReadonlyArray<LegacyRawEntry>
+): MappedContentLink[] {
+  if (!journal.period_start || !journal.period_end) {
+    return [];
+  }
+
+  const inPeriod = rawEntriesInPeriod(
+    journal.period_start,
+    journal.period_end,
+    rawEntries
+  );
+
+  const links: MappedContentLink[] = [];
+  for (const raw of inPeriod) {
+    const createdAt = normalizeToUtcIso(raw.created_at);
+    const forwardId = stableLinkId(journal.id, raw.id);
+    const reverseId = stableLinkId(raw.id, journal.id);
+
+    // Forward link: journal → raw
+    links.push({
+      id: forwardId,
+      source_id: journal.id,
+      target_id: raw.id,
+      link_type: "references",
+      created_at: createdAt,
+    });
+
+    // Reverse link: raw → journal
+    links.push({
+      id: reverseId,
+      source_id: raw.id,
+      target_id: journal.id,
+      link_type: "references",
+      created_at: createdAt,
+    });
+  }
+
+  return links;
 }
 
 /**

@@ -21,13 +21,15 @@ export class PathTraversalError extends Error {
  * volume as the database. Computing this per call (rather than at
  * module load) means tests can override `DATA_DIR` before the first
  * `getEnv()` call without hitting a stale cached value.
+ *
+ * Uses `process.cwd()` for robust project-root resolution across
+ * runtimes (dev / production / tests). The previous version used
+ * `join(__dirname, "..", "..")`, which resolved to `.next/...`
+ * in the bundled dev server and broke DATA_DIR resolution.
  */
 export function getImagesDir(): string {
   const dataDir = getEnv().DATA_DIR;
-  // Resolve relative DATA_DIR against the project root, mirroring
-  // `getDbPath` in src/db/index.ts so image storage and the database
-  // follow the same base-directory convention in dev, test, and prod.
-  const projectRoot = path.join(__dirname, "..", "..");
+  const projectRoot = process.cwd();
   const resolvedDir = path.isAbsolute(dataDir)
     ? dataDir
     : path.join(projectRoot, dataDir);

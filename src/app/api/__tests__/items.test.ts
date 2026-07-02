@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { authedRequest, cleanupTestDb, createTestDb } from "@/db/test-utils";
 import { GET, POST } from "@/app/api/items/route";
 import { GET as GET_BY_ID, PATCH, DELETE } from "@/app/api/items/[id]/route";
+import { getDb } from "@/db/index";
 
 // Mock the metadata fetcher so tests don't touch the network. Each test
 // sets its own `fetchBookmarkMetadata` behaviour via the per-test
@@ -554,5 +555,104 @@ describe("/api/items per-type metadata validation", () => {
     expect(res.status).toBe(201);
     const json = await res.json();
     expect(json.type).toBe("note");
+  });
+});
+
+describe("/api/items cover-image resolution", () => {
+  beforeEach(() => {
+    cleanupTestDb();
+    createTestDb().close();
+    mockFetcher.mockReset();
+    mockFetcher.mockResolvedValue({
+      ok: false,
+      reason: "no url in content",
+      metadata: { url: "", fetched_at: new Date().toISOString() },
+    });
+  });
+
+  afterEach(() => {
+    cleanupTestDb();
+  });
+
+  it("overrides image_path with the cover from linked image when listing items", async () => {
+    // Create a source note with no image_path
+    const noteReq = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "note",
+        content: "source note",
+        source: "manual",
+      }),
+    });
+    const noteRes = await POST(noteReq);
+    const note = await noteRes.json();
+
+    // Create an image item
+    const imageReq = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "image",
+        content: "image content",
+        source: "manual",
+      }),
+    });
+    const imageRes = await POST(imageReq);
+    const image = await imageRes.json();
+
+    // Set the image_path directly (since POST doesn't accept it)
+    const db = getDb();
+    db.prepare("UPDATE content_items SET image_path = ? WHERE id = ?").run(
+      "/cover.jpg",
+      image.id
+    );
+
+    // Create a link from note to image
+    const linkId = crypto.randomUUID();
+    db.prepare(
+      `INSERT INTO content_links (id, source_id, target_id, link_type, created_at)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(linkId, note.id, image.id, "references", new Date().toISOString());
+
+    // List items and verify cover resolution
+    const listReq = await authedRequest("http://localhost/api/items");
+    const listRes = await GET(listReq);
+    const json = await listRes.json();
+
+    const noteResult = json.items.find((i: { id: string }) => i.id === note.id);
+    expect(noteResult).toBeDefined();
+    expect(noteResult.image_path).toBe("/cover.jpg");
+  });
+
+  it("keeps the item's own image_path when there is no linked image", async () => {
+    // Create a note
+    const noteReq = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "note",
+        content: "source note",
+        source: "manual",
+      }),
+    });
+    const noteRes = await POST(noteReq);
+    const note = await noteRes.json();
+
+    // Set the image_path directly (since POST doesn't accept it)
+    const db = getDb();
+    db.prepare("UPDATE content_items SET image_path = ? WHERE id = ?").run(
+      "/own.jpg",
+      note.id
+    );
+
+    // List items and verify own image_path is kept
+    const listReq = await authedRequest("http://localhost/api/items");
+    const listRes = await GET(listReq);
+    const json = await listRes.json();
+
+    const noteResult = json.items.find((i: { id: string }) => i.id === note.id);
+    expect(noteResult).toBeDefined();
+    expect(noteResult.image_path).toBe("/own.jpg");
   });
 });

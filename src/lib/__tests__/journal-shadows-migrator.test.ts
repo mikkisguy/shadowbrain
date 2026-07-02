@@ -5,6 +5,7 @@ import {
   mapNoteName,
   mapJournalPeriod,
   mapSettings,
+  mapJournalRawLinks,
   noteIdForPath,
   normalizeToUtcIso,
   LEGACY_SOURCE,
@@ -382,5 +383,189 @@ describe("mapSettings", () => {
     const blob = JSON.stringify(kept);
     expect(blob).not.toContain("super-secret");
     expect(blob).not.toContain("another-secret");
+  });
+});
+
+describe("mapJournalRawLinks", () => {
+  const journal: LegacyJournalEntry = {
+    id: "je-1",
+    date: "2026-01-01",
+    content: "First journal entry",
+    period_start: "2026-01-01 04:00:00",
+    period_end: "2026-01-01 21:00:00",
+    created_at: "2026-01-01 21:00:00",
+    updated_at: "2026-01-01 21:00:00",
+    title: "Hello, 2026",
+  };
+
+  const raws: LegacyRawEntry[] = [
+    {
+      id: "r1",
+      content: "Morning text",
+      type: "text",
+      image_path: null,
+      created_at: "2026-01-01 10:00:00",
+    },
+    {
+      id: "r2",
+      content: "",
+      type: "image",
+      image_path: "2026-01/x.webp",
+      created_at: "2026-01-01 12:00:00",
+    },
+    // Out of period (before start)
+    {
+      id: "r3",
+      content: "Too early",
+      type: "text",
+      image_path: null,
+      created_at: "2026-01-01 03:00:00",
+    },
+    // Out of period (after end)
+    {
+      id: "r4",
+      content: "Too late",
+      type: "text",
+      image_path: null,
+      created_at: "2026-01-01 22:00:00",
+    },
+  ];
+
+  it("returns bidirectional references links for raw entries inside the period", () => {
+    const links = mapJournalRawLinks(journal, raws);
+
+    // 2 raw entries in period × 2 bidirectional links each = 4 links
+    expect(links).toHaveLength(4);
+
+    // All links have link_type "references"
+    expect(links.every((l) => l.link_type === "references")).toBe(true);
+
+    // Check forward links (journal → raw)
+    const forwardLinks = links.filter((l) => l.source_id === "je-1");
+    expect(forwardLinks).toHaveLength(2);
+    expect(forwardLinks.map((l) => l.target_id)).toEqual(
+      expect.arrayContaining(["r1", "r2"])
+    );
+
+    // Check reverse links (raw → journal)
+    const reverseLinks = links.filter((l) => l.target_id === "je-1");
+    expect(reverseLinks).toHaveLength(2);
+    expect(reverseLinks.map((l) => l.source_id)).toEqual(
+      expect.arrayContaining(["r1", "r2"])
+    );
+
+    // created_at matches the raw's normalized timestamp
+    const linkForR1 = links.find(
+      (l) => l.source_id === "je-1" && l.target_id === "r1"
+    );
+    expect(linkForR1?.created_at).toBe("2026-01-01T10:00:00.000Z");
+
+    const linkForR2 = links.find(
+      (l) => l.source_id === "je-1" && l.target_id === "r2"
+    );
+    expect(linkForR2?.created_at).toBe("2026-01-01T12:00:00.000Z");
+  });
+
+  it("excludes raw entries outside the period", () => {
+    const links = mapJournalRawLinks(journal, raws);
+
+    // Only r1 and r2 should be linked (r3 and r4 are outside the period)
+    const linkedRawIds = new Set(
+      links.map((l) => (l.source_id === "je-1" ? l.target_id : l.source_id))
+    );
+    expect(linkedRawIds).toContain("r1");
+    expect(linkedRawIds).toContain("r2");
+    expect(linkedRawIds).not.toContain("r3");
+    expect(linkedRawIds).not.toContain("r4");
+  });
+
+  it("returns empty array when journal has null period bounds", () => {
+    const journalNoPeriod: LegacyJournalEntry = {
+      ...journal,
+      period_start: null,
+      period_end: null,
+    };
+    const links = mapJournalRawLinks(journalNoPeriod, raws);
+    expect(links).toEqual([]);
+  });
+
+  it("returns empty array when journal has only one period bound", () => {
+    const journalNoStart: LegacyJournalEntry = {
+      ...journal,
+      period_start: null,
+    };
+    const linksNoStart = mapJournalRawLinks(journalNoStart, raws);
+    expect(linksNoStart).toEqual([]);
+
+    const journalNoEnd: LegacyJournalEntry = {
+      ...journal,
+      period_end: null,
+    };
+    const linksNoEnd = mapJournalRawLinks(journalNoEnd, raws);
+    expect(linksNoEnd).toEqual([]);
+  });
+
+  it("generates stable, deterministic ids", () => {
+    const links1 = mapJournalRawLinks(journal, raws);
+    const links2 = mapJournalRawLinks(journal, raws);
+
+    expect(links1).toEqual(links2);
+
+    // Forward and reverse links have different ids
+    const forward = links1.find(
+      (l) => l.source_id === "je-1" && l.target_id === "r1"
+    );
+    const reverse = links1.find(
+      (l) => l.source_id === "r1" && l.target_id === "je-1"
+    );
+    expect(forward?.id).not.toBe(reverse?.id);
+
+    // Ids are uuid-shaped with 'link-' prefix
+    expect(forward?.id).toMatch(/^link-[0-9a-f]{32}$/);
+    expect(reverse?.id).toMatch(/^link-[0-9a-f]{32}$/);
+  });
+
+  it("chronologically first image becomes the earliest linked image", () => {
+    const rawsWithEarlierImage: LegacyRawEntry[] = [
+      {
+        id: "r1",
+        content: "",
+        type: "image",
+        image_path: "2026-01/early.webp",
+        created_at: "2026-01-01 08:00:00",
+      },
+      {
+        id: "r2",
+        content: "Morning text",
+        type: "text",
+        image_path: null,
+        created_at: "2026-01-01 10:00:00",
+      },
+      {
+        id: "r3",
+        content: "",
+        type: "image",
+        image_path: "2026-01/late.webp",
+        created_at: "2026-01-01 14:00:00",
+      },
+    ];
+
+    const links = mapJournalRawLinks(journal, rawsWithEarlierImage);
+
+    // The image links should be ordered by created_at (earliest first)
+    const imageLinks = links.filter(
+      (l) =>
+        l.source_id === "je-1" &&
+        rawsWithEarlierImage.find((r) => r.id === l.target_id)?.type === "image"
+    );
+    expect(imageLinks).toHaveLength(2);
+    expect(imageLinks[0].target_id).toBe("r1"); // Earlier image
+    expect(imageLinks[1].target_id).toBe("r3"); // Later image
+  });
+
+  it("returns empty array for no raw entries in period", () => {
+    const emptyRawEntries: LegacyRawEntry[] = [];
+    const links = mapJournalRawLinks(journal, emptyRawEntries);
+    expect(links).toEqual([]);
   });
 });

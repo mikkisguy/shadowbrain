@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getDb, search, contentTags } from "@/db/index";
+import { getDb, search, contentTags, contentLinks } from "@/db/index";
 import {
   parsePagination,
   errorResponse,
@@ -70,12 +70,18 @@ export async function GET(request: Request) {
     // Attach each result's tag names (batched, no N+1) so the card
     // renders clickable tags in search results too — the tag-click
     // affordance works the same in list and search mode.
-    const tagMap = contentTags.findNamesByContentIds(
-      db,
-      results.map((r) => r.id)
-    );
+    const ids = results.map((r) => r.id);
+    const tagMap = contentTags.findNamesByContentIds(db, ids);
+    // Same cover resolution as /api/items: the first linked image's
+    // path, else the row's own image_path. Keeps the browse card
+    // identical in list and search mode.
+    const coverMap = contentLinks.findCoverImagesBySourceIds(db, ids, {
+      includeHidden,
+      includePrivate,
+    });
     const resultsWithTags = results.map((r) => ({
       ...r,
+      image_path: coverMap[r.id] ?? r.image_path,
       tags: tagMap[r.id] ?? [],
     }));
 
