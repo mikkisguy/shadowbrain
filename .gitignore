@@ -62,3 +62,7 @@ logs/
 # Husky internal state
 .husky/_
 paseo.json
+
+# Playwright test output
+test-results/
+playwright-report/
