@@ -109,6 +109,21 @@ export async function proxy(request: NextRequest) {
   const isProd = env.NODE_ENV === "production";
   const nonce = generateNonce();
 
+  // 1a. E2E mode — bypass auth, CSRF, and rate limiting so
+  // AI agents and e2e tests can interact with the app directly
+  // without managing session cookies. This branch is only
+  // reachable when the app is started with NODE_ENV=e2e
+  // (see e2e/ and playwright.config.ts).
+  if (env.NODE_ENV === "e2e") {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-nonce", nonce);
+    return applySecurityHeaders(
+      NextResponse.next({ request: { headers: requestHeaders } }),
+      nonce,
+      !isProd
+    );
+  }
+
   // 2. Rate limit — per-IP token bucket. The category is
   // determined by the path; the IP comes from the configured
   // trusted-proxy header. The check happens before auth / CSRF
