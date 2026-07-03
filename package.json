@@ -1,6 +1,6 @@
 {
   "name": "shadowbrain",
-  "version": "0.20.0",
+  "version": "0.20.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -23,7 +23,12 @@
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm test --run && pnpm exec knip",
-    "prepare": "husky"
+    "prepare": "husky",
+    "dev:e2e": "NODE_ENV=e2e PORT=3001 next dev",
+    "setup:e2e": "NODE_ENV=e2e node scripts/setup-db.js",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:debug": "playwright test --debug"
   },
   "lint-staged": {
     "*.{ts,tsx,js}": [
@@ -79,6 +84,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

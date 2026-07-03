@@ -6,10 +6,12 @@ import { seedSettings } from "./seed-settings";
 import { getEnv } from "@/lib/env";
 import { isVecExtensionLoaded } from "./vectors";
 
-export type NodeEnv = "development" | "production" | "test";
+export type NodeEnv = "development" | "production" | "test" | "e2e";
 
 function isNodeEnv(v: string | undefined): v is NodeEnv {
-  return v === "development" || v === "production" || v === "test";
+  return (
+    v === "development" || v === "production" || v === "test" || v === "e2e"
+  );
 }
 
 export function getDbPath(
@@ -25,6 +27,8 @@ export function getDbPath(
   if (env === "test") {
     const workerId = process.env.VITEST_POOL_ID;
     suffix = workerId ? `.test.${workerId}` : ".test";
+  } else if (env === "e2e") {
+    suffix = ".e2e";
   } else if (env === "development") {
     suffix = ".dev";
   } else {
@@ -212,6 +216,10 @@ export function getDevelopmentDb(): Database.Database {
 
 export function getTestDb(): Database.Database {
   return getDb({ env: "test" });
+}
+
+export function getE2eDb(): Database.Database {
+  return getDb({ env: "e2e" });
 }
 
 export function getProductionDb(): Database.Database {

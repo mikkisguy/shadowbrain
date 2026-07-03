@@ -12,6 +12,8 @@ const VECTOR_SEARCH_MIGRATION_VERSION = 3;
 const getDbFilename = (env) => {
   const projectName = "shadowbrain";
   switch (env) {
+    case "e2e":
+      return `${projectName}.e2e.db`;
     case "test":
       return `${projectName}.test.db`;
     case "development":

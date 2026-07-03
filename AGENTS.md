@@ -78,6 +78,96 @@ The script prints these instructions automatically if the CLI is absent.
 > lands, the script path above is the contract the implementation must create
 > (exit codes, usage, bootstrap instructions must all match this section).
 
+## E2E Testing (Playwright)
+
+The e2e suite uses Playwright against a dedicated `NODE_ENV=e2e` environment
+that runs on port 3001 with an isolated SQLite database (`data/shadowbrain.e2e.db`).
+Auth, CSRF, and rate limiting are bypassed in e2e mode — tests do not need to
+log in or manage session cookies.
+
+### How it works
+
+- `src/proxy.ts`: when `NODE_ENV === "e2e"`, all requests pass through without
+  auth/CSRF/rate-limit checks (the security headers — CSP, HSTS, etc. — still
+  apply so CSP-related regressions are caught).
+- `src/lib/auth/guard.ts`: `requireAuthenticated()` returns `{ ok: true }` in
+  e2e mode, so every API route handler accepts requests without credentials.
+- `src/db/client.ts`: `getDbPath()` resolves to `data/shadowbrain.e2e.db` when
+  `NODE_ENV === "e2e"` — fully isolated from your dev DB.
+- `src/lib/env.ts`: the Zod schema accepts `"e2e"` as a valid `NODE_ENV`.
+
+### Commands
+
+```bash
+# Start the e2e dev server (port 3001, separate DB)
+pnpm dev:e2e
+
+# Set up / migrate the e2e database (auto-migrates on first server start too)
+pnpm setup:e2e
+
+# Run e2e tests (starts the server automatically via webServer config)
+pnpm test:e2e
+
+# Run e2e tests with Playwright UI mode
+pnpm test:e2e:ui
+
+# Run e2e tests in debug mode (step through, see DevTools)
+pnpm test:e2e:debug
+```
+
+### Test structure
+
+Tests live in `e2e/` at the project root. They are not part of the app
+build — `tsconfig.json` excludes the directory and the root typecheck
+(`pnpm typecheck`) does not cover them.
+
+```
+e2e/
+├── *.setup.ts    # Seed data before tests (runs first via project dependency)
+├── *.spec.ts     # Actual test files
+└── tsconfig.json # Extends root, adds @playwright/test types
+```
+
+The **setup project** (`e2e/seed.setup.ts`) runs before all spec files
+and populates the e2e database with test data via the API. Add new seed
+data there when you need pre-existing content for your tests.
+
+### Writing e2e tests
+
+Use the standard Playwright API. Since auth is bypassed, you can navigate
+to any page or call any API route directly:
+
+```ts
+import { test, expect } from "@playwright/test";
+
+test("browse page shows seeded items", async ({ page }) => {
+  await page.goto("/browse");
+  await expect(page.getByText("Welcome to ShadowBrain")).toBeVisible();
+});
+```
+
+For API-only tests, use `request`:
+
+```ts
+test("GET /api/items works", async ({ request }) => {
+  const res = await request.get("/api/items");
+  expect(res.ok()).toBeTruthy();
+});
+```
+
+### When to use e2e vs vitest
+
+| Concern                           | vitest (unit/integration) | Playwright (e2e)      |
+| --------------------------------- | ------------------------- | --------------------- |
+| Route handler logic               | ✅ Faster, no browser     | ❌                    |
+| DB queries                        | ✅ Direct DB access       | ❌                    |
+| Auth / guard behavior             | ✅ `createAuthedRequest`  | ❌ (bypassed)         |
+| Browser rendering                 | ❌ jsdom (partial)        | ✅ Real Chromium      |
+| CSP / security headers            | ✅ Unit-tested            | ✅ Integration-tested |
+| Page navigation                   | ❌                        | ✅                    |
+| User interactions (clicks, forms) | ❌                        | ✅                    |
+| AI agent: "does my feature work?" | ❌                        | ✅ Best fit           |
+
 ## Project Structure
 
 ShadowBrain is a single Next.js (App Router) application — not a monorepo.

@@ -36,6 +36,18 @@ export async function requireAuthenticated(
   request: Request
 ): Promise<GuardResult> {
   const env = getEnv();
+
+  // E2E mode: bypass auth for testing. The proxy also skips auth
+  // in e2e mode (see src/proxy.ts), and this guard follows suit
+  // so every route handler accepts requests without credentials.
+  // Only reachable when NODE_ENV=e2e — never in dev/prod/test.
+  // The username "e2e" is a deliberate marker so audit-log entries
+  // written during test runs are distinguishable. The e2e DB is
+  // fully isolated (data/shadowbrain.e2e.db) so this never
+  // contaminates production.
+  if (env.NODE_ENV === "e2e") {
+    return { ok: true, username: "e2e" };
+  }
   const result = await readSessionFromRequest(request, env.SESSION_SECRET);
   if (!result.ok || !result.session) {
     return {
