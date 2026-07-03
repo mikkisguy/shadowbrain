@@ -1,6 +1,6 @@
 import { test as setup } from "@playwright/test";
 
-const BASE = process.env.PLAYWRIGHT_TEST_BASE_URL ?? "http://localhost:3001";
+const BASE = process.env.PLAYWRIGHT_TEST_BASE_URL ?? "http://localhost:3011";
 
 interface Item {
   id: string;

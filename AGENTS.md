@@ -81,7 +81,7 @@ The script prints these instructions automatically if the CLI is absent.
 ## E2E Testing (Playwright)
 
 The e2e suite uses Playwright against a dedicated `NODE_ENV=e2e` environment
-that runs on port 3001 with an isolated SQLite database (`data/shadowbrain.e2e.db`).
+that runs on port 3011 with an isolated SQLite database (`data/shadowbrain.e2e.db`).
 Auth, CSRF, and rate limiting are bypassed in e2e mode — tests do not need to
 log in or manage session cookies.
 
@@ -99,7 +99,7 @@ log in or manage session cookies.
 ### Commands
 
 ```bash
-# Start the e2e dev server (port 3001, separate DB)
+# Start the e2e dev server (port 3011, separate DB)
 pnpm dev:e2e
 
 # Set up / migrate the e2e database (auto-migrates on first server start too)
