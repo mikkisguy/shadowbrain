@@ -4,6 +4,34 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// Mock react-virtuoso to render all items (no virtualization in tests)
+vi.mock("react-virtuoso", () => ({
+  Virtuoso: ({
+    data,
+    itemContent,
+    components,
+  }: {
+    data: unknown[];
+    itemContent: (index: number, data: unknown) => React.ReactNode;
+    components?: {
+      List?: React.ComponentType<{
+        children?: React.ReactNode;
+        style?: React.CSSProperties;
+        [key: string]: unknown;
+      }>;
+    };
+  }) => {
+    const List = components?.List || "div";
+    return (
+      <List>
+        {data.map((item, index) => (
+          <div key={index}>{itemContent(index, item)}</div>
+        ))}
+      </List>
+    );
+  },
+}));
+
 import { BrowsePage } from "./browse-page";
 
 /**
