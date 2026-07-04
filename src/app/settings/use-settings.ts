@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { fetchSettings } from "./api";
+import { queryKeys, staleTimes } from "@/lib/query-config";
 import type { SettingsDraft, SettingsSnapshot } from "./types";
 import { snapshotToDraft } from "./types";
 
@@ -33,14 +35,10 @@ const LOAD_ERROR = "Couldn't load your settings right now. Please try again.";
 export function useSettings(): UseSettingsResult {
   const [saved, setSaved] = useState<SettingsSnapshot | null>(null);
   const [draft, setDraft] = useState<SettingsDraft | null>(null);
-  const [status, setStatus] = useState<SettingsStatus>("loading");
-  const [error, setError] = useState<string | null>(null);
   const [clearedSecrets, setClearedSecrets] = useState<
     Set<keyof SettingsDraft>
   >(() => new Set());
-  const [reloadToken, setReloadToken] = useState(0);
   const [savedVersion, setSavedVersion] = useState(0);
-  const versionRef = useRef(0);
 
   const applySaved = useCallback((snapshot: SettingsSnapshot) => {
     setSaved(snapshot);
@@ -49,9 +47,29 @@ export function useSettings(): UseSettingsResult {
     setSavedVersion((v) => v + 1);
   }, []);
 
+  const {
+    data,
+    status: queryStatus,
+    error: queryError,
+    refetch,
+  } = useQuery({
+    queryKey: queryKeys.settings.current,
+    queryFn: ({ signal }) => fetchSettings(signal),
+    staleTime: staleTimes.settings,
+    refetchOnWindowFocus: false,
+  });
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (queryStatus === "success" && data) {
+      applySaved(data);
+    }
+  }, [data, queryStatus, applySaved]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   const refresh = useCallback(() => {
-    setReloadToken((n) => n + 1);
-  }, []);
+    refetch();
+  }, [refetch]);
 
   const clearSecret = useCallback((key: keyof SettingsDraft) => {
     setDraft((prev) => (prev ? { ...prev, [key]: "" } : prev));
@@ -62,37 +80,18 @@ export function useSettings(): UseSettingsResult {
     });
   }, []);
 
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    const controller = new AbortController();
-    const version = versionRef.current + 1;
-    versionRef.current = version;
-    setStatus((prev) => (prev === "success" ? prev : "loading"));
-
-    fetchSettings(controller.signal)
-      .then((snapshot) => {
-        if (versionRef.current !== version) return;
-        applySaved(snapshot);
-        setStatus("success");
-        setError(null);
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        if (versionRef.current !== version) return;
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setStatus("error");
-        setError(LOAD_ERROR);
-      });
-
-    return () => controller.abort();
-  }, [reloadToken, applySaved]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  const mappedStatus: SettingsStatus =
+    queryStatus === "pending"
+      ? "loading"
+      : queryStatus === "error"
+        ? "error"
+        : "success";
 
   return {
     saved,
     draft,
-    status,
-    error,
+    status: mappedStatus,
+    error: queryError ? LOAD_ERROR : null,
     clearedSecrets,
     setDraft,
     clearSecret,

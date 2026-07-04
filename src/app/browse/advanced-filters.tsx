@@ -22,6 +22,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CalendarRange, Tag as TagIcon, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { splitTags } from "@/lib/tags";
+import { queryKeys, staleTimes } from "@/lib/query-config";
 
 import type { BrowseFilters } from "./types";
 
@@ -92,36 +94,28 @@ export function AdvancedFilters({
   const [tagInput, setTagInput] = useState("");
   const tagInputRef = useRef<HTMLInputElement>(null);
 
-  // Existing tag names for type-to-search suggestions. Fetched lazily
-  // on first focus so the panel never fires a request it doesn't need.
-  const [allTagNames, setAllTagNames] = useState<string[] | null>(null);
-  const tagsFetchedRef = useRef(false);
-
-  function ensureTagsFetched() {
-    if (tagsFetchedRef.current) return;
-    tagsFetchedRef.current = true;
-    fetch("/api/tags", {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((body: unknown) => {
-        if (
-          body &&
-          typeof body === "object" &&
-          Array.isArray((body as { tags: unknown }).tags)
-        ) {
-          setAllTagNames(
-            (body as { tags: { name: string }[] }).tags.map((t) => t.name)
-          );
-        }
-      })
-      .catch(() => {
-        // Suggestions are best-effort; on failure reset so a later
-        // focus can retry.
-        tagsFetchedRef.current = false;
+  // Fetch tags for typeahead suggestions. Enabled on first focus.
+  const [tagsEnabled, setTagsEnabled] = useState(false);
+  const { data: tagsData } = useQuery({
+    queryKey: queryKeys.tags.typeahead,
+    queryFn: async ({ signal }) => {
+      const res = await fetch("/api/tags", {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+        signal,
       });
-  }
+      if (!res.ok) return null;
+      const body = (await res.json()) as { tags: { name: string }[] };
+      return body.tags;
+    },
+    enabled: tagsEnabled,
+    staleTime: staleTimes.tags,
+  });
+
+  const allTagNames = useMemo(() => {
+    if (!tagsData) return null;
+    return tagsData.map((t) => t.name);
+  }, [tagsData]);
 
   const suggestions = useMemo(() => {
     if (!allTagNames) return [];
@@ -239,7 +233,7 @@ export function AdvancedFilters({
             }
             value={tagInput}
             onChange={(e) => setTagInput(e.target.value)}
-            onFocus={ensureTagsFetched}
+            onFocus={() => setTagsEnabled(true)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();

@@ -28,6 +28,9 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+import { queryKeys } from "@/lib/query-config";
 import { CelestialCluster } from "@/components/visual/celestial-motif";
 
 import { Button } from "@/components/ui/button";
@@ -79,6 +82,44 @@ const SKELETON_ROW_COUNT = 5;
 
 export function TagsPage() {
   const { tags, status, error, refresh } = useTags();
+  const queryClient = useQueryClient();
+
+  const createTagMutation = useMutation({
+    mutationFn: createTag,
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }),
+  });
+
+  const renameTagMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      renameTag(id, name),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }),
+  });
+
+  const deleteTagMutation = useMutation({
+    mutationFn: deleteTag,
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }),
+  });
+
+  const mergeTagMutation = useMutation({
+    mutationFn: ({
+      sourceId,
+      targetId,
+    }: {
+      sourceId: string;
+      targetId: string;
+    }) => mergeTag(sourceId, targetId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }),
+  });
+
+  const deleteUnusedMutation = useMutation({
+    mutationFn: deleteUnusedTags,
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }),
+  });
 
   const [sort, setSort] = useState<TagSort>({
     field: "name",
@@ -239,10 +280,7 @@ export function TagsPage() {
         onOpenChange={setIsCreateOpen}
         mode="create"
         existingNames={allNames}
-        onSubmit={async (name) => {
-          await createTag(name);
-          refresh();
-        }}
+        onSubmit={(name) => createTagMutation.mutateAsync(name).then(() => {})}
       />
 
       <TagFormDialog
@@ -253,10 +291,11 @@ export function TagsPage() {
         mode="rename"
         initialName={renameTarget?.name ?? ""}
         existingNames={renameNames}
-        onSubmit={async (name) => {
-          if (!renameTarget) return;
-          await renameTag(renameTarget.id, name);
-          refresh();
+        onSubmit={(name) => {
+          if (!renameTarget) return Promise.resolve();
+          return renameTagMutation
+            .mutateAsync({ id: renameTarget.id, name })
+            .then(() => {});
         }}
       />
 
@@ -266,10 +305,7 @@ export function TagsPage() {
           if (!open) setDeleteTarget(null);
         }}
         tag={deleteTarget}
-        onConfirm={async (id) => {
-          await deleteTag(id);
-          refresh();
-        }}
+        onConfirm={(id) => deleteTagMutation.mutateAsync(id).then(() => {})}
       />
 
       <MergeTagDialog
@@ -279,20 +315,16 @@ export function TagsPage() {
         }}
         source={mergeTarget}
         allTags={tags}
-        onConfirm={async (sourceId, targetId) => {
-          await mergeTag(sourceId, targetId);
-          refresh();
-        }}
+        onConfirm={(sourceId, targetId) =>
+          mergeTagMutation.mutateAsync({ sourceId, targetId }).then(() => {})
+        }
       />
 
       <DeleteUnusedTagsDialog
         open={isDeleteUnusedOpen}
         onOpenChange={setIsDeleteUnusedOpen}
         unusedCount={unusedCount}
-        onConfirm={async () => {
-          await deleteUnusedTags();
-          refresh();
-        }}
+        onConfirm={() => deleteUnusedMutation.mutateAsync().then(() => {})}
       />
     </main>
   );

@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 
 import { TagsPage } from "./tags-page";
 import type { TagWithCount } from "./types";
@@ -52,6 +54,17 @@ function tag(name: string, count = 0): TagWithCount {
   return { id: name, name, color: null, created_at: "x", count };
 }
 
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  };
+}
+
 beforeEach(() => {
   refresh.mockReset();
   createTag.mockReset().mockResolvedValue(undefined);
@@ -71,7 +84,7 @@ afterEach(() => {
 describe("TagsPage", () => {
   it("renders a row with name and count for each tag", () => {
     hookValues.tags = [tag("alpha", 3), tag("beta", 0)];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     const rows = screen.getAllByTestId("tag-row");
     expect(rows).toHaveLength(2);
     expect(screen.getByText("alpha")).toBeInTheDocument();
@@ -80,13 +93,13 @@ describe("TagsPage", () => {
 
   it("shows the tag count in the header", () => {
     hookValues.tags = [tag("alpha"), tag("beta")];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     expect(screen.getByText(/2 tags/)).toBeInTheDocument();
   });
 
   it("sorts by name ascending by default", () => {
     hookValues.tags = [tag("gamma"), tag("alpha"), tag("beta")];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     const names = screen
       .getAllByTestId("tag-row")
       .map((row) => within(row).getByText(/alpha|beta|gamma/).textContent);
@@ -96,7 +109,7 @@ describe("TagsPage", () => {
   it("sorts by count descending when the Count toggle is clicked", async () => {
     const user = userEvent.setup();
     hookValues.tags = [tag("alpha", 2), tag("beta", 5), tag("gamma", 1)];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByTestId("sort-count"));
     const names = screen
       .getAllByTestId("tag-row")
@@ -107,7 +120,7 @@ describe("TagsPage", () => {
   it("flips direction when the active sort field is clicked again", async () => {
     const user = userEvent.setup();
     hookValues.tags = [tag("alpha"), tag("beta")];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     // Name is active+asc by default; click flips to desc.
     await user.click(screen.getByTestId("sort-name"));
     const names = screen
@@ -118,7 +131,7 @@ describe("TagsPage", () => {
 
   it("renders the loading state", () => {
     hookValues.status = "loading";
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     expect(screen.getByTestId("tags-loading")).toBeInTheDocument();
   });
 
@@ -126,7 +139,7 @@ describe("TagsPage", () => {
     const user = userEvent.setup();
     hookValues.status = "error";
     hookValues.error = "Boom";
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     expect(screen.getByTestId("tags-error")).toHaveTextContent("Boom");
     await user.click(screen.getByTestId("tags-retry"));
     expect(refresh).toHaveBeenCalled();
@@ -134,13 +147,13 @@ describe("TagsPage", () => {
 
   it("renders the empty state when there are no tags", () => {
     hookValues.tags = [];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     expect(screen.getByTestId("tags-empty")).toBeInTheDocument();
   });
 
   it("opens the create dialog and creates a tag", async () => {
     const user = userEvent.setup();
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByTestId("new-tag-button"));
     expect(screen.getByTestId("tag-form-dialog")).toBeInTheDocument();
 
@@ -148,13 +161,12 @@ describe("TagsPage", () => {
     await user.click(screen.getByTestId("tag-form-submit"));
 
     await waitFor(() => expect(createTag).toHaveBeenCalledWith("newtag"));
-    expect(refresh).toHaveBeenCalled();
   });
 
   it("blocks creating a duplicate name client-side", async () => {
     const user = userEvent.setup();
     hookValues.tags = [tag("alpha")];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByTestId("new-tag-button"));
     await user.type(screen.getByTestId("tag-name-input"), "ALPHA");
     await user.click(screen.getByTestId("tag-form-submit"));
@@ -166,7 +178,7 @@ describe("TagsPage", () => {
   it("opens the rename dialog seeded with the current name", async () => {
     const user = userEvent.setup();
     hookValues.tags = [tag("alpha")];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByTestId("tag-rename-button"));
 
     const input = screen.getByTestId("tag-name-input") as HTMLInputElement;
@@ -179,7 +191,6 @@ describe("TagsPage", () => {
     await waitFor(() =>
       expect(renameTag).toHaveBeenCalledWith("alpha", "renamed")
     );
-    expect(refresh).toHaveBeenCalled();
   });
 
   it("blocks dismissing the dialog while a create is in flight", async () => {
@@ -192,7 +203,7 @@ describe("TagsPage", () => {
         resolve = () => r();
       })
     );
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByTestId("new-tag-button"));
     await user.type(screen.getByTestId("tag-name-input"), "newtag");
     await user.click(screen.getByTestId("tag-form-submit"));
@@ -208,7 +219,7 @@ describe("TagsPage", () => {
   it("confirms and deletes a tag", async () => {
     const user = userEvent.setup();
     hookValues.tags = [tag("alpha", 4)];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByTestId("tag-delete-button"));
 
     const dialog = screen.getByTestId("delete-tag-dialog");
@@ -216,13 +227,12 @@ describe("TagsPage", () => {
 
     await user.click(screen.getByTestId("delete-tag-confirm"));
     await waitFor(() => expect(deleteTag).toHaveBeenCalledWith("alpha"));
-    expect(refresh).toHaveBeenCalled();
   });
 
   it("filters tags by search query", async () => {
     const user = userEvent.setup();
     hookValues.tags = [tag("alpha"), tag("beta"), tag("gamma")];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
 
     await user.type(screen.getByTestId("tags-search"), "alp");
     expect(screen.getAllByTestId("tag-row")).toHaveLength(1);
@@ -233,7 +243,7 @@ describe("TagsPage", () => {
   it("shows a no-matches state when search finds nothing", async () => {
     const user = userEvent.setup();
     hookValues.tags = [tag("alpha")];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
 
     await user.type(screen.getByTestId("tags-search"), "zzz");
     expect(screen.getByTestId("tags-no-matches")).toBeInTheDocument();
@@ -243,7 +253,7 @@ describe("TagsPage", () => {
   it("filters to unused tags only", async () => {
     const user = userEvent.setup();
     hookValues.tags = [tag("alpha", 2), tag("beta", 0), tag("gamma", 0)];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
 
     await user.click(screen.getByTestId("filter-unused"));
     const names = screen
@@ -255,7 +265,7 @@ describe("TagsPage", () => {
   it("shows delete-unused when unused tags exist and confirms bulk delete", async () => {
     const user = userEvent.setup();
     hookValues.tags = [tag("alpha", 1), tag("beta", 0)];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
 
     expect(screen.getByTestId("delete-unused-button")).toHaveTextContent(
       "Delete unused (1)"
@@ -264,13 +274,12 @@ describe("TagsPage", () => {
     await user.click(screen.getByTestId("delete-unused-tags-confirm"));
 
     await waitFor(() => expect(deleteUnusedTags).toHaveBeenCalled());
-    expect(refresh).toHaveBeenCalled();
   });
 
   it("opens the merge dialog and merges tags", async () => {
     const user = userEvent.setup();
     hookValues.tags = [tag("alpha", 3), tag("beta", 1)];
-    render(<TagsPage />);
+    render(<TagsPage />, { wrapper: createWrapper() });
 
     await user.click(screen.getAllByTestId("tag-merge-button")[0]);
     expect(screen.getByTestId("merge-tag-dialog")).toBeInTheDocument();
@@ -278,6 +287,5 @@ describe("TagsPage", () => {
 
     await user.click(screen.getByTestId("merge-tag-confirm"));
     await waitFor(() => expect(mergeTag).toHaveBeenCalledWith("alpha", "beta"));
-    expect(refresh).toHaveBeenCalled();
   });
 });

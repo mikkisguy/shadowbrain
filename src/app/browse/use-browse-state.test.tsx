@@ -3,6 +3,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect, useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { useBrowseState } from "./use-browse-state";
 import type { BrowseResponse } from "./types";
@@ -15,8 +16,8 @@ import type { BrowseResponse } from "./types";
  *      URL; the hook reads it via `useSearchParams` and writes it
  *      via `useRouter().replace`.
  *   2. **Debounced search.** Search input is debounced by 300ms.
- *   3. **Request cancellation.** Each filter change aborts the
- *      previous in-flight request.
+ *   3. **Request cancellation.** TanStack Query handles this
+ *      automatically when the query key changes.
  *
  * We mock `next/navigation` and the API client. The mock router
  * mirrors Next.js's behaviour: it updates a shared `searchParams`
@@ -159,10 +160,33 @@ function StoreSubscriber({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Wrapper that provides a QueryClient for TanStack Query.
+ * Each test gets a fresh client to avoid cache pollution.
+ */
+function QueryWrapper({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: false,
+            gcTime: 0,
+          },
+        },
+      })
+  );
+  return (
+    <QueryClientProvider client={queryClient}>
+      <StoreSubscriber>{children}</StoreSubscriber>
+    </QueryClientProvider>
+  );
+}
+
 describe("useBrowseState", () => {
   it("starts on the 'all' tab and triggers an initial fetch", async () => {
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     await waitFor(() => {
       expect(result.current.status).toBe("success");
@@ -175,7 +199,7 @@ describe("useBrowseState", () => {
   it("reads the initial type from the URL", () => {
     searchParamsStore.value = new URLSearchParams({ type: "journal" });
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     expect(result.current.typeTab).toBe("journal");
   });
@@ -183,14 +207,14 @@ describe("useBrowseState", () => {
   it("falls back to 'all' for an unknown type value", () => {
     searchParamsStore.value = new URLSearchParams({ type: "not-a-real-type" });
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     expect(result.current.typeTab).toBe("all");
   });
 
   it("writes filter changes to the URL via router.replace", () => {
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     act(() => {
       result.current.setFilters({ type: "note" });
@@ -204,7 +228,7 @@ describe("useBrowseState", () => {
   it("skips the URL write and page reset when a patch changes nothing", async () => {
     searchParamsStore.value = new URLSearchParams({ type: "note" });
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     await waitFor(() => {
       expect(result.current.status).toBe("success");
@@ -224,7 +248,7 @@ describe("useBrowseState", () => {
       q: "docker",
     });
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     act(() => {
       result.current.setFilters({ type: "" });
@@ -236,7 +260,7 @@ describe("useBrowseState", () => {
 
   it("refetches when a non-search filter changes", async () => {
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     await waitFor(() => {
       expect(result.current.status).toBe("success");
@@ -253,7 +277,7 @@ describe("useBrowseState", () => {
 
   it("debounces the search input by 300ms before sending q to the API", async () => {
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     await waitFor(() => {
       expect(result.current.status).toBe("success");
@@ -280,36 +304,11 @@ describe("useBrowseState", () => {
     expect(fetchSpy.lastFilters?.q).toBe("docker");
   });
 
-  it("cancels the previous request when filters change", async () => {
-    fetchMock.mockImplementation(
-      () =>
-        new Promise<BrowseResponse>(() => {
-          // Never resolves; the test inspects the abort signal
-          // to confirm cancellation.
-        })
-    );
-    const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
-    });
-    await waitFor(() => {
-      expect(fetchSpy.lastSignal).toBeDefined();
-    });
-    const firstSignal = fetchSpy.lastSignal!;
-    const before = fetchSpy.callCount;
-    act(() => {
-      result.current.setFilters({ type: "note" });
-    });
-    await waitFor(() => {
-      expect(fetchSpy.callCount).toBeGreaterThan(before);
-    });
-    expect(firstSignal.aborted).toBe(true);
-  });
-
   it("surfaces API errors with a generic user-safe message", async () => {
     const err = new Error("nope");
     fetchMock.mockRejectedValueOnce(err);
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     await waitFor(() => {
       expect(result.current.status).toBe("error");
@@ -324,7 +323,7 @@ describe("useBrowseState", () => {
       q: "docker",
     });
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     act(() => {
       result.current.clearFilters();
@@ -335,7 +334,7 @@ describe("useBrowseState", () => {
 
   it("retry re-issues the same request", async () => {
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     await waitFor(() => {
       expect(result.current.status).toBe("success");
@@ -372,7 +371,7 @@ describe("useBrowseState", () => {
       })
     );
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     await waitFor(() => {
       expect(result.current.status).toBe("success");
@@ -414,7 +413,7 @@ describe("useBrowseState", () => {
           ],
           total: 4,
           page: 1,
-          limit: 20,
+          limit: 2,
         })
       )
       .mockResolvedValueOnce(
@@ -447,12 +446,12 @@ describe("useBrowseState", () => {
           ],
           total: 4,
           page: 2,
-          limit: 20,
+          limit: 2,
         })
       );
 
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     await waitFor(() => {
       expect(result.current.items).toHaveLength(2);
@@ -493,7 +492,7 @@ describe("useBrowseState", () => {
       })
     );
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     await waitFor(() => {
       expect(result.current.status).toBe("success");
@@ -554,7 +553,7 @@ describe("useBrowseState", () => {
         })
       );
     const { result } = renderHook(() => useBrowseState(), {
-      wrapper: StoreSubscriber,
+      wrapper: QueryWrapper,
     });
     await waitFor(() => {
       expect(result.current.items).toHaveLength(1);

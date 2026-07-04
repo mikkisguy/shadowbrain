@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,13 +55,20 @@ vi.mock("next/navigation", () => ({
 const fetchMock = vi.fn();
 
 function renderPalette() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+    },
+  });
   return render(
-    <AddDialogProvider>
-      <CommandPaletteProvider>
-        <PaletteTrigger />
-        <CommandPalette />
-      </CommandPaletteProvider>
-    </AddDialogProvider>
+    <QueryClientProvider client={queryClient}>
+      <AddDialogProvider>
+        <CommandPaletteProvider>
+          <PaletteTrigger />
+          <CommandPalette />
+        </CommandPaletteProvider>
+      </AddDialogProvider>
+    </QueryClientProvider>
   );
 }
 
