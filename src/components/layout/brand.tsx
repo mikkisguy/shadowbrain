@@ -10,8 +10,8 @@ import Link from "next/link";
  *
  * Sizing: 32×32 (h-8 / w-8), a small bump from the previous
  * icon-in-frame at 28×28 so the mark reads cleanly at the smaller
- * display size. The link's tappable hit area is 44×44
- * (min-h-11 / min-w-11) for touch; the visible logo stays 32×32.
+ * display size. The link hit area is 32×32 on desktop (matching
+ * the h-8 nav controls) and 44×44 on mobile for touch.
  *
  * The link's accessible name still resolves to "ShadowBrain — home"
  * for assistive tech, even though the wordmark is no longer
@@ -22,7 +22,7 @@ export function Brand() {
     <Link
       href="/"
       aria-label="ShadowBrain — home"
-      className="focus-visible:ring-ring focus-visible:ring-offset-background inline-flex min-h-11 min-w-11 items-center justify-center outline-none focus-visible:ring-1 focus-visible:ring-offset-2"
+      className="focus-visible:ring-ring focus-visible:ring-offset-background inline-flex size-8 items-center justify-center outline-none focus-visible:ring-1 focus-visible:ring-offset-2 max-md:size-auto max-md:min-h-11 max-md:min-w-11"
     >
       {/* eslint-disable-next-line @next/next/no-img-element -- the
           /public asset is intentionally served as-is for now; if

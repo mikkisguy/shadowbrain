@@ -6,11 +6,11 @@ import { AddButton } from "@/components/add-dialog";
 /**
  * Minimal top navigation shell.
  *
- * Three regions in a CSS grid:
- *   1. Logo + brand (left)
- *   2. Centered palette trigger (the global command palette lives in
- *      #88; the trigger itself is a stub here)
- *   3. User menu (right; the theme toggle is out of scope for v1 —
+ * Three regions in a flex row with equal `flex-1` bookends so the
+ * palette trigger stays optically centered:
+ *   1. Brand mark (left)
+ *   2. Command palette trigger (center; #88)
+ *   3. Add + user menu (right; theme toggle is out of scope for v1 —
  *      ShadowBrain is dark-only)
  *
  * The component itself does not gate on auth. The layout in
@@ -28,17 +28,17 @@ export function TopNav() {
       className="border-border bg-background sticky top-0 z-40 w-full border-b"
       data-testid="top-nav"
     >
-      <div className="mx-auto grid h-14 w-full max-w-screen-2xl grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:px-6">
-        <div className="flex items-center justify-start">
+      <div className="mx-auto flex h-14 w-full max-w-screen-2xl items-center gap-2 px-4 sm:gap-3 sm:px-6">
+        <div className="flex min-w-0 flex-1 items-center justify-start">
           <Brand />
         </div>
 
-        <div className="flex items-center justify-center gap-2">
-          <AddButton />
+        <div className="flex shrink-0 items-center justify-center">
           <PaletteTrigger />
         </div>
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2">
+          <AddButton />
           <UserMenu />
         </div>
       </div>

@@ -39,10 +39,10 @@ export function PaletteTrigger() {
         onClick={open}
         aria-label={`Open command palette — ${shortcut}`}
         className={cn(
-          "border-border bg-surface-elevated hidden h-8 w-full max-w-sm items-center gap-2 rounded-sm border",
+          "border-border bg-surface-elevated hidden h-8 w-[min(100vw-12rem,22rem)] items-center gap-2 rounded-sm border",
           "text-muted-foreground px-3 text-left text-sm outline-none",
           "hover:border-border-strong hover:bg-surface-muted transition-colors",
-          "focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-1",
+          "focus-visible:border-ring focus-visible:ring-ring focus-visible:ring-1",
           "md:flex"
         )}
       >
@@ -54,7 +54,7 @@ export function PaletteTrigger() {
         <span className="flex-1 truncate">Search or jump to…</span>
         <kbd
           aria-hidden="true"
-          className="border-border bg-background text-muted-foreground inline-flex h-5 items-center rounded-sm border px-1.5 font-mono text-[10px] font-medium"
+          className="text-muted-foreground/70 hidden shrink-0 font-mono text-[10px] font-medium tracking-wide sm:inline"
         >
           {shortcut}
         </kbd>
@@ -71,7 +71,7 @@ export function PaletteTrigger() {
           "border-border bg-surface-elevated inline-flex size-11 items-center justify-center rounded-sm border",
           "text-muted-foreground transition-colors outline-none",
           "hover:border-border-strong hover:bg-surface-muted hover:text-foreground",
-          "focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-1",
+          "focus-visible:border-ring focus-visible:ring-ring focus-visible:ring-1",
           "md:hidden"
         )}
       >

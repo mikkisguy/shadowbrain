@@ -643,12 +643,13 @@ export function AddButton() {
     <Button
       variant="inverted"
       size="default"
+      mono
       onClick={() => setOpen(true)}
       data-testid="add-dialog-trigger"
-      className="shrink-0"
+      className="shrink-0 rounded-sm max-md:size-11 max-md:px-0"
     >
       <Plus className="size-4" aria-hidden />
-      <span className="hidden sm:inline">Add</span>
+      <span className="hidden md:inline">Add</span>
     </Button>
   );
 }
