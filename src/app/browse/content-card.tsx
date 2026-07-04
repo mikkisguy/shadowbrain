@@ -64,6 +64,13 @@ export interface ContentCardProps {
    */
   onTagClick?: (tag: string) => void;
   /**
+   * Called when the user clicks the card (regular left-click without
+   * modifier keys). The feed wires this to open the item preview sheet.
+   * Ctrl/Cmd+Click and middle-click pass through to the native
+   * <Link> behavior (open in new tab).
+   */
+  onItemClick?: (id: string) => void;
+  /**
    * Visual treatment for the type indicator. Two options, both
    * live in the card header (no chrome on the card body):
    *   - `"pill"` — the dot + uppercase text become a filled
@@ -178,6 +185,7 @@ export function ContentCard({
   item,
   tags,
   onTagClick,
+  onItemClick,
   variant = "larger-dot",
 }: ContentCardProps) {
   const dotClass = typeColorClass(item.type);
@@ -444,11 +452,27 @@ export function ContentCard({
           navigates to the item's detail page. Sits beneath the body
           (body is z-20 with pointer-events-none), so clicks pass
           through to this link except on the tag pills and the
-          timestamp (which re-enable pointer events above it). */}
+          timestamp (which re-enable pointer events above it).
+
+          Click behavior:
+          - Regular left-click → open in the preview sheet (onItemClick)
+          - Ctrl/Cmd+Click → native browser new-tab behavior
+          - Middle-click → native browser new-tab behavior (onClick
+            doesn't fire for button 1, so the <a> handles it) */}
       <Link
         href={`/item/${item.id}`}
         className="focus-visible:ring-ring absolute inset-0 z-10 rounded-sm focus-visible:ring-2 focus-visible:outline-none"
         aria-label={`Open ${item.title ?? label}`}
+        onClick={(e) => {
+          // Ctrl/Cmd+Click → let the browser open in a new tab natively.
+          if (e.ctrlKey || e.metaKey) return;
+          // Regular click → open in the preview sheet instead of
+          // navigating to the detail page.
+          if (onItemClick) {
+            e.preventDefault();
+            onItemClick(item.id);
+          }
+        }}
       >
         <span className="sr-only">Open item</span>
       </Link>

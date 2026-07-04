@@ -20,16 +20,22 @@
  */
 
 import { LayoutGrid, Rows3 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { CelestialHeader } from "@/components/visual/celestial-motif";
 import { BrowseToolbar } from "./browse-toolbar";
 import { ContentFeed } from "./content-feed";
 import { useBrowseState } from "./use-browse-state";
+import { ItemPreviewSheet } from "./item-preview-sheet";
 import type { BrowseView } from "./types";
 
 export function BrowsePage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const {
     filters,
     items,
@@ -48,6 +54,30 @@ export function BrowsePage() {
   const [view, setView] = useState<BrowseView>("grid");
   const [cardVariant, setCardVariant] = useState<"pill" | "larger-dot">(
     "larger-dot"
+  );
+
+  // Item preview sheet: read `?item=` from the URL so the state is
+  // shareable / deep-linkable. The sheet is dismissed by removing the
+  // param from the URL, which is handled by `handleClosePreview`.
+  const previewItemId = searchParams.get("item");
+  const searchString = searchParams.toString();
+
+  const handleClosePreview = useCallback(() => {
+    const params = new URLSearchParams(searchString);
+    params.delete("item");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+  }, [pathname, router, searchString]);
+
+  const handleItemClick = useCallback(
+    (id: string) => {
+      const params = new URLSearchParams(searchString);
+      params.set("item", id);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchString]
   );
 
   const hasActiveFilters = Boolean(
@@ -179,7 +209,13 @@ export function BrowsePage() {
         // filters panel. The card's own navigation (click-anywhere →
         // /item/[id]) is handled inside the card via a stretched link.
         onTagClick={(tag) => setFilters({ tag })}
+        // Regular left-click on a card opens the item preview sheet.
+        // Ctrl/Cmd+Click and middle-click pass through to the native
+        // <Link> behaviour (open in new tab).
+        onItemClick={handleItemClick}
       />
+
+      <ItemPreviewSheet itemId={previewItemId} onClose={handleClosePreview} />
     </main>
   );
 }

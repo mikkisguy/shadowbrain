@@ -56,6 +56,11 @@ export interface ContentFeedProps {
    *  to `setFilters({ tag })` so a click narrows the feed and the
    *  URL picks up `?tag=…`. */
   onTagClick?: (tag: string) => void;
+  /** Called when a card is clicked (regular left-click). The page
+   *  wires this to open the item preview sheet. Ctrl/Cmd+Click and
+   *  middle-click pass through to the native <Link> behaviour (open
+   *  in new tab). */
+  onItemClick?: (id: string) => void;
   /** Whether the scroll-triggered auto-load (the IntersectionObserver
    *  on the sentinel) is active. Disabled during an active search so
    *  results appear as a finite set "replacing infinite scroll" (issue
@@ -87,6 +92,7 @@ export function ContentFeed({
   onLoadMore,
   cardVariant = "larger-dot",
   onTagClick,
+  onItemClick,
   infiniteScroll = true,
 }: ContentFeedProps) {
   // ---- Column-count derivation for the grid -----------
@@ -229,6 +235,7 @@ export function ContentFeed({
       tags={item.tags}
       variant={cardVariant}
       onTagClick={onTagClick}
+      onItemClick={onItemClick}
     />
   );
 

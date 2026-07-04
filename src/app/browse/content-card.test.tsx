@@ -156,6 +156,55 @@ describe("ContentCard", () => {
     expect(link).toHaveAttribute("href", "/item/id-1");
   });
 
+  it("calls onItemClick on regular left-click and prevents default navigation", async () => {
+    const user = userEvent.setup();
+    const onItemClick = vi.fn();
+    render(<ContentCard item={baseItem} onItemClick={onItemClick} />);
+    await user.click(
+      screen.getByRole("link", { name: /open docker networking basics/i })
+    );
+    expect(onItemClick).toHaveBeenCalledWith("id-1");
+    expect(onItemClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call onItemClick on Ctrl+Click (passes through to native new-tab)", async () => {
+    const user = userEvent.setup();
+    const onItemClick = vi.fn();
+    render(<ContentCard item={baseItem} onItemClick={onItemClick} />);
+    // userEvent supports modifier keys via keyboard state.
+    await user.keyboard("{Control>}");
+    await user.click(
+      screen.getByRole("link", { name: /open docker networking basics/i })
+    );
+    await user.keyboard("{/Control}");
+    expect(onItemClick).not.toHaveBeenCalled();
+  });
+
+  it("does not call onItemClick on Meta+Click (Cmd+Click on Mac)", async () => {
+    const user = userEvent.setup();
+    const onItemClick = vi.fn();
+    render(<ContentCard item={baseItem} onItemClick={onItemClick} />);
+    await user.keyboard("{Meta>}");
+    await user.click(
+      screen.getByRole("link", { name: /open docker networking basics/i })
+    );
+    await user.keyboard("{/Meta}");
+    expect(onItemClick).not.toHaveBeenCalled();
+  });
+
+  it("falls through to native navigation when onItemClick is not provided", async () => {
+    const user = userEvent.setup();
+    render(<ContentCard item={baseItem} />);
+    // No onItemClick — the click should not throw or prevent default.
+    // The link's href is still set, so the browser would navigate.
+    const link = screen.getByRole("link", {
+      name: /open docker networking basics/i,
+    });
+    expect(link).toHaveAttribute("href", "/item/id-1");
+    // Clicking should not throw.
+    await user.click(link);
+  });
+
   it("the card link still appears for untitled items", () => {
     const untitled: BrowseItem = { ...baseItem, title: null };
     render(<ContentCard item={untitled} />);

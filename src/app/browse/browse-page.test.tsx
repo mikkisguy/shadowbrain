@@ -5,6 +5,16 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+// Mock next/navigation so BrowsePage can read `?item=` and update the URL.
+const mockReplace = vi.fn();
+const mockSearchParams = new URLSearchParams();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: mockReplace }),
+  usePathname: () => "/",
+  useSearchParams: () => mockSearchParams,
+}));
+
 // Mock react-virtuoso to render all items (no virtualization in tests)
 vi.mock("react-virtuoso", () => ({
   Virtuoso: ({
@@ -31,6 +41,24 @@ vi.mock("react-virtuoso", () => ({
       </List>
     );
   },
+}));
+
+// Mock the ItemPreviewSheet to keep tests simple (no Base UI Dialog complexity).
+vi.mock("./item-preview-sheet", () => ({
+  ItemPreviewSheet: ({
+    itemId,
+    onClose,
+  }: {
+    itemId: string | null;
+    onClose: () => void;
+  }) =>
+    itemId ? (
+      <div data-testid="item-preview-sheet" data-item-id={itemId}>
+        <button data-testid="sheet-close" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    ) : null,
 }));
 
 import { BrowsePage } from "./browse-page";
@@ -86,6 +114,8 @@ vi.mock("./use-browse-state", () => ({
 }));
 
 beforeEach(() => {
+  mockReplace.mockReset();
+  mockSearchParams.forEach((_value, key) => mockSearchParams.delete(key));
   setFilters.mockReset();
   clearFilters.mockReset();
   retry.mockReset();
@@ -269,6 +299,49 @@ describe("BrowsePage", () => {
         .getByTestId("content-card")
         .querySelector("span.bg-type-note.rounded-full")
     ).toBeNull();
+  });
+
+  it("does not render the preview sheet when no item is selected", () => {
+    render(<BrowsePage />, { wrapper: createWrapper() });
+    expect(screen.queryByTestId("item-preview-sheet")).not.toBeInTheDocument();
+  });
+
+  it("renders the preview sheet when ?item= is set in the URL", () => {
+    mockSearchParams.set("item", "abc-123");
+    render(<BrowsePage />, { wrapper: createWrapper() });
+    const sheet = screen.getByTestId("item-preview-sheet");
+    expect(sheet).toHaveAttribute("data-item-id", "abc-123");
+  });
+
+  it("calls router.replace with ?item= when a card is clicked", async () => {
+    const user = userEvent.setup();
+    hookValues.items = [
+      {
+        id: "item-1",
+        type: "note",
+        title: "Note",
+        content: "Hello",
+        image_url: null,
+        source: "manual",
+        source_url: null,
+        tags: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+    render(<BrowsePage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("link", { name: /open note/i }));
+    expect(mockReplace).toHaveBeenCalledWith("/?item=item-1", {
+      scroll: false,
+    });
+  });
+
+  it("removes ?item= from the URL when the preview sheet is closed", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.set("item", "abc-123");
+    render(<BrowsePage />, { wrapper: createWrapper() });
+    await user.click(screen.getByTestId("sheet-close"));
+    expect(mockReplace).toHaveBeenCalledWith("/", { scroll: false });
   });
 
   it("wires the load-more affordance to the hook's loadMore", async () => {
