@@ -1,11 +1,27 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdvancedFilters } from "./advanced-filters";
 import type { BrowseFilters } from "./types";
+
+/** Wrap the component tree in a fresh QueryClientProvider per call. */
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+    },
+  });
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  };
+}
 
 /**
  * Advanced-filters tests.
@@ -49,7 +65,8 @@ describe("AdvancedFilters", () => {
         filters={empty}
         onPatch={() => undefined}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     expect(screen.getByTestId("advanced-tag")).toBeInTheDocument();
     expect(screen.getByTestId("advanced-source")).toBeInTheDocument();
@@ -65,7 +82,8 @@ describe("AdvancedFilters", () => {
         filters={{ tag: "docker,kubernetes" }}
         onPatch={() => undefined}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     expect(screen.getByText("docker")).toBeInTheDocument();
     expect(screen.getByText("kubernetes")).toBeInTheDocument();
@@ -80,7 +98,8 @@ describe("AdvancedFilters", () => {
         filters={empty}
         onPatch={onPatch}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     const input = screen.getByTestId("advanced-tag");
     await user.type(input, "docker{Enter}");
@@ -95,7 +114,8 @@ describe("AdvancedFilters", () => {
         filters={{ tag: "docker" }}
         onPatch={onPatch}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     const input = screen.getByTestId("advanced-tag");
     await user.type(input, "kubernetes{Enter}");
@@ -110,7 +130,8 @@ describe("AdvancedFilters", () => {
         filters={{ tag: "docker" }}
         onPatch={onPatch}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     const input = screen.getByTestId("advanced-tag");
     await user.type(input, "Docker{Enter}");
@@ -125,7 +146,8 @@ describe("AdvancedFilters", () => {
         filters={{ tag: "docker,kubernetes" }}
         onPatch={onPatch}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     await user.click(screen.getByTestId("tag-remove-docker"));
     expect(onPatch).toHaveBeenCalledWith({ tag: "kubernetes" });
@@ -139,7 +161,8 @@ describe("AdvancedFilters", () => {
         filters={{ tag: "docker" }}
         onPatch={onPatch}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     await user.click(screen.getByTestId("tag-remove-docker"));
     expect(onPatch).toHaveBeenCalledWith({ tag: undefined });
@@ -153,7 +176,8 @@ describe("AdvancedFilters", () => {
         filters={empty}
         onPatch={onPatch}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     // The base-ui Select is a custom dropdown (not a native <select>):
     // open the trigger, then click the option.
@@ -171,7 +195,8 @@ describe("AdvancedFilters", () => {
         filters={{ source: "discord" }}
         onPatch={onPatch}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     await user.click(screen.getByTestId("advanced-source"));
     const item = await screen.findByRole("option", { name: "All sources" });
@@ -187,7 +212,8 @@ describe("AdvancedFilters", () => {
         filters={empty}
         onPatch={onPatch}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     await user.click(screen.getByTestId("preset-7d"));
     expect(onPatch).toHaveBeenCalledWith({
@@ -204,7 +230,8 @@ describe("AdvancedFilters", () => {
         filters={empty}
         onPatch={onPatch}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     await user.click(screen.getByTestId("preset-30d"));
     expect(onPatch).toHaveBeenCalledWith({
@@ -219,7 +246,8 @@ describe("AdvancedFilters", () => {
         filters={empty}
         onPatch={() => undefined}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     expect(screen.getByTestId("advanced-clear")).toBeDisabled();
   });
@@ -232,7 +260,8 @@ describe("AdvancedFilters", () => {
         filters={{ tag: "docker" }}
         onPatch={() => undefined}
         onClear={onClear}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     const button = screen.getByTestId("advanced-clear");
     expect(button).not.toBeDisabled();
@@ -254,7 +283,8 @@ describe("AdvancedFilters", () => {
         filters={empty}
         onPatch={() => undefined}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     const input = screen.getByTestId("advanced-tag");
     // Focus triggers the lazy fetch.
@@ -280,7 +310,8 @@ describe("AdvancedFilters", () => {
         filters={empty}
         onPatch={onPatch}
         onClear={() => undefined}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
     const input = screen.getByTestId("advanced-tag");
     await user.click(input);

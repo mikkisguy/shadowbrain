@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -169,26 +170,28 @@ export function SettingsPage() {
   } = useSettings();
 
   const [active, setActive] = useState(SECTIONS[0].id);
-  const [saving, setSaving] = useState(false);
+
+  const saveMutation = useMutation({
+    mutationFn: (patch: Parameters<typeof saveSettings>[0]) =>
+      saveSettings(patch),
+    onSuccess: (snapshot) => {
+      applySaved(snapshot);
+      toast.success("Settings saved.");
+    },
+    onError: () => {
+      toast.error("Couldn't save your settings. Please try again.");
+    },
+  });
 
   const dirty = useMemo(() => {
     if (!saved || !draft) return false;
     return isSettingsDirty(saved, draft, clearedSecrets);
   }, [saved, draft, clearedSecrets]);
 
-  async function handleSave() {
+  function handleSave() {
     if (!saved || !draft) return;
-    setSaving(true);
-    try {
-      const patch = buildSettingsPatch(saved, draft, clearedSecrets);
-      const snapshot = await saveSettings(patch);
-      applySaved(snapshot);
-      toast.success("Settings saved.");
-    } catch {
-      toast.error("Couldn't save your settings. Please try again.");
-    } finally {
-      setSaving(false);
-    }
+    const patch = buildSettingsPatch(saved, draft, clearedSecrets);
+    saveMutation.mutate(patch);
   }
 
   function handleDiscard() {
@@ -269,7 +272,7 @@ export function SettingsPage() {
 
       <SaveBar
         dirty={dirty}
-        saving={saving}
+        saving={saveMutation.isPending}
         onSave={() => void handleSave()}
         onDiscard={handleDiscard}
       />

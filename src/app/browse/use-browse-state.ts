@@ -13,16 +13,13 @@
  *  2. **Debounced fetch.** Search input is debounced (300ms, per
  *     the design spec) so a typing user does not fire a request
  *     per keystroke. Other filters fire immediately.
- *  3. **Infinite scroll.** Each filter change resets the page
- *     to 1 and clears the accumulated items. A `loadMore`
- *     callback appends the next page to the existing list,
- *     driven by an `IntersectionObserver` on a sentinel element
- *     in the feed.
- *  4. **Request lifecycle.** Each fetch (initial or loadMore)
- *     cancels the previous in-flight request via
- *     `AbortController` and ignores the response of any
- *     cancelled fetch. Errors land in `error`; success lands
- *     in `items` + `total`.
+ *  3. **Infinite scroll.** TanStack Query's `useInfiniteQuery` handles
+ *     pagination. Each filter change resets the query cache and
+ *     fetches page 1. `fetchNextPage` appends the next page to the
+ *     existing items.
+ *  4. **Request lifecycle.** TanStack Query manages request cancellation
+ *     automatically when the query key changes. Errors land in `error`;
+ *     success lands in `items` + `total`.
  *
  * The hook does not own the advanced-filters open/closed state
  * or the grid/list view — both are purely UI and live on the
@@ -37,11 +34,13 @@
  * `useEffect` per URL change — negligible for a single-user app.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useInfiniteQuery } from "@tanstack/react-query";
 
 import { fetchBrowseItems, BrowseApiError } from "./api";
 import { type BrowseFilters, type BrowseItem, coerceTypeTab } from "./types";
+import { queryKeys, staleTimes } from "@/lib/query-config";
 
 /** Debounce window for the search input. 300ms is the design spec. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -178,62 +177,6 @@ export function useBrowseState(): UseBrowseStateResult {
   const [committedQ, setCommittedQ] = useState(filters.q ?? "");
   const [isSearchPending, setIsSearchPending] = useState(false);
 
-  // Accumulated items across pages. Reset on filter change.
-  const [items, setItems] = useState<BrowseItem[]>([]);
-  const [total, setTotal] = useState(0);
-  // The highest page that has been *fully loaded*; loadMore reads
-  // `nextPage` from this and writes back when the response
-  // arrives. A version counter (see the fetch effect below) keys
-  // stale responses out so a filter change during a loadMore
-  // doesn't corrupt the accumulated list.
-  const [loadedPage, setLoadedPage] = useState(0);
-  // True once any fetch (initial or loadMore) has resolved —
-  // success or error. Drives the status derivation: a `pending`
-  // count > 0 with `hasFetched === false` is "loading";
-  // `hasFetched === true` is "success" (or "error"). Without
-  // this flag a successful-but-empty response would render as
-  // "idle" because `items.length === 0` and `pending === 0`.
-  const [hasFetched, setHasFetched] = useState(false);
-  // Pending fetch count. Bumped on every fetch effect, decremented
-  // when the matching promise resolves. Tracked as state (not a
-  // ref) because the status is derived from it during render and
-  // the linter forbids reading refs during render.
-  const [pending, setPending] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  // `isLoadingMore` is a derived flag, but we still need a state
-  // slot for it because the initial-load `status === "loading"`
-  // and the loadMore indicator are different visual states.
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [retryToken, setRetryToken] = useState(0);
-  // A version counter that bumps on every fetch. The fetch effect
-  // captures the value at request time; the .then / .catch check
-  // it against the latest commit and bail if the request was
-  // superseded by a later filter change. This is what lets us
-  // avoid clobbering `items` from a stale request.
-  const latestVersionRef = useRef(0);
-
-  // ---- Page state setters ----------------------------------------
-  // `setPage(1)` resets the accumulated list and triggers a fresh
-  // fetch on page 1. The fetch effect reads `pageToFetchRef` to
-  // decide what to load; the ref is updated here so the next
-  // effect run picks up the new page.
-  //
-  // Declared before the debounce effect so the debounce can call
-  // it (the linter rejects forward references to `setPage`).
-  const setPage = useCallback((next: number) => {
-    if (next === 1) {
-      // Filter change → reset everything.
-      setItems([]);
-      setTotal(0);
-      setLoadedPage(0);
-      setHasFetched(false);
-      setError(null);
-      pageToFetchRef.current = 1;
-    } else {
-      pageToFetchRef.current = next;
-    }
-  }, []);
-
   // ---- URL → committedQ debounce ---------------------------------
   // When the URL's `q` changes, we mirror it into `committedQ` after
   // 300ms so the toolbar's local input stays in sync with the URL
@@ -251,7 +194,6 @@ export function useBrowseState(): UseBrowseStateResult {
     debounceRef.current = setTimeout(() => {
       setCommittedQ(incoming);
       setIsSearchPending(false);
-      setPage(1);
     }, SEARCH_DEBOUNCE_MS);
 
     return () => {
@@ -264,112 +206,83 @@ export function useBrowseState(): UseBrowseStateResult {
   }, [filters.q]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // ---- Fetch effect -----------------------------------------------
-  // The effect's behaviour depends on the *page-to-fetch* signal:
-  //   - `page === 0` → reset and fetch page 1 (initial load for a
-  //     filter change; `loadedPage` starts at 0)
-  //   - `page > loadedPage` → fetch the next page and append
-  //
-  // The effect itself reads `page` from a ref (see below) to
-  // avoid an effect-cascade where every state update retriggers
-  // the effect.
-  const pageToFetchRef = useRef(0);
+  // ---- TanStack Query: infinite query for browse items -----------
+  // The query key includes all filters (including the committed search
+  // query). When any filter changes, the query is invalidated and
+  // refetched from page 1. TanStack Query handles request cancellation
+  // automatically when the key changes.
+  const queryKey = useMemo(
+    () =>
+      queryKeys.browse.list({
+        q: committedQ,
+        type: filters.type,
+        tag: filters.tag,
+        source: filters.source,
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      }),
+    [
+      committedQ,
+      filters.type,
+      filters.tag,
+      filters.source,
+      filters.startDate,
+      filters.endDate,
+    ]
+  );
 
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    const controller = new AbortController();
-    const version = latestVersionRef.current + 1;
-    latestVersionRef.current = version;
-    setPending((p) => p + 1);
-
-    const pageToFetch = pageToFetchRef.current;
-    const isLoadMore = pageToFetch > 0;
-    if (isLoadMore) {
-      setIsLoadingMore(true);
-    }
-
-    const requestFilters: BrowseFilters = { ...filters, q: committedQ };
-
-    fetchBrowseItems(requestFilters, {
-      page: Math.max(1, pageToFetch),
-      limit: PAGE_SIZE,
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (latestVersionRef.current !== version) return;
-        setIsLoadingMore(false);
-        setItems((prev) =>
-          isLoadMore ? [...prev, ...response.items] : response.items
-        );
-        setTotal(response.total);
-        // The loaded page is the page that was actually fetched
-        // (pageToFetch is 0 for the initial request, so we use
-        // the response's page instead).
-        setLoadedPage(response.page);
-        setHasFetched(true);
-        // Clear any prior error on a successful fetch.
-        if (!isLoadMore) setError(null);
-        setPending((p) => Math.max(0, p - 1));
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) {
-          setPending((p) => Math.max(0, p - 1));
-          return;
-        }
-        if (latestVersionRef.current !== version) {
-          setPending((p) => Math.max(0, p - 1));
-          return;
-        }
-        setIsLoadingMore(false);
-        setPending((p) => Math.max(0, p - 1));
-        if (err instanceof BrowseApiError) {
-          setError("Couldn't load your brain right now. Please try again.");
-          setHasFetched(true);
-          return;
-        }
-        if (err instanceof DOMException && err.name === "AbortError") {
-          return;
-        }
-        setError("Couldn't load your brain right now. Please try again.");
-        setHasFetched(true);
+  const {
+    data,
+    status: queryStatus,
+    error: queryError,
+    fetchNextPage,
+    isFetchingNextPage,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey,
+    queryFn: ({ pageParam = 1 }) => {
+      const requestFilters: BrowseFilters = { ...filters, q: committedQ };
+      return fetchBrowseItems(requestFilters, {
+        page: pageParam as number,
+        limit: PAGE_SIZE,
       });
+    },
+    getNextPageParam: (lastPage) => {
+      const totalPages = Math.ceil(lastPage.total / lastPage.limit);
+      return lastPage.page < totalPages ? lastPage.page + 1 : undefined;
+    },
+    initialPageParam: 1,
+    staleTime: staleTimes.browse,
+  });
 
-    return () => {
-      controller.abort();
-    };
-    // We intentionally do not depend on `filters` directly — the
-    // individual fields are listed. The linter wants `filters`
-    // here; including it would change the dep array reference on
-    // every render (filters is a new object every time) and
-    // cause a fetch-loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    committedQ,
-    filters.type,
-    filters.tag,
-    filters.source,
-    filters.startDate,
-    filters.endDate,
-    retryToken,
-  ]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  // Flatten pages into a single items array
+  const items = useMemo(
+    () => data?.pages.flatMap((page) => page.items) ?? [],
+    [data]
+  );
 
-  // Status is derived from the request lifecycle:
-  //   - `error` wins (we surfaced a user-safe message)
-  //   - `hasFetched` → "success" (the request completed; the
-  //     feed's empty / success branch handles the rest)
-  //   - `pending > 0` and we have not fetched yet → "loading"
-  //   - otherwise → "idle" (the page has not asked for anything
-  //     yet; this only happens for one render cycle on first
-  //     mount)
-  const status: BrowseStatus = error
-    ? "error"
-    : hasFetched
-      ? "success"
-      : pending > 0
-        ? "loading"
-        : "idle";
+  // Total from the first page (all pages report the same total)
+  const total = data?.pages[0]?.total ?? 0;
 
+  // Map TanStack Query status to our BrowseStatus
+  const status: BrowseStatus =
+    queryStatus === "pending"
+      ? "loading"
+      : queryStatus === "error"
+        ? "error"
+        : "success";
+
+  // User-safe error message
+  const error = queryError
+    ? queryError instanceof BrowseApiError
+      ? "Couldn't load your brain right now. Please try again."
+      : "Couldn't load your brain right now. Please try again."
+    : null;
+
+  // Derive hasMore from items.length vs total (matches original behavior).
+  // TanStack Query's hasNextPage is based on pagination logic, but the
+  // original hook derived it from the actual item count vs total, which
+  // is more intuitive and matches the API's semantics.
   const hasMore = items.length < total;
 
   // ---- URL writers -----------------------------------------------
@@ -404,48 +317,28 @@ export function useBrowseState(): UseBrowseStateResult {
       // no-op (e.g. re-clicking an already-applied date preset, or
       // blurring a date input you never edited).
       if (filtersEqual(merged, filters)) return;
-      const resetPage = Object.keys(patch).some((k) => k !== "q");
-      if (resetPage) {
-        setPage(1);
-        setCommittedQ(merged.q ?? "");
-      }
       // Optimistic local update so the UI reflects the new
       // filter immediately, even before `searchParams` re-reads.
       setFiltersState(merged);
       writeFilters(merged);
     },
-    [filters, setPage, writeFilters]
+    [filters, writeFilters]
   );
 
   const clearFilters = useCallback(() => {
-    setPage(1);
     setCommittedQ("");
     setFiltersState({});
     writeFilters({});
-  }, [setPage, writeFilters]);
+  }, [writeFilters]);
 
-  /* eslint-disable react-hooks/immutability */
   const retry = useCallback(() => {
-    setItems([]);
-    setTotal(0);
-    setLoadedPage(0);
-    setHasFetched(false);
-    setError(null);
-    pageToFetchRef.current = 1;
-    setRetryToken((n) => n + 1);
-  }, []);
-  /* eslint-enable react-hooks/immutability */
+    refetch();
+  }, [refetch]);
 
-  /* eslint-disable react-hooks/immutability */
   const loadMore = useCallback(() => {
-    if (!hasMore || isLoadingMore) return;
-    pageToFetchRef.current = loadedPage + 1;
-    // Bump a fresh version so the load-more request doesn't get
-    // keyed out by a stale ref.
-    latestVersionRef.current += 1;
-    setRetryToken((n) => n + 1);
-  }, [hasMore, isLoadingMore, loadedPage]);
-  /* eslint-enable react-hooks/immutability */
+    if (!hasMore || isFetchingNextPage) return;
+    fetchNextPage();
+  }, [hasMore, isFetchingNextPage, fetchNextPage]);
 
   return {
     filters: { ...filters, q: committedQ },
@@ -455,7 +348,7 @@ export function useBrowseState(): UseBrowseStateResult {
     status,
     error,
     isSearchPending,
-    isLoadingMore,
+    isLoadingMore: isFetchingNextPage,
     hasMore,
     setFilters,
     clearFilters,

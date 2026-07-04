@@ -10,8 +10,10 @@ import {
 import { Loader2, Maximize2, Minimize2, Plus, XIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@/lib/utils";
+import { queryKeys } from "@/lib/query-config";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -238,27 +240,19 @@ function AddForm({
   isExpanded: boolean;
   onToggleExpand: () => void;
 }) {
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const queryClient = useQueryClient();
 
-  // Ref guards that must be synchronous (state is batched/async):
-  //   mountedRef — true only while this AddForm instance is mounted
-  //   submitGuardRef — prevents a second submit from racing before
-  //     setSubmitting flushes (refs are synchronous)
-  //   abortRef — current AbortController; aborted on unmount so a
-  //     stale fetch response can never close/open or wipe a fresh
-  //     draft after the dialog has been reopened
+  // Ref guard for mount status: if the component unmounts before
+  // the response lands (dialog was closed and reopened with fresh
+  // content), do not overwrite the new draft or close the dialog again.
   const mountedRef = useRef(true);
-  const submitGuardRef = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      abortRef.current?.abort();
     };
   }, []);
 
@@ -269,7 +263,6 @@ function AddForm({
   // open animation runs in the same tick.
   useEffect(() => {
     setDraft(draftRef.current);
-    setError(null);
   }, [draftRef]);
 
   // Autofocus the content textarea on mount. A requestAnimationFrame
@@ -282,68 +275,50 @@ function AddForm({
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  function updateField<K extends keyof Draft>(field: K, value: Draft[K]) {
-    setDraft((prev) => {
-      const next = { ...prev, [field]: value };
-      draftRef.current = next;
-      return next;
-    });
-    if (error) setError(null);
-  }
+  // Mutation for creating a new item
+  const mutation = useMutation({
+    mutationFn: async (draftToSubmit: Draft) => {
+      const content = resolveContent(draftToSubmit);
+      if (!content) {
+        throw new Error("Content is required");
+      }
 
-  const handleSubmit = useCallback(async () => {
-    const content = resolveContent(draft);
-    if (!content) return;
-
-    // Ref-synchronous double-submit guard. React state won't have
-    // flushed `submitting` yet in the same synchronous task.
-    if (submitGuardRef.current) return;
-    submitGuardRef.current = true;
-
-    // Abort any in-flight request from a previous submit so a
-    // stale response can't overwrite a fresh draft or close the
-    // dialog after the user has already reopened it.
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-    const { signal } = abortRef.current;
-
-    setSubmitting(true);
-    setError(null);
-
-    try {
       const body: Record<string, unknown> = {
-        type: draft.type,
+        type: draftToSubmit.type,
         content,
         source: "web",
       };
 
-      if (draft.title.trim()) body.title = draft.title;
-      if (draft.sourceUrl && draft.type === "bookmark") {
-        body.source_url = draft.sourceUrl;
+      if (draftToSubmit.title.trim()) body.title = draftToSubmit.title;
+      if (draftToSubmit.sourceUrl && draftToSubmit.type === "bookmark") {
+        body.source_url = draftToSubmit.sourceUrl;
       }
 
       // Build metadata for type-specific fields. Only keys that
       // are present in the API's per-type metadata schemas are
       // included; the superRefine in route.ts will validate them.
       const meta: Record<string, unknown> = {};
-      if (draft.type === "person") {
-        if (draft.email.trim()) meta.email = draft.email;
-        if (draft.phoneNumber.trim()) meta.phone_number = draft.phoneNumber;
-        if (draft.role.trim()) meta.role = draft.role;
+      if (draftToSubmit.type === "person") {
+        if (draftToSubmit.email.trim()) meta.email = draftToSubmit.email;
+        if (draftToSubmit.phoneNumber.trim())
+          meta.phone_number = draftToSubmit.phoneNumber;
+        if (draftToSubmit.role.trim()) meta.role = draftToSubmit.role;
       }
-      if (draft.type === "project") {
-        if (draft.status.trim()) meta.status = draft.status;
-        if (draft.repo.trim()) meta.repo = draft.repo;
-        if (draft.started) meta.started = draft.started;
-        if (draft.goalEndDate) meta.goal_end_date = draft.goalEndDate;
+      if (draftToSubmit.type === "project") {
+        if (draftToSubmit.status.trim()) meta.status = draftToSubmit.status;
+        if (draftToSubmit.repo.trim()) meta.repo = draftToSubmit.repo;
+        if (draftToSubmit.started) meta.started = draftToSubmit.started;
+        if (draftToSubmit.goalEndDate)
+          meta.goal_end_date = draftToSubmit.goalEndDate;
       }
-      if (draft.type === "event") {
-        if (draft.startDate) meta.start_date = draft.startDate;
-        if (draft.endDate) meta.end_date = draft.endDate;
-        if (draft.duration.trim()) meta.duration = draft.duration;
+      if (draftToSubmit.type === "event") {
+        if (draftToSubmit.startDate) meta.start_date = draftToSubmit.startDate;
+        if (draftToSubmit.endDate) meta.end_date = draftToSubmit.endDate;
+        if (draftToSubmit.duration.trim())
+          meta.duration = draftToSubmit.duration;
       }
-      if (draft.type === "dream") {
-        if (draft.mood.trim()) meta.mood = draft.mood;
+      if (draftToSubmit.type === "dream") {
+        if (draftToSubmit.mood.trim()) meta.mood = draftToSubmit.mood;
       }
       if (Object.keys(meta).length > 0) {
         body.metadata = meta;
@@ -353,7 +328,6 @@ function AddForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-        signal,
       });
 
       if (!res.ok) {
@@ -361,6 +335,14 @@ function AddForm({
         const msg: string | undefined = payload?.error?.message;
         throw new Error(msg ?? "Failed to save");
       }
+
+      return res.json();
+    },
+    onSuccess: () => {
+      // Invalidate the browse query so the feed refetches and
+      // shows the newly-created item. Using `queryKeys.browse.all`
+      // invalidates all browse queries regardless of filters.
+      queryClient.invalidateQueries({ queryKey: queryKeys.browse.all });
 
       // Gate on mount status: if the component unmounted before
       // the response landed (dialog was closed and reopened with
@@ -371,34 +353,42 @@ function AddForm({
       const fresh = emptyDraft();
       draftRef.current = fresh;
       setDraft(fresh);
-      setError(null);
       toast.success("Saved.");
       onClose();
-    } catch (err) {
-      // Silently swallow aborted fetches — the dialog was closed
-      // or another submit was started; nothing to show the user.
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      if (!mountedRef.current) return;
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      if (mountedRef.current) setSubmitting(false);
-      submitGuardRef.current = false;
+    },
+  });
+
+  function updateField<K extends keyof Draft>(field: K, value: Draft[K]) {
+    setDraft((prev) => {
+      const next = { ...prev, [field]: value };
+      draftRef.current = next;
+      return next;
+    });
+    // Clear error when user starts typing
+    if (mutation.error) {
+      mutation.reset();
     }
-  }, [draft, draftRef, onClose]);
+  }
+
+  const handleSubmit = useCallback(() => {
+    if (!canSubmit(draft) || mutation.isPending) return;
+    mutation.mutate(draft);
+  }, [draft, mutation]);
 
   // Ctrl+Enter / Cmd+Enter handler.
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        void handleSubmit();
+        handleSubmit();
       }
     },
     [handleSubmit]
   );
 
   const contentRequired = isContentRequired(draft.type);
-  const submitDisabled = submitting || !canSubmit(draft);
+  const submitDisabled = mutation.isPending || !canSubmit(draft);
+  const error = mutation.error ? mutation.error.message : null;
 
   return (
     <>
@@ -621,17 +611,17 @@ function AddForm({
         </span>
         <DialogClose
           render={<Button type="button" variant="outline" />}
-          disabled={submitting}
+          disabled={mutation.isPending}
         >
           Cancel
         </DialogClose>
         <Button
           variant="inverted"
-          onClick={() => void handleSubmit()}
+          onClick={handleSubmit}
           disabled={submitDisabled}
           data-testid="add-dialog-submit"
         >
-          {submitting && (
+          {mutation.isPending && (
             <Loader2 aria-hidden className="size-3.5 animate-spin" />
           )}
           Save

@@ -3,6 +3,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { AddButton, AddDialogRoot } from "@/components/add-dialog";
 
@@ -47,10 +48,19 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
 }
 
 function renderDialog() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
   return render(
-    <AddDialogRoot>
-      <AddButton />
-    </AddDialogRoot>
+    <QueryClientProvider client={queryClient}>
+      <AddDialogRoot>
+        <AddButton />
+      </AddDialogRoot>
+    </QueryClientProvider>
   );
 }
 

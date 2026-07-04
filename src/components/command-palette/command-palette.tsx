@@ -11,6 +11,7 @@ import {
 } from "react";
 import { CornerDownLeft, Search as SearchIcon } from "lucide-react";
 import { Command as CommandPrimitive } from "cmdk";
+import { useQuery } from "@tanstack/react-query";
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
@@ -31,6 +32,7 @@ import {
 } from "./command-items";
 import { fuzzyFilter } from "./fuzzy-filter";
 import { renderSnippet, typeBadgeClasses } from "./snippet";
+import { queryKeys, staleTimes } from "@/lib/query-config";
 
 import { cn } from "@/lib/utils";
 
@@ -118,8 +120,35 @@ function PaletteBody() {
   // Local UI state. Lives only while the dialog is open so a
   // re-mount (next open) starts fresh.
   const [query, setQuery] = useState("");
-  const [contentState, setContentState] = useState<ContentState>({
-    status: "idle",
+
+  // Debounced query for TanStack Query. The 300ms idle window matches the
+  // Browse page's search bar in the original web-UI spec; the value is
+  // "feels responsive" rather than a hard measurement, and the 2-char
+  // minimum avoids hammering the API with single-character queries.
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  // Debounce effect: update debouncedQuery after 300ms of no typing
+  useEffect(() => {
+    const trimmed = query.trim();
+    const handle = window.setTimeout(() => {
+      setDebouncedQuery(trimmed.length >= 2 ? trimmed : "");
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [query]);
+
+  // TanStack Query for search results
+  const { data: searchResults, isPending: isSearching } = useQuery({
+    queryKey: queryKeys.search.results(debouncedQuery),
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/search?q=${encodeURIComponent(debouncedQuery)}&limit=8`
+      );
+      if (!res.ok) return [];
+      const body = (await res.json()) as SearchApiResponse;
+      return body.results ?? [];
+    },
+    enabled: debouncedQuery.length >= 2,
+    staleTime: staleTimes.search,
   });
 
   // The pages group: fuzzy-filtered when there is a query,
@@ -136,59 +165,6 @@ function PaletteBody() {
   const filteredUtilities: UtilityCommandItem[] = useMemo(() => {
     if (!query.trim()) return utilities;
     return fuzzyFilter(query, utilities, searchHaystack);
-  }, [query]);
-
-  // Debounced FTS5 fetch. The 300ms idle window matches the
-  // Browse page's search bar in the original web-UI spec; the
-  // value is "feels responsive" rather than a hard
-  // measurement, and the 2-char minimum avoids hammering the
-  // API with single-character queries.
-  //
-  // Two things this effect must get right:
-  //
-  //   1. The AbortController has to be created on the effect
-  //      side, not inside the setTimeout — otherwise the
-  //      cleanup function cannot reach the controller and the
-  //      in-flight request is never cancelled when the user
-  //      keeps typing.
-  //   2. The setTimeout handle is cleared on cleanup so a
-  //      rapid keystroke does not queue a stale fetch.
-  //
-  // For queries shorter than 2 chars we deliberately do not
-  // touch state — the body is unmounted when the palette
-  // closes, so there is no "stale" state to clear.
-  useEffect(() => {
-    const trimmed = query.trim();
-    if (trimmed.length < 2) return;
-    const controller = new AbortController();
-    const handle = window.setTimeout(() => {
-      setContentState({ status: "loading" });
-      fetch(`/api/search?q=${encodeURIComponent(trimmed)}&limit=8`, {
-        signal: controller.signal,
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            setContentState({ status: "ready", results: [] });
-            return;
-          }
-          const body = (await res.json()) as SearchApiResponse;
-          setContentState({ status: "ready", results: body.results ?? [] });
-        })
-        .catch((err: unknown) => {
-          // AbortError is expected when the user keeps typing
-          // and the next request supersedes this one. We do
-          // not update state in that case — the next effect
-          // run will fire the follow-up fetch and overwrite.
-          if (err instanceof DOMException && err.name === "AbortError") {
-            return;
-          }
-          setContentState({ status: "ready", results: [] });
-        });
-    }, 300);
-    return () => {
-      window.clearTimeout(handle);
-      controller.abort();
-    };
   }, [query]);
 
   // Ref to the cmdk input. We blur it on the first Esc so the
@@ -241,6 +217,13 @@ function PaletteBody() {
     },
     [router, setOpen, setAddOpen]
   );
+
+  // Derive content state from TanStack Query
+  const contentState: ContentState = useMemo(() => {
+    if (query.trim().length < 2) return { status: "idle" };
+    if (isSearching) return { status: "loading" };
+    return { status: "ready", results: searchResults ?? [] };
+  }, [query, isSearching, searchResults]);
 
   return (
     <CommandPrimitive

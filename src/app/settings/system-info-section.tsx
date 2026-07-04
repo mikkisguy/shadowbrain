@@ -1,28 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { fetchSystemInfo } from "./api";
-import type { SystemInfo } from "./types";
+import { queryKeys, staleTimes } from "@/lib/query-config";
 
 export function SystemInfoSection() {
-  const [info, setInfo] = useState<SystemInfo | null>(null);
-  const [status, setStatus] = useState<"loading" | "success" | "error">(
-    "loading"
-  );
+  const {
+    data: info,
+    isPending,
+    isError,
+  } = useQuery({
+    queryKey: queryKeys.settings.systemInfo,
+    queryFn: ({ signal }) => fetchSystemInfo(signal),
+    staleTime: staleTimes.systemInfo,
+    refetchInterval: 30_000, // Refresh every 30s for live updates
+  });
 
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchSystemInfo(controller.signal)
-      .then((data) => {
-        setInfo(data);
-        setStatus("success");
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setStatus("error");
-      });
-    return () => controller.abort();
-  }, []);
+  const status = isPending ? "loading" : isError ? "error" : "success";
 
   return (
     <section

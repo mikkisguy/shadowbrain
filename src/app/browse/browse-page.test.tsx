@@ -3,6 +3,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Mock react-virtuoso to render all items (no virtualization in tests)
 vi.mock("react-virtuoso", () => ({
@@ -104,24 +105,39 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  };
+}
+
 describe("BrowsePage", () => {
   it("renders the page header with the total count from the hook", () => {
     hookValues.total = 42;
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     expect(screen.getByTestId("browse-page")).toBeInTheDocument();
     expect(screen.getByText(/42 items/)).toBeInTheDocument();
   });
 
   it("clicking a type tab calls setFilters with the new type", async () => {
     const user = userEvent.setup();
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("button", { name: /journal/i }));
     expect(setFilters).toHaveBeenCalledWith({ type: "journal" });
   });
 
   it("typing into the search input calls setFilters with the q", async () => {
     const user = userEvent.setup();
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     const input = screen.getByTestId("search-input");
     await user.type(input, "docker");
     // Each keystroke forwards the cumulative value to the hook,
@@ -139,7 +155,7 @@ describe("BrowsePage", () => {
 
   it("toggles the advanced filters panel and forwards filter changes", async () => {
     const user = userEvent.setup();
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     const toggle = screen.getByTestId("advanced-toggle");
     // Collapsed by default.
     expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -152,27 +168,27 @@ describe("BrowsePage", () => {
   it("renders the empty state when items is empty and no filters are set", () => {
     hookValues.items = [];
     hookValues.total = 0;
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     expect(screen.getByTestId("feed-empty")).toBeInTheDocument();
   });
 
   it("renders the error state when status is error", () => {
     hookValues.status = "error";
     hookValues.error = "Boom";
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     expect(screen.getByTestId("feed-error")).toHaveTextContent("Boom");
   });
 
   it("renders the loading skeleton when status is loading with no items", () => {
     hookValues.status = "loading";
     hookValues.items = [];
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     expect(screen.getByTestId("feed-loading")).toBeInTheDocument();
   });
 
   it("starts on the grid view", () => {
     hookValues.items = [];
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     const grid = screen.getByTestId("view-grid");
     expect(grid).toHaveAttribute("aria-pressed", "true");
     const list = screen.getByTestId("view-list");
@@ -182,7 +198,7 @@ describe("BrowsePage", () => {
   it("switches to the list view when the list button is clicked", async () => {
     const user = userEvent.setup();
     hookValues.items = [];
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     await user.click(screen.getByTestId("view-list"));
     expect(screen.getByTestId("view-list")).toHaveAttribute(
       "aria-pressed",
@@ -196,7 +212,7 @@ describe("BrowsePage", () => {
 
   it("starts on the larger-dot indicator variant", () => {
     hookValues.items = [];
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     const dot = screen.getByTestId("indicator-dot");
     expect(dot).toHaveAttribute("aria-pressed", "true");
     const pill = screen.getByTestId("indicator-pill");
@@ -206,7 +222,7 @@ describe("BrowsePage", () => {
   it("switches to the pill variant when the pill button is clicked", async () => {
     const user = userEvent.setup();
     hookValues.items = [];
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     await user.click(screen.getByTestId("indicator-pill"));
     expect(screen.getByTestId("indicator-pill")).toHaveAttribute(
       "aria-pressed",
@@ -234,7 +250,7 @@ describe("BrowsePage", () => {
         updated_at: new Date().toISOString(),
       },
     ];
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     // Default: `larger-dot` — the card carries a `size-2.5` dot
     // and no pill.
     expect(screen.queryByTestId("content-card-pill")).toBeNull();
@@ -273,7 +289,7 @@ describe("BrowsePage", () => {
     ];
     hookValues.total = 40;
     hookValues.hasMore = true;
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     await user.click(screen.getByTestId("feed-load-more-button"));
     expect(loadMore).toHaveBeenCalledOnce();
   });
@@ -294,7 +310,7 @@ describe("BrowsePage", () => {
         updated_at: new Date().toISOString(),
       },
     ];
-    render(<BrowsePage />);
+    render(<BrowsePage />, { wrapper: createWrapper() });
     await user.click(
       screen.getByRole("button", { name: /filter by tag docker/i })
     );
