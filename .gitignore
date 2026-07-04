@@ -66,3 +66,4 @@ paseo.json
 # Playwright test output
 test-results/
 playwright-report/
+.playwright-mcp/
