@@ -248,7 +248,7 @@ export function ContentCard({
             className="absolute inset-0"
             style={{
               background:
-                "linear-gradient(rgba(18,18,18,0.9) 0%, rgba(18,18,18,0.95) 30%, rgba(18,18,18,0.98) 60%, rgba(18,18,18,1) 100%)",
+                "linear-gradient(rgba(10,10,10,0.9) 0%, rgba(10,10,10,0.95) 30%, rgba(10,10,10,0.98) 60%, rgba(10,10,10,1) 100%)",
             }}
           />
         </div>

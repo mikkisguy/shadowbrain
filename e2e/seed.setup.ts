@@ -14,7 +14,7 @@ setup("seed e2e database with test data", async () => {
   // Clean up any previously seeded items so the setup is idempotent across
   // repeated runs against a reused server (reuseExistingServer: true in dev).
   const existing = await fetch(`${BASE}/api/items`).then((r) => r.json());
-  const items = (existing.data ?? existing) as Item[];
+  const items = (existing.items ?? []) as Item[];
   for (const item of items) {
     if (
       item.title === "Welcome to ShadowBrain" ||

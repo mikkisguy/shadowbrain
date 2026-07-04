@@ -63,7 +63,8 @@ logs/
 .husky/_
 paseo.json
 
-# Playwright test output
+# Playwright
+.playwright-mcp/
 test-results/
 playwright-report/
 .playwright-mcp/
