@@ -435,7 +435,7 @@ function AddForm({
         </div>
       </DialogHeader>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="mb-4 flex min-h-0 flex-1 flex-col gap-3">
         {/* Hero writing surface — the content textarea is the visual and
           functional centre of the dialog. */}
         <div className="bg-muted/30 ring-border/40 focus-within:bg-muted/40 focus-within:ring-border/60 flex min-h-0 flex-1 flex-col gap-2 rounded-xl p-4 ring-1 transition-colors">
