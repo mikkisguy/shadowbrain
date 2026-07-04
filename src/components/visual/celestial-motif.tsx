@@ -18,6 +18,9 @@ import { cn } from "@/lib/utils";
  *   - {@link CelestialHeader} — a horizontal "title plate" for page
  *     headers, confined to the header band so it frames a heading
  *     without competing with the content below.
+ *   - {@link CelestialArtifact} — a tiny, seed-stable decoration for
+ *     filling the incidental whitespace in cards when the grid row
+ *     stretches them taller than their text content.
  *
  * Both are pure presentational components (`aria-hidden`,
  * `pointer-events-none`) with no hooks or event handlers, so they render
@@ -261,7 +264,7 @@ export function CelestialHeader({
       aria-hidden="true"
       className={cn(
         "pointer-events-none absolute inset-0 z-0 mix-blend-screen",
-        "[mask-image:linear-gradient(to_bottom,black_40%,black_70%,transparent_100%)]",
+        "mask-[linear-gradient(to_bottom,black_40%,black_70%,transparent_100%)]",
         className
       )}
     >
@@ -362,6 +365,421 @@ export function CelestialHeader({
             );
           })}
         </g>
+      </svg>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * CelestialArtifact — tiny decorative filler for card whitespace
+ * ------------------------------------------------------------------ */
+
+export interface CelestialArtifactProps {
+  /** Deterministic seed so the same card always renders the same
+   *  variant (no hydration mismatch). Typically the item's `id`. */
+  seed: string;
+  /** Extra classes for the wrapper (positioning / sizing). */
+  className?: string;
+}
+
+/** Simple FNV-1a-style hash for deterministic variant selection. */
+function hashSeed(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+/** A handful of celestial decorations — constellations, nebula washes,
+ *  field stars, and ecliptic arcs — rendered at 160×160 viewBox / 80 px.
+ *  Each variant is a tiny standalone scene, not just a few dots. */
+type ArtifactVariant = (ctx: {
+  /** Fraction 0…1 for varying sub-elements of the chosen variant. */
+  t: number;
+  /** Unique suffix for gradient IDs (prevents cross-card collisions). */
+  sid: string;
+}) => React.ReactElement;
+
+/** Helper: a faint field star with deterministic size/colour variation. */
+function Field({ x, y, ix }: { x: number; y: number; ix: number }) {
+  const r = 0.9 + (((ix * 7) % 100) / 100) * 1.2;
+  const colors = [
+    "var(--accent-cyan)",
+    "var(--accent-violet)",
+    "var(--foreground)",
+  ];
+  const c = colors[(x + y + ix) % colors.length]!;
+  const o = 0.12 + (((ix * 3) % 100) / 100) * 0.25;
+  return <circle cx={x} cy={y} r={r} fill={c} fillOpacity={o} />;
+}
+
+const ARTIFACTS: readonly ArtifactVariant[] = [
+  // 0 — Constellation: 5 stars connected by a thin hairline, with
+  //     a violet nebula wash, field stars, and a focal star halo.
+  ({ t, sid }) => {
+    const stars: [number, number, number][] = [
+      [30, 120, 3.2],
+      [56, 78, 2.8],
+      [78, 32, 4.5],
+      [104, 62, 3.0],
+      [130, 118, 3.5],
+    ];
+    const link = "M " + stars.map(([sx, sy]) => `${sx} ${sy}`).join(" L ");
+    const field = [
+      [18, 30],
+      [42, 18],
+      [92, 100],
+      [24, 82],
+      [118, 30],
+      [48, 110],
+      [138, 78],
+      [108, 14],
+    ];
+    const gid = `ca-nebula-${sid}`;
+    return (
+      <>
+        <radialGradient id={gid} cx="50%" cy="50%" r="50%">
+          <stop
+            offset="0%"
+            stopColor="var(--accent-violet)"
+            stopOpacity="0.12"
+          />
+          <stop offset="60%" stopColor="var(--primary)" stopOpacity="0.04" />
+          <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
+        </radialGradient>
+        <ellipse cx="78" cy="32" rx="40" ry="30" fill={`url(#${gid})`} />
+        {/* Ecliptic arc fragment. */}
+        <path
+          d="M -10 50 Q 50 90 170 40"
+          stroke="var(--primary)"
+          strokeOpacity="0.06"
+          strokeWidth="1"
+          fill="none"
+        />
+        {/* Constellation hairline. */}
+        <path
+          d={link}
+          stroke="var(--accent-cyan)"
+          strokeOpacity="0.22"
+          strokeWidth="1.2"
+          fill="none"
+        />
+        {/* Focal star halo. */}
+        <circle
+          cx="78"
+          cy="32"
+          r="10"
+          fill="var(--foreground)"
+          fillOpacity="0.08"
+        />
+        {/* Constellation stars. */}
+        {stars.map(([x, y, r], i) => (
+          <circle
+            key={`cs-${i}`}
+            cx={x}
+            cy={y}
+            r={r}
+            fill={i === 2 ? "var(--foreground)" : "var(--accent-cyan)"}
+            fillOpacity={i === 2 ? 0.7 : 0.45}
+          />
+        ))}
+        {/* Field stars. */}
+        {field.map(([fx, fy], i) => (
+          <Field key={`f-${i}`} x={fx} y={fy} ix={i} />
+        ))}
+      </>
+    );
+  },
+
+  // 1 — Binary system: two bright stars with halos connected by a
+  //     fine line, surrounded by an orbital arc and field stars.
+  ({ t, sid }) => {
+    const c1 = { x: 48, y: 110 };
+    const c2 = { x: 112, y: 52 };
+    const field = [
+      [22, 24],
+      [84, 18],
+      [40, 52],
+      [132, 94],
+      [98, 130],
+      [62, 42],
+      [140, 30],
+      [18, 88],
+    ];
+    const gid = `ca-nebula-${sid}`;
+    return (
+      <>
+        <radialGradient id={gid} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="var(--accent-cyan)" stopOpacity="0.1" />
+          <stop offset="60%" stopColor="var(--primary)" stopOpacity="0.03" />
+          <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
+        </radialGradient>
+        <ellipse cx="80" cy="80" rx="45" ry="35" fill={`url(#${gid})`} />
+        {/* Faint orbital arc suggesting binary motion. */}
+        <path
+          d="M 20 70 Q 80 0 140 70"
+          stroke="var(--primary)"
+          strokeOpacity="0.05"
+          strokeWidth="1"
+          fill="none"
+        />
+        {/* Connection line. */}
+        <path
+          d={`M ${c1.x} ${c1.y} L ${c2.x} ${c2.y}`}
+          stroke="var(--accent-cyan)"
+          strokeOpacity="0.3"
+          strokeWidth="1.2"
+        />
+        {/* Halos. */}
+        <circle
+          cx={c1.x}
+          cy={c1.y}
+          r="9"
+          fill="var(--accent-cyan)"
+          fillOpacity="0.08"
+        />
+        <circle
+          cx={c2.x}
+          cy={c2.y}
+          r="11"
+          fill="var(--foreground)"
+          fillOpacity="0.08"
+        />
+        {/* Stars. */}
+        <circle
+          cx={c1.x}
+          cy={c1.y}
+          r="3.8"
+          fill="var(--accent-cyan)"
+          fillOpacity="0.65"
+        />
+        <circle
+          cx={c2.x}
+          cy={c2.y}
+          r="4.5"
+          fill="var(--foreground)"
+          fillOpacity="0.72"
+        />
+        {field.map(([fx, fy], i) => (
+          <Field key={`f-${i}`} x={fx} y={fy} ix={i} />
+        ))}
+      </>
+    );
+  },
+
+  // 2 — Astrolabe fragment: an ecliptic arc with graduation ticks,
+  //     a highlight star at each end, and a dusting of field stars.
+  ({ t, sid }) => {
+    const ticks: [number, number][] = [
+      [28, 102],
+      [46, 82],
+      [64, 66],
+      [86, 52],
+      [106, 44],
+      [128, 42],
+      [148, 48],
+    ];
+    const field = [
+      [16, 38],
+      [58, 22],
+      [80, 110],
+      [40, 56],
+      [112, 90],
+      [140, 22],
+      [98, 18],
+      [24, 128],
+    ];
+    const gid = `ca-nebula-${sid}`;
+    return (
+      <>
+        <radialGradient id={gid} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.08" />
+          <stop
+            offset="60%"
+            stopColor="var(--accent-violet)"
+            stopOpacity="0.03"
+          />
+          <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
+        </radialGradient>
+        <ellipse cx="85" cy="70" rx="50" ry="40" fill={`url(#${gid})`} />
+        {/* Ecliptic arc. */}
+        <path
+          d="M -10 130 Q 80 20 170 40"
+          stroke="var(--primary)"
+          strokeOpacity="0.08"
+          strokeWidth="1"
+          fill="none"
+        />
+        {/* Graduation ticks. */}
+        <g stroke="var(--accent-cyan)" strokeOpacity="0.12" strokeWidth="1">
+          {ticks.map(([tx, ty], i) => (
+            <line
+              key={`tk-${i}`}
+              x1={tx}
+              y1={ty - (i % 2 === 0 ? 4 : 2)}
+              x2={tx}
+              y2={ty + (i % 2 === 0 ? 4 : 2)}
+            />
+          ))}
+        </g>
+        {/* Endpoint stars with halos. */}
+        <circle
+          cx="22"
+          cy="108"
+          r="8"
+          fill="var(--accent-cyan)"
+          fillOpacity="0.06"
+        />
+        <circle
+          cx="22"
+          cy="108"
+          r="3"
+          fill="var(--accent-cyan)"
+          fillOpacity="0.55"
+        />
+        <circle
+          cx="148"
+          cy="48"
+          r="10"
+          fill="var(--foreground)"
+          fillOpacity="0.07"
+        />
+        <circle
+          cx="148"
+          cy="48"
+          r="4"
+          fill="var(--foreground)"
+          fillOpacity="0.65"
+        />
+        {field.map(([fx, fy], i) => (
+          <Field key={`f-${i}`} x={fx} y={fy} ix={i} />
+        ))}
+      </>
+    );
+  },
+
+  // 3 — Star cluster: a loose gathering of 7 stars of varying
+  //     brightness, connected by a faint wisp of a nebula and
+  //     a hairline tracing the brightest three.
+  ({ t, sid }) => {
+    const stars: [number, number, number, boolean][] = [
+      [36, 84, 2.8, false],
+      [52, 46, 3.5, true],
+      [80, 28, 2.2, false],
+      [68, 72, 2.0, false],
+      [104, 92, 3.0, false],
+      [128, 54, 2.5, false],
+      [100, 120, 2.8, false],
+    ];
+    const field = [
+      [18, 20],
+      [44, 118],
+      [120, 14],
+      [146, 88],
+      [24, 58],
+      [88, 130],
+      [142, 30],
+      [56, 14],
+    ];
+    const trace = "M 52 46 L 36 84 L 104 92";
+    const gid = `ca-nebula-${sid}`;
+    return (
+      <>
+        <radialGradient id={gid} cx="50%" cy="50%" r="50%">
+          <stop
+            offset="0%"
+            stopColor="var(--accent-violet)"
+            stopOpacity="0.1"
+          />
+          <stop
+            offset="50%"
+            stopColor="var(--accent-cyan)"
+            stopOpacity="0.04"
+          />
+          <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
+        </radialGradient>
+        <ellipse cx="72" cy="68" rx="55" ry="45" fill={`url(#${gid})`} />
+        {/* Faint arc wash. */}
+        <path
+          d="M -5 60 Q 75 0 160 50"
+          stroke="var(--accent-cyan)"
+          strokeOpacity="0.05"
+          strokeWidth="1"
+          fill="none"
+        />
+        {/* Hairline trace. */}
+        <path
+          d={trace}
+          stroke="var(--primary)"
+          strokeOpacity="0.18"
+          strokeWidth="1.2"
+          fill="none"
+        />
+        {/* Focal star halo. */}
+        <circle
+          cx="52"
+          cy="46"
+          r="10"
+          fill="var(--foreground)"
+          fillOpacity="0.07"
+        />
+        {/* Stars. */}
+        {stars.map(([x, y, r, focal], i) => (
+          <circle
+            key={`sc-${i}`}
+            cx={x}
+            cy={y}
+            r={r}
+            fill={
+              focal
+                ? "var(--foreground)"
+                : i % 3 === 0
+                  ? "var(--accent-cyan)"
+                  : "var(--accent-violet)"
+            }
+            fillOpacity={focal ? 0.7 : 0.4 + (i % 3) * 0.08}
+          />
+        ))}
+        {field.map(([fx, fy], i) => (
+          <Field key={`f-${i}`} x={fx} y={fy} ix={i} />
+        ))}
+      </>
+    );
+  },
+];
+
+/**
+ * A tiny celestial decoration — one of several seed-stable variants —
+ * rendered as a subdued inline SVG. Intended to fill incidental
+ * whitespace at the bottom of a grid card when the card is stretched
+ * taller than its text content.
+ *
+ * The `seed` prop (typically the item's `id`) deterministically picks
+ * the variant and any sub-variation, so the same card always renders
+ * the same decoration — no hydration mismatch, no randomness drift.
+ */
+export function CelestialArtifact({
+  seed,
+  className,
+}: CelestialArtifactProps): React.ReactElement {
+  const h = hashSeed(seed);
+  const variantIdx = h % ARTIFACTS.length;
+  const t = (h % 100) / 100; // sub-variation fraction 0…1 for angle/size tweaks
+  const Variant = ARTIFACTS[variantIdx]!;
+
+  return (
+    <div
+      aria-hidden="true"
+      className={cn("pointer-events-none mix-blend-screen", className)}
+    >
+      <svg viewBox="0 0 160 160" className="block size-20" fill="none">
+        <defs>
+          {/* Each variant defines its own radialGradient inside
+           *  its render function so they share this <defs> slot
+           *  without id collisions. */}
+        </defs>
+        <Variant t={t} sid={String(h)} />
       </svg>
     </div>
   );

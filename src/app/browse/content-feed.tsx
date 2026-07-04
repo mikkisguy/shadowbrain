@@ -14,23 +14,11 @@
  *     sentinel at the bottom that triggers `loadMore` when the
  *     viewport reaches the end of the list
  *
- * The feed supports two views via a simple flex-column masonry:
- *   - `grid` (default) — items are split round-robin into N
- *     columns (N derived from the container width). Each column
- *     is an independent flex column so cards sit with their
- *     natural height and pack vertically — cards keep varying
- *     heights and stack flush, like a Pinterest wall. Ordering is
- *     left-to-right (item 0 → column 0, item 1 → column 1, …),
- *     which keeps the chronological timestamp order intact.
- *
- *     Each column carries `min-w-0`. Without it, a flex item's
- *     default `min-width: auto` resolves to its widest card's
- *     min-content (a long unbreakable token or a wide image), so
- *     one column would balloon to ~40% while the others shrank —
- *     the "messed-up columns" bug. `min-w-0` lets `flex-1` hold
- *     every column at an equal 1/N share; the card itself breaks
- *     long tokens with `break-words`, so nothing overflows.
- *   - `list` — single-column wide row.
+ * Two views:
+ *   - `grid` — items grouped into rows of N cards. A single
+ *     `Virtuoso` instance virtualizes the rows. CSS grid inside
+ *     each row lays out the cards side by side.
+ *   - `list` — single-column, fully virtualized.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -40,6 +28,13 @@ import { Button } from "@/components/ui/button";
 import { CelestialCluster } from "@/components/visual/celestial-motif";
 import { ContentCard } from "./content-card";
 import type { BrowseItem, BrowseView } from "./types";
+
+import { Virtuoso } from "react-virtuoso";
+
+/** Extra pixels rendered above and below the viewport so the
+ *  browser has time to paint before items scroll into view.
+ *  Shared by both the grid and list Virtuoso instances. */
+const VIEWPORT_OVERSCAN_PX = 1200;
 
 export interface ContentFeedProps {
   items: BrowseItem[] | null;
@@ -80,18 +75,6 @@ function columnCountForWidth(width: number): number {
   return 3;
 }
 
-/** Split an array round-robin into `n` buckets. Item 0 → bucket 0,
- *  item 1 → bucket 1, …, item n → bucket 0, etc. This preserves
- *  the original chronological order left-to-right across columns. */
-function roundRobin<T>(arr: readonly T[], n: number): T[][] {
-  if (n <= 1) return [arr.slice()];
-  const buckets: T[][] = Array.from({ length: n }, () => []);
-  for (let i = 0; i < arr.length; i++) {
-    buckets[i % n].push(arr[i]);
-  }
-  return buckets;
-}
-
 export function ContentFeed({
   items,
   status,
@@ -106,18 +89,7 @@ export function ContentFeed({
   onTagClick,
   infiniteScroll = true,
 }: ContentFeedProps) {
-  // ---- Column-count derivation for the masonry grid -----------
-  // The grid node is absent on the first render — the feed returns
-  // `null` (status "idle", items empty) until the first page
-  // arrives, so a one-shot mount effect can't measure it (the ref is
-  // null at mount and the `[]`-dep effect bails, leaving the count
-  // stuck at its default — the "always 3 columns" bug). We track the
-  // node via a callback ref and (re)bind the ResizeObserver whenever
-  // it actually mounts, and seed the count from the viewport width so
-  // the grid's first appearance is already at the right column count
-  // (no 3-column flash on mobile). The grid is never part of the SSR
-  // HTML (items are empty on the server), so reading `window.innerWidth`
-  // in the initializer is hydration-safe.
+  // ---- Column-count derivation for the grid -----------
   const [gridEl, setGridEl] = useState<HTMLDivElement | null>(null);
   const [gridColumnCount, setGridColumnCount] = useState(() =>
     typeof window === "undefined" ? 3 : columnCountForWidth(window.innerWidth)
@@ -132,22 +104,18 @@ export function ContentFeed({
     return () => observer.disconnect();
   }, [gridEl]);
 
-  // ---- Masonry columns for the grid view ----------------------
-  // Items are split round-robin so item ordering is L-to-R
-  // (first item → left column, second item → middle column, …).
-  // Each column is an independent flex column — cards sit with
-  // their natural height and pack vertically.
-  const masonryColumns = useMemo(() => {
-    if (!items || view !== "grid") return null;
-    return roundRobin(items, gridColumnCount);
+  /** Items chunked into rows of N for the single-Virtuoso grid view.
+   *  Null when the grid view is not active (avoids unnecessary array work). */
+  const gridRows = useMemo(() => {
+    if (!items || view !== "grid" || items.length === 0) return null;
+    const rows: BrowseItem[][] = [];
+    for (let i = 0; i < items.length; i += gridColumnCount) {
+      rows.push(items.slice(i, i + gridColumnCount));
+    }
+    return rows;
   }, [items, view, gridColumnCount]);
 
   // ---- Infinite-scroll sentinel -------------------------------
-  // Disabled during an active search (`infiniteScroll === false`):
-  // the observer is not attached, so scrolling to the bottom does
-  // not auto-fetch the next page. A manual "Load more" button below
-  // still paginates, so search results are never cut off — only the
-  // scroll-triggered auto-load (the "infinite scroll") is suspended.
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!infiniteScroll) return;
@@ -165,6 +133,12 @@ export function ContentFeed({
     observer.observe(node);
     return () => observer.disconnect();
   }, [onLoadMore, infiniteScroll]);
+
+  const handleEndReached = () => {
+    if (!isLoadingMore && hasMore && infiniteScroll) {
+      onLoadMore();
+    }
+  };
 
   if (status === "error") {
     return (
@@ -188,13 +162,8 @@ export function ContentFeed({
     );
   }
 
+  // Loading skeleton
   if (status === "loading" && (!items || items.length === 0)) {
-    // Loading skeleton: same visual columns as the grid view so
-    // the layout reserves the right space.
-    const skelCols = roundRobin(
-      Array.from({ length: SKELETON_CARD_COUNT }, (_, i) => i),
-      gridColumnCount
-    );
     return (
       <div
         data-testid="feed-loading"
@@ -203,29 +172,23 @@ export function ContentFeed({
         ref={setGridEl}
         className="flex gap-3"
       >
-        {skelCols.map((bucket, ci) => (
-          // `min-w-0` keeps the skeleton columns at an equal 1/N
-          // width, matching the success-state masonry below.
-          <div key={ci} className="flex min-w-0 flex-1 flex-col gap-3">
-            {bucket.map((i) => (
-              <div
-                key={i}
-                className="border-border bg-surface-elevated flex flex-col gap-3 overflow-hidden rounded-sm border"
-              >
-                <div className="bg-surface-muted aspect-video w-full" />
-                <div className="flex flex-col gap-3 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="bg-surface-muted h-3 w-16 rounded-sm" />
-                    <div className="bg-surface-muted h-3 w-12 rounded-sm" />
-                  </div>
-                  <div className="bg-surface-muted h-5 w-3/4 rounded-sm" />
-                  <div className="flex flex-col gap-1.5">
-                    <div className="bg-surface-muted h-3 w-full rounded-sm" />
-                    <div className="bg-surface-muted h-3 w-5/6 rounded-sm" />
-                  </div>
-                </div>
+        {Array.from({ length: SKELETON_CARD_COUNT }, (_, i) => (
+          <div
+            key={i}
+            className="border-border bg-surface-elevated flex flex-col gap-3 overflow-hidden rounded-sm border"
+          >
+            <div className="bg-surface-muted aspect-video w-full" />
+            <div className="flex flex-col gap-3 p-4">
+              <div className="flex items-center justify-between">
+                <div className="bg-surface-muted h-3 w-16 rounded-sm" />
+                <div className="bg-surface-muted h-3 w-12 rounded-sm" />
               </div>
-            ))}
+              <div className="bg-surface-muted h-5 w-3/4 rounded-sm" />
+              <div className="flex flex-col gap-1.5">
+                <div className="bg-surface-muted h-3 w-full rounded-sm" />
+                <div className="bg-surface-muted h-3 w-5/6 rounded-sm" />
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -257,8 +220,20 @@ export function ContentFeed({
     return null;
   }
 
-  // ---- Grid view: masonry columns (flex) ----------------------
-  if (view === "grid" && masonryColumns) {
+  // ---- Success: virtualized grid or list ---------------------
+
+  const cardRenderer = (item: BrowseItem) => (
+    <ContentCard
+      key={item.id}
+      item={item}
+      tags={item.tags}
+      variant={cardVariant}
+      onTagClick={onTagClick}
+    />
+  );
+
+  // Grid view: single Virtuoso chunked rows of N items per row
+  if (view === "grid" && gridRows) {
     return (
       <div className="flex flex-col gap-6">
         <div
@@ -266,21 +241,34 @@ export function ContentFeed({
           data-testid="feed"
           data-view="grid"
           aria-label="Browse feed"
-          className="flex gap-3"
         >
-          {masonryColumns.map((col, ci) => (
-            <div key={ci} className="flex min-w-0 flex-1 flex-col gap-3">
-              {col.map((item) => (
-                <ContentCard
-                  key={item.id}
-                  item={item}
-                  tags={item.tags}
-                  variant={cardVariant}
-                  onTagClick={onTagClick}
-                />
-              ))}
-            </div>
-          ))}
+          <Virtuoso
+            data={gridRows}
+            useWindowScroll
+            increaseViewportBy={{
+              top: VIEWPORT_OVERSCAN_PX,
+              bottom: VIEWPORT_OVERSCAN_PX,
+            }}
+            endReached={handleEndReached}
+            computeItemKey={(_index, row) => row[0].id}
+            itemContent={(_index, row) => (
+              <div
+                className="mb-3 grid gap-3"
+                style={{
+                  gridTemplateColumns: `repeat(${gridColumnCount}, minmax(0, 1fr))`,
+                }}
+              >
+                {row.map((item) => cardRenderer(item))}
+              </div>
+            )}
+            components={{
+              List: ({ style, children, ...props }) => (
+                <div {...props} style={style}>
+                  {children}
+                </div>
+              ),
+            }}
+          />
         </div>
 
         {/* Infinite-scroll sentinel + load-more affordance */}
@@ -316,26 +304,33 @@ export function ContentFeed({
     );
   }
 
-  // ---- List view: single-column list --------------------------
+  // ---- List view: single-column virtualized list --------------------------
   return (
     <div className="flex flex-col gap-6">
-      <ul
-        data-testid="feed"
-        data-view="list"
-        aria-label="Browse feed"
-        className="flex flex-col gap-3"
-      >
-        {items.map((item) => (
-          <li key={item.id}>
-            <ContentCard
-              item={item}
-              tags={item.tags}
-              variant={cardVariant}
-              onTagClick={onTagClick}
-            />
-          </li>
-        ))}
-      </ul>
+      <Virtuoso
+        data={items}
+        useWindowScroll
+        increaseViewportBy={{
+          top: VIEWPORT_OVERSCAN_PX,
+          bottom: VIEWPORT_OVERSCAN_PX,
+        }}
+        endReached={handleEndReached}
+        components={{
+          List: ({ style, children, ...props }) => (
+            <div
+              {...props}
+              data-testid="feed"
+              data-view="list"
+              aria-label="Browse feed"
+              className="flex flex-col gap-3"
+              style={style}
+            >
+              {children}
+            </div>
+          ),
+        }}
+        itemContent={(_index, item) => cardRenderer(item)}
+      />
 
       <div
         ref={sentinelRef}

@@ -27,13 +27,11 @@
  * width. The image is the visual focal point; the type badge,
  * title, preview, and tags flow underneath in a stacked layout.
  *
- * Layout: the article is `h-full` so it fills the grid cell's
- * height. The inner content body is `flex-1` so the body grows
- * to match the tallest card in the row, and the tag strip is
- * `mt-auto` so it always sticks to the bottom — even when the
- * preview is short. This is what gives the grid the "fluid"
- * feel: every card in a row has the same outer height, with
- * internal content distributed top-to-bottom.
+ * Layout: the card fills its grid cell height so every card in a
+ * row has the same outer height. The inner content body is
+ * `flex-1` and the tag strip uses `mt-auto` so it always sticks
+ * to the bottom — this distributes content top-to-bottom and
+ * makes the grid read as clean, aligned rows.
  *
  * The card is wrapped in a `<article>` with a `data-testid` so
  * the feed tests can assert on the rendered shape without
@@ -220,7 +218,11 @@ export function ContentCard({
       data-variant={variant}
       className={cn(
         "group border-border bg-surface-elevated relative flex min-w-0 flex-col overflow-hidden rounded-sm border",
-        "group-hover:border-border-strong transition-colors"
+        "group-hover:border-border-strong transition-colors",
+        // Isolate each card's layout and paint from its neighbours so
+        // the browser (especially Chrome) can skip reflow cascades
+        // when a card's content (image, preview, tags) changes.
+        "[contain:content]"
       )}
     >
       {/* Cover image as a fading card background (non-image types). */}
@@ -230,6 +232,8 @@ export function ContentCard({
           <img
             src={item.image_url!}
             alt=""
+            width={640}
+            height={360}
             loading="lazy"
             decoding="async"
             onError={() => setImageError(true)}
@@ -252,11 +256,13 @@ export function ContentCard({
 
       {/* Image-type cards render a top banner (16:9) above the body. */}
       {isImageType && item.image_url && !imageError ? (
-        <div className="border-border bg-surface-muted pointer-events-none relative aspect-video w-full overflow-hidden border-b">
+        <div className="border-border bg-surface-muted pointer-events-none relative h-36 w-full overflow-hidden border-b">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={item.image_url!}
             alt=""
+            width={640}
+            height={360}
             loading="lazy"
             decoding="async"
             onError={() => setImageError(true)}
@@ -271,7 +277,7 @@ export function ContentCard({
           the same grid, rather than showing a browser broken-icon. */}
       {isImageType && item.image_url && imageError ? (
         <div
-          className="border-border bg-surface-muted pointer-events-none flex aspect-video w-full items-center justify-center border-b"
+          className="border-border bg-surface-muted pointer-events-none flex h-36 w-full items-center justify-center border-b"
           data-testid="content-card-image-error"
         >
           <p className="text-muted-foreground font-sans text-xs">
