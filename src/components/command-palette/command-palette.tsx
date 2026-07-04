@@ -20,6 +20,7 @@ import {
   CommandGroup,
 } from "@/components/ui/command";
 import { useCommandPalette } from "./use-command-palette";
+import { useAddDialog } from "@/components/add-dialog";
 import {
   pages,
   utilities,
@@ -111,6 +112,7 @@ export function CommandPalette() {
 
 function PaletteBody() {
   const { setOpen } = useCommandPalette();
+  const { setOpen: setAddOpen } = useAddDialog();
   const router = useRouter();
 
   // Local UI state. Lives only while the dialog is open so a
@@ -233,8 +235,11 @@ function PaletteBody() {
         document.body.appendChild(form);
         form.submit();
       }
+      if (item.action === "quickAdd") {
+        setAddOpen(true);
+      }
     },
-    [router, setOpen]
+    [router, setOpen, setAddOpen]
   );
 
   return (

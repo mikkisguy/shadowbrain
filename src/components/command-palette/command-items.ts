@@ -44,7 +44,7 @@ export interface UtilityCommandItem {
   description?: string;
   /** Action identifier — the palette maps these to local
    *  handlers in `command-palette.tsx`. */
-  action: "signOut";
+  action: "signOut" | "quickAdd";
 }
 
 const page = (item: Omit<PageCommandItem, "kind">): PageCommandItem => ({
@@ -103,6 +103,12 @@ export const pages: PageCommandItem[] = [
  *  list is the *unconditional* catalogue; consumers filter as
  *  needed. */
 export const utilities: UtilityCommandItem[] = [
+  utility({
+    id: "utility.quickAdd",
+    label: "Quick Add",
+    description: "Add a new item",
+    action: "quickAdd",
+  }),
   utility({
     id: "utility.signOut",
     label: "Sign out",

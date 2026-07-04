@@ -36,9 +36,10 @@ describe("command-items catalogue", () => {
     expect(pages.find((p) => p.href === "/search")).toBeUndefined();
   });
 
-  it("exposes a sign-out utility item (only utility in v1)", () => {
-    expect(utilities).toHaveLength(1);
-    expect(utilities[0]?.action).toBe("signOut");
+  it("exposes a quick-add and a sign-out utility item in order", () => {
+    expect(utilities).toHaveLength(2);
+    expect(utilities[0]?.action).toBe("quickAdd");
+    expect(utilities[1]?.action).toBe("signOut");
   });
 
   it("uses stable string IDs for every item", () => {
@@ -79,8 +80,11 @@ describe("searchHaystack", () => {
   });
 
   it("uses just the label for utility items", () => {
-    const [signOut] = utilities;
+    const signOut = utilities.find((u) => u.action === "signOut");
     expect(signOut).toBeDefined();
     expect(searchHaystack(signOut!)).toBe("Sign out");
+    const quickAdd = utilities.find((u) => u.action === "quickAdd");
+    expect(quickAdd).toBeDefined();
+    expect(searchHaystack(quickAdd!)).toBe("Quick Add");
   });
 });

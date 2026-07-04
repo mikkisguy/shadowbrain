@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandPalette } from "./command-palette";
 import { CommandPaletteProvider } from "./use-command-palette";
 import { PaletteTrigger } from "@/components/layout/palette-trigger";
+import { AddDialogProvider } from "@/components/add-dialog";
 
 /**
  * The integration test for the command-palette dialog.
@@ -54,10 +55,12 @@ const fetchMock = vi.fn();
 
 function renderPalette() {
   return render(
-    <CommandPaletteProvider>
-      <PaletteTrigger />
-      <CommandPalette />
-    </CommandPaletteProvider>
+    <AddDialogProvider>
+      <CommandPaletteProvider>
+        <PaletteTrigger />
+        <CommandPalette />
+      </CommandPaletteProvider>
+    </AddDialogProvider>
   );
 }
 
@@ -138,7 +141,7 @@ describe("CommandPalette", () => {
     });
   });
 
-  it("renders the 5 page items + the sign-out utility in the default view", async () => {
+  it("renders the 5 page items + the sign-out and quick-add utilities in the default view", async () => {
     const user = userEvent.setup();
     renderPalette();
     await user.click(screen.getByTestId("palette-trigger-desktop"));
@@ -149,6 +152,7 @@ describe("CommandPalette", () => {
       "page.graph",
       "page.tags",
       "page.settings",
+      "utility.quickAdd",
       "utility.signOut",
     ]) {
       expect(
