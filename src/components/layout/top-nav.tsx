@@ -1,6 +1,7 @@
 import { Brand } from "@/components/layout/brand";
 import { PaletteTrigger } from "@/components/layout/palette-trigger";
 import { UserMenu } from "@/components/layout/user-menu";
+import { AddButton } from "@/components/add-dialog";
 
 /**
  * Minimal top navigation shell.
@@ -32,7 +33,8 @@ export function TopNav() {
           <Brand />
         </div>
 
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center gap-2">
+          <AddButton />
           <PaletteTrigger />
         </div>
 
