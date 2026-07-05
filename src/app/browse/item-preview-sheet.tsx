@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronRight, ExternalLink, Pencil } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
@@ -28,8 +28,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { MarkdownContent } from "@/app/item/[id]/markdown-content";
 import { formatLinkType } from "@/app/item/[id]/item-sidebar";
+import { EditDialog } from "@/components/edit-dialog/edit-dialog";
+import { useEditDialog } from "@/components/edit-dialog/use-edit-dialog";
 
 /* ------------------------------------------------------------------ */
 /*  Types matching the API response from GET /api/items/[id]          */
@@ -45,6 +48,8 @@ interface ItemDetail {
   source_url: string | null;
   /** JSON string stored in the DB; must be parsed before use. */
   metadata: string | null;
+  is_private: number;
+  is_hidden: number;
   created_at: string;
   updated_at: string;
 }
@@ -52,6 +57,8 @@ interface ItemDetail {
 interface Tag {
   id: string;
   name: string;
+  color: string | null;
+  created_at: string;
 }
 
 interface LinkedItem {
@@ -241,6 +248,9 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
     "idle" | "loading" | "success" | "error"
   >("idle");
 
+  // Edit dialog state
+  const { open: editOpen, setOpen: setEditOpen } = useEditDialog();
+
   // Shared fetch helper — used by both the effect (on itemId change)
   // and the retry button. The `cancelled` ref lets the effect's cleanup
   // suppress setState after unmount; the retry handler shares the same
@@ -307,6 +317,13 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
     [onClose]
   );
 
+  // Refresh item data after edit
+  const handleEditSaved = useCallback(() => {
+    if (itemId) {
+      fetchItem(itemId, { reset: true });
+    }
+  }, [itemId, fetchItem]);
+
   const item = data?.item;
   const tags = data?.tags;
   const links = data?.links;
@@ -356,14 +373,27 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
             <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-6">
               {/* Header */}
               <header className="flex flex-col gap-3">
-                <Link
-                  href={`/item/${item.id}`}
-                  className="text-muted-foreground hover:text-foreground mb-4 inline-flex w-fit items-center gap-1.5 rounded-sm font-sans text-sm transition-colors"
-                  aria-label="Open full page"
-                >
-                  <ExternalLink className="size-4" />
-                  <span>Open full page</span>
-                </Link>
+                <div className="mb-4 flex items-center gap-2">
+                  <Link
+                    href={`/item/${item.id}`}
+                    className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1.5 rounded-sm font-sans text-sm transition-colors"
+                    aria-label="Open full page"
+                  >
+                    <ExternalLink className="size-4" />
+                    <span>Open full page</span>
+                  </Link>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setEditOpen(true)}
+                    aria-label="Edit item"
+                    title="Edit item"
+                    className="text-muted-foreground hover:text-foreground shrink-0"
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                </div>
                 <span
                   data-testid="sheet-type-badge"
                   className={cn(
@@ -494,6 +524,17 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                 </div>
               </div>
             ) : null}
+
+            {/* Edit dialog */}
+            {data && (
+              <EditDialog
+                item={data.item}
+                tags={data.tags}
+                open={editOpen}
+                onOpenChange={setEditOpen}
+                onSaved={handleEditSaved}
+              />
+            )}
           </div>
         ) : null}
       </SheetContent>
