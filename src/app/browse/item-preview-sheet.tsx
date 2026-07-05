@@ -16,12 +16,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, ExternalLink, Pencil } from "lucide-react";
+import { ChevronRight, ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@/lib/utils";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
 import { formatAbsolute } from "@/lib/dates";
 import { extractMetadataFields } from "@/lib/metadata-fields";
+import { queryKeys } from "@/lib/query-config";
 import {
   Sheet,
   SheetContent,
@@ -33,6 +36,8 @@ import { MarkdownContent } from "@/app/item/[id]/markdown-content";
 import { formatLinkType } from "@/app/item/[id]/item-sidebar";
 import { EditDialog } from "@/components/edit-dialog/edit-dialog";
 import { useEditDialog } from "@/components/edit-dialog/use-edit-dialog";
+import { DeleteConfirmationDialog } from "@/components/delete-dialog/delete-confirmation-dialog";
+import { useDeleteDialog } from "@/components/delete-dialog/use-delete-dialog";
 
 /* ------------------------------------------------------------------ */
 /*  Types matching the API response from GET /api/items/[id]          */
@@ -251,6 +256,34 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
   // Edit dialog state
   const { open: editOpen, setOpen: setEditOpen } = useEditDialog();
 
+  // Delete dialog state
+  const { open: deleteOpen, setOpen: setDeleteOpen } = useDeleteDialog();
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/items/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        const msg: string | undefined = payload?.error?.message;
+        throw new Error(msg ?? "Failed to delete item");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.browse.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all });
+      toast.success("Item deleted.");
+      setDeleteOpen(false);
+      onClose();
+    },
+    onError: () => {
+      toast.error("Failed to delete item.");
+    },
+  });
+
   // Shared fetch helper — used by both the effect (on itemId change)
   // and the retry button. The `cancelled` ref lets the effect's cleanup
   // suppress setState after unmount; the retry handler shares the same
@@ -393,6 +426,17 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                       className="text-muted-foreground hover:text-foreground shrink-0"
                     >
                       <Pencil className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setDeleteOpen(true)}
+                      aria-label="Delete item"
+                      title="Delete item"
+                      className="text-muted-foreground hover:text-foreground shrink-0"
+                    >
+                      <Trash2 className="size-4" />
                     </Button>
                   </div>
                   <span
@@ -538,6 +582,18 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
           open={editOpen}
           onOpenChange={setEditOpen}
           onSaved={handleEditSaved}
+        />
+      )}
+
+      {/* Delete confirmation dialog */}
+      {data && (
+        <DeleteConfirmationDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          itemTitle={data.item.title}
+          itemType={data.item.type}
+          onConfirm={() => deleteMutation.mutate(data.item.id)}
+          isDeleting={deleteMutation.isPending}
         />
       )}
     </>

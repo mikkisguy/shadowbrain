@@ -3,8 +3,22 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import ItemDetailPage from "./page";
+
+/**
+ * Wrap a rendered element in a QueryClientProvider so components that
+ * use TanStack Query (e.g. ItemEditor's delete mutation) have a client.
+ */
+function renderWithQuery(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+  );
+}
 
 const mocks = vi.hoisted(() => ({
   findWithRelations: vi.fn(),
@@ -129,7 +143,9 @@ describe("ItemDetailPage metadata rendering (issue #103)", () => {
       })
     );
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     expect(screen.getByLabelText("Metadata")).toBeInTheDocument();
     expect(screen.getByText("Email")).toBeInTheDocument();
@@ -155,7 +171,9 @@ describe("ItemDetailPage metadata rendering (issue #103)", () => {
       })
     );
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     expect(screen.getByText("Goal end date")).toBeInTheDocument();
     expect(screen.getByText("Dec 31, 2026, 6:00 PM")).toBeInTheDocument();
@@ -173,7 +191,9 @@ describe("ItemDetailPage metadata rendering (issue #103)", () => {
       })
     );
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     expect(screen.getByText("Start")).toBeInTheDocument();
     expect(screen.getByText("Apr 12, 2026, 9:30 AM")).toBeInTheDocument();
@@ -189,7 +209,9 @@ describe("ItemDetailPage metadata rendering (issue #103)", () => {
       })
     );
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     expect(screen.getByText("Mood")).toBeInTheDocument();
     expect(screen.queryByText("Lucidity")).not.toBeInTheDocument();
@@ -200,7 +222,9 @@ describe("ItemDetailPage foundation (issue #25)", () => {
   it("renders a colored type badge with the type label", async () => {
     mockItem("note", null);
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     const badge = screen.getByTestId("item-type-badge");
     expect(badge).toHaveTextContent("Note");
@@ -211,7 +235,9 @@ describe("ItemDetailPage foundation (issue #25)", () => {
   it("falls back to the raw token for an unknown type", async () => {
     mockItem("not-a-real-type", null);
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     const badge = screen.getByTestId("item-type-badge");
     // Unknown types keep the raw label and the raw (neutral) token.
@@ -222,7 +248,9 @@ describe("ItemDetailPage foundation (issue #25)", () => {
   it("renders a visible back button", async () => {
     mockItem("note", null);
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     expect(screen.getByTestId("item-back-button")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /back/i })).toBeInTheDocument();
@@ -236,7 +264,9 @@ describe("ItemDetailPage foundation (issue #25)", () => {
       .mockReturnValue(2);
     mockItem("note", null);
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
     await user.click(screen.getByTestId("item-back-button"));
 
     expect(router.back).toHaveBeenCalledOnce();
@@ -252,7 +282,9 @@ describe("ItemDetailPage foundation (issue #25)", () => {
       .mockReturnValue(1);
     mockItem("note", null);
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
     await user.click(screen.getByTestId("item-back-button"));
 
     expect(router.push).toHaveBeenCalledWith("/");
@@ -267,7 +299,9 @@ describe("ItemDetailPage foundation (issue #25)", () => {
       "# Docker networking\n\nBridge is the **default**. Use `docker network ls`.\n\n- bridge\n- host"
     );
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     // Markdown h1 renders as a heading inside the content area.
     expect(screen.getByText("Docker networking")).toBeInTheDocument();
@@ -283,7 +317,9 @@ describe("ItemDetailPage foundation (issue #25)", () => {
   it("renders fenced code blocks", async () => {
     mockItem("note", null, "```js\nconst x = 1;\nconsole.log(x);\n```");
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     expect(screen.getByText(/const x = 1/)).toBeInTheDocument();
     expect(document.querySelector("pre")).not.toBeNull();
@@ -292,7 +328,9 @@ describe("ItemDetailPage foundation (issue #25)", () => {
   it("opens external links in a new tab with safe rel", async () => {
     mockItem("bookmark", null, "Read [the docs](https://example.com/docs).");
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     const link = screen.getByRole("link", { name: "the docs" });
     expect(link).toHaveAttribute("target", "_blank");
@@ -303,7 +341,9 @@ describe("ItemDetailPage foundation (issue #25)", () => {
   it("keeps relative links in-tab (no target=_blank)", async () => {
     mockItem("note", null, "See [section](#section).");
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     const link = screen.getByRole("link", { name: "section" });
     expect(link).not.toHaveAttribute("target");
@@ -315,7 +355,9 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
     const desktopSpy = mockDesktopViewport();
     mockItem("note", null);
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     expect(screen.getByRole("heading", { name: "Links" })).toBeInTheDocument();
     expect(
@@ -339,7 +381,9 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
       ],
     });
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     const link = screen.getByRole("link", { name: /Linked project/ });
     expect(link).toHaveAttribute("href", "/item/42");
@@ -361,7 +405,9 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
       ],
     });
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     const link = screen.getByRole("link", { name: /Referring note/ });
     expect(link).toHaveAttribute("href", "/item/7");
@@ -381,7 +427,9 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
       ],
     });
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     expect(screen.getByText("Untitled")).toBeInTheDocument();
 
@@ -392,7 +440,9 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
     const user = userEvent.setup();
     mockItem("note", null);
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     // matchMedia stub reports mobile → no inline aside rendered.
     expect(screen.queryByTestId("item-sidebar")).not.toBeInTheDocument();
@@ -426,7 +476,9 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
     const desktopSpy = mockDesktopViewport();
     mockItem("note", null);
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     const toggle = screen.getByTestId("sidebar-toggle");
     const sidebar = screen.getByTestId("item-sidebar");
@@ -454,7 +506,9 @@ describe("ItemDetailPage links sidebar (issue #26)", () => {
     const desktopSpy = mockDesktopViewport();
     mockItem("note", null);
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     // Desktop default is open; toggle it closed.
     await user.click(screen.getByTestId("sidebar-toggle"));
@@ -471,7 +525,9 @@ describe("ItemDetailPage cover background", () => {
       "1": "2026-05/abc.webp",
     });
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     const bg = screen.getByTestId("item-cover-background");
     const img = bg.querySelector("img");
@@ -481,7 +537,9 @@ describe("ItemDetailPage cover background", () => {
   it("renders no cover background when there is no linked image", async () => {
     mockItem("note", null);
 
-    render(await ItemDetailPage({ params: Promise.resolve({ id: "1" }) }));
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
 
     expect(screen.queryByTestId("item-cover-background")).toBeNull();
   });

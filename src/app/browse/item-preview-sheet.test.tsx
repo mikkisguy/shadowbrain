@@ -11,6 +11,27 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+/**
+ * Wrap a rendered element in a QueryClientProvider so components that
+ * use TanStack Query (e.g. delete mutation) have a client.
+ */
+function renderWithQuery(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const result = render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+  );
+  return {
+    ...result,
+    rerender: (newUi: React.ReactElement) =>
+      result.rerender(
+        <QueryClientProvider client={queryClient}>{newUi}</QueryClientProvider>
+      ),
+  };
+}
 
 // Mock the Sheet components to avoid Base UI Dialog complexity.
 vi.mock("@/components/ui/sheet", () => ({
@@ -128,7 +149,7 @@ describe("ItemPreviewSheet", () => {
   });
 
   it("renders nothing when itemId is null", () => {
-    const { container } = render(
+    const { container } = renderWithQuery(
       <ItemPreviewSheet itemId={null} onClose={onClose} />
     );
     expect(container.firstChild).toBeNull();
@@ -141,7 +162,7 @@ describe("ItemPreviewSheet", () => {
         /* never resolves */
       })
     );
-    render(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
     expect(screen.getByTestId("sheet-loading")).toBeInTheDocument();
   });
 
@@ -152,7 +173,7 @@ describe("ItemPreviewSheet", () => {
       json: () => Promise.resolve(fixture),
     } as Response);
 
-    render(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
 
     await waitFor(() => {
       expect(screen.getByTestId("sheet-type-badge")).toHaveTextContent("Note");
@@ -186,7 +207,7 @@ describe("ItemPreviewSheet", () => {
       json: () => Promise.resolve(fixture),
     } as Response);
 
-    render(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
 
     await waitFor(() => {
       expect(screen.getByTestId("sheet-type-badge")).toHaveTextContent("Note");
@@ -206,7 +227,7 @@ describe("ItemPreviewSheet", () => {
       json: () => Promise.resolve(createFixture()),
     } as Response);
 
-    render(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
 
     await waitFor(() => {
       expect(screen.getByTestId("sheet-type-badge")).toBeInTheDocument();
@@ -221,7 +242,7 @@ describe("ItemPreviewSheet", () => {
       new Error("Network error")
     );
 
-    render(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
 
     await waitFor(() => {
       expect(screen.getByTestId("sheet-error")).toBeInTheDocument();
@@ -238,7 +259,7 @@ describe("ItemPreviewSheet", () => {
       new Error("Network error")
     );
 
-    render(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
 
     await waitFor(() => {
       expect(screen.getByTestId("sheet-error")).toBeInTheDocument();
@@ -272,7 +293,7 @@ describe("ItemPreviewSheet", () => {
       json: () => Promise.resolve(fixture),
     } as Response);
 
-    render(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
 
     await waitFor(() => {
       expect(screen.getByText("DevOps lead")).toBeInTheDocument();
@@ -291,7 +312,7 @@ describe("ItemPreviewSheet", () => {
       json: () => Promise.resolve(fixture),
     } as Response);
 
-    render(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
 
     await waitFor(() => {
       // The cover image has alt="" (presentational), so getByRole("img")
@@ -309,7 +330,7 @@ describe("ItemPreviewSheet", () => {
       json: () => Promise.resolve(createFixture()),
     } as Response);
 
-    const { rerender } = render(
+    const { rerender } = renderWithQuery(
       <ItemPreviewSheet itemId="item-1" onClose={onClose} />
     );
     expect(fetchSpy).toHaveBeenCalledTimes(1);
