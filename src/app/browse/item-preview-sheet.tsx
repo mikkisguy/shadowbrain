@@ -330,214 +330,216 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
   const isImageType = item?.type === "image";
 
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-[min(640px,90vw)] flex-col gap-0 p-0 sm:max-w-[min(640px,90vw)]"
-      >
-        <SheetHeader className="sr-only">
-          <SheetTitle>{item?.title ?? "Item preview"}</SheetTitle>
-        </SheetHeader>
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-[min(640px,90vw)] flex-col gap-0 p-0 sm:max-w-[min(640px,90vw)]"
+        >
+          <SheetHeader className="sr-only">
+            <SheetTitle>{item?.title ?? "Item preview"}</SheetTitle>
+          </SheetHeader>
 
-        {status === "loading" ? <SheetSkeleton /> : null}
-        {status === "error" ? <SheetError onRetry={handleRetry} /> : null}
+          {status === "loading" ? <SheetSkeleton /> : null}
+          {status === "error" ? <SheetError onRetry={handleRetry} /> : null}
 
-        {status === "success" && item ? (
-          <div className="flex h-full flex-col overflow-hidden">
-            {/* Cover image banner (non-image types) */}
-            {!isImageType && item.image_path ? (
-              <div className="shrink-0 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/images/${item.image_path.replace(/^\//, "")}`}
-                  alt=""
-                  className="size-full object-cover"
-                  style={{ height: 160 }}
-                />
-              </div>
-            ) : null}
-
-            {/* Image-type: show inline in content area */}
-            {isImageType && item.image_path ? (
-              <div className="border-border shrink-0 overflow-hidden border-b">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/images/${item.image_path.replace(/^\//, "")}`}
-                  alt={item.title ?? ""}
-                  className="h-auto max-w-full"
-                />
-              </div>
-            ) : null}
-
-            {/* Scrollable content area */}
-            <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-6">
-              {/* Header */}
-              <header className="flex flex-col gap-3">
-                <div className="mb-4 flex items-center gap-2">
-                  <Link
-                    href={`/item/${item.id}`}
-                    className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1.5 rounded-sm font-sans text-sm transition-colors"
-                    aria-label="Open full page"
-                  >
-                    <ExternalLink className="size-4" />
-                    <span>Open full page</span>
-                  </Link>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setEditOpen(true)}
-                    aria-label="Edit item"
-                    title="Edit item"
-                    className="text-muted-foreground hover:text-foreground shrink-0"
-                  >
-                    <Pencil className="size-4" />
-                  </Button>
+          {status === "success" && item ? (
+            <div className="flex h-full flex-col overflow-hidden">
+              {/* Cover image banner (non-image types) */}
+              {!isImageType && item.image_path ? (
+                <div className="shrink-0 overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/images/${item.image_path.replace(/^\//, "")}`}
+                    alt=""
+                    className="size-full object-cover"
+                    style={{ height: 160 }}
+                  />
                 </div>
-                <span
-                  data-testid="sheet-type-badge"
-                  className={cn(
-                    typeColorClass(item.type),
-                    "text-foreground-inverted inline-flex w-fit items-center rounded-sm px-2 py-0.5 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase"
-                  )}
-                >
-                  {typeLabel(item.type)}
-                </span>
-                {item.title ? (
-                  <h2 className="text-foreground flex items-center gap-2 font-serif text-2xl font-semibold tracking-[-0.01em] wrap-break-word">
-                    {item.title}
-                  </h2>
-                ) : null}
-                <dl className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs">
-                  <div className="flex gap-1.5">
-                    <dt>Created</dt>
-                    <dd className="text-foreground">
-                      {formatAbsolute(item.created_at)}
-                    </dd>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <dt>Updated</dt>
-                    <dd className="text-foreground">
-                      {formatAbsolute(item.updated_at)}
-                    </dd>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <dt>Source</dt>
-                    <dd className="text-foreground">{item.source}</dd>
-                  </div>
-                </dl>
-              </header>
+              ) : null}
 
-              {/* Markdown body */}
-              <MarkdownContent content={item.content} />
+              {/* Image-type: show inline in content area */}
+              {isImageType && item.image_path ? (
+                <div className="border-border shrink-0 overflow-hidden border-b">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/images/${item.image_path.replace(/^\//, "")}`}
+                    alt={item.title ?? ""}
+                    className="h-auto max-w-full"
+                  />
+                </div>
+              ) : null}
 
-              {/* Type-specific metadata */}
-              <MetadataSection type={item.type} metadata={item.metadata} />
-
-              {/* Source URL */}
-              {item.source_url ? (
-                <p className="font-sans text-sm">
-                  <a
-                    href={item.source_url}
-                    rel="noopener noreferrer"
-                    target="_blank"
-                    className="text-primary break-all hover:underline"
+              {/* Scrollable content area */}
+              <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-6">
+                {/* Header */}
+                <header className="flex flex-col gap-3">
+                  <div className="mb-4 flex items-center gap-2">
+                    <Link
+                      href={`/item/${item.id}`}
+                      className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1.5 rounded-sm font-sans text-sm transition-colors"
+                      aria-label="Open full page"
+                    >
+                      <ExternalLink className="size-4" />
+                      <span>Open full page</span>
+                    </Link>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setEditOpen(true)}
+                      aria-label="Edit item"
+                      title="Edit item"
+                      className="text-muted-foreground hover:text-foreground shrink-0"
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                  </div>
+                  <span
+                    data-testid="sheet-type-badge"
+                    className={cn(
+                      typeColorClass(item.type),
+                      "text-foreground-inverted inline-flex w-fit items-center rounded-sm px-2 py-0.5 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase"
+                    )}
                   >
-                    {item.source_url}
-                  </a>
-                </p>
+                    {typeLabel(item.type)}
+                  </span>
+                  {item.title ? (
+                    <h2 className="text-foreground flex items-center gap-2 font-serif text-2xl font-semibold tracking-[-0.01em] wrap-break-word">
+                      {item.title}
+                    </h2>
+                  ) : null}
+                  <dl className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs">
+                    <div className="flex gap-1.5">
+                      <dt>Created</dt>
+                      <dd className="text-foreground">
+                        {formatAbsolute(item.created_at)}
+                      </dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt>Updated</dt>
+                      <dd className="text-foreground">
+                        {formatAbsolute(item.updated_at)}
+                      </dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt>Source</dt>
+                      <dd className="text-foreground">{item.source}</dd>
+                    </div>
+                  </dl>
+                </header>
+
+                {/* Markdown body */}
+                <MarkdownContent content={item.content} />
+
+                {/* Type-specific metadata */}
+                <MetadataSection type={item.type} metadata={item.metadata} />
+
+                {/* Source URL */}
+                {item.source_url ? (
+                  <p className="font-sans text-sm">
+                    <a
+                      href={item.source_url}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                      className="text-primary break-all hover:underline"
+                    >
+                      {item.source_url}
+                    </a>
+                  </p>
+                ) : null}
+              </div>
+
+              {/* Sticky bottom section: tags, links, backlinks */}
+              {(tags && tags.length > 0) ||
+              (links && links.outbound.length > 0) ||
+              (links && links.inbound.length > 0) ? (
+                <div className="border-border bg-background shrink-0 border-t p-4">
+                  <div className="flex max-h-64 flex-col gap-3 overflow-y-auto">
+                    {/* Tags */}
+                    {tags && tags.length > 0 ? (
+                      <details className="group [&>summary::-webkit-details-marker]:hidden [&>summary::marker]:hidden">
+                        <summary className="text-muted-foreground hover:text-foreground border-border flex cursor-pointer items-center justify-between border-b pb-2 font-mono text-xs font-medium tracking-wide uppercase transition-colors">
+                          <span>Tags ({tags.length})</span>
+                          <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
+                        </summary>
+                        <ul
+                          aria-label="Tags"
+                          className="mt-3 flex flex-wrap items-center gap-1.5"
+                        >
+                          {tags.map((tag) => (
+                            <li key={tag.id}>
+                              <Link
+                                href={`/?tag=${encodeURIComponent(tag.name)}`}
+                                className="border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong rounded-sm border px-2 py-0.5 font-mono text-[0.7rem] tracking-wide transition-colors"
+                              >
+                                #{tag.name}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    ) : null}
+
+                    {/* Outbound links */}
+                    {links && links.outbound.length > 0 ? (
+                      <details className="group [&>summary::-webkit-details-marker]:hidden [&>summary::marker]:hidden">
+                        <summary className="text-muted-foreground hover:text-foreground border-border flex cursor-pointer items-center justify-between border-b pb-2 font-mono text-xs font-medium tracking-wide uppercase transition-colors">
+                          <span>Links ({links.outbound.length})</span>
+                          <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
+                        </summary>
+                        <ul className="mt-3 flex flex-col gap-2">
+                          {links.outbound.map((link) => (
+                            <LinkRow
+                              key={link.id}
+                              href={`/item/${link.target.id}`}
+                              title={link.target.title}
+                              type={link.target.type}
+                              linkType={link.link_type}
+                            />
+                          ))}
+                        </ul>
+                      </details>
+                    ) : null}
+
+                    {/* Backlinks */}
+                    {links && links.inbound.length > 0 ? (
+                      <details className="group [&>summary::-webkit-details-marker]:hidden [&>summary::marker]:hidden">
+                        <summary className="text-muted-foreground hover:text-foreground border-border flex cursor-pointer items-center justify-between border-b pb-2 font-mono text-xs font-medium tracking-wide uppercase transition-colors">
+                          <span>Backlinks ({links.inbound.length})</span>
+                          <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
+                        </summary>
+                        <ul className="mt-3 flex flex-col gap-2">
+                          {links.inbound.map((link) => (
+                            <LinkRow
+                              key={link.id}
+                              href={`/item/${link.source.id}`}
+                              title={link.source.title}
+                              type={link.source.type}
+                              linkType={link.link_type}
+                            />
+                          ))}
+                        </ul>
+                      </details>
+                    ) : null}
+                  </div>
+                </div>
               ) : null}
             </div>
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
-            {/* Sticky bottom section: tags, links, backlinks */}
-            {(tags && tags.length > 0) ||
-            (links && links.outbound.length > 0) ||
-            (links && links.inbound.length > 0) ? (
-              <div className="border-border bg-background shrink-0 border-t p-4">
-                <div className="flex max-h-64 flex-col gap-3 overflow-y-auto">
-                  {/* Tags */}
-                  {tags && tags.length > 0 ? (
-                    <details className="group [&>summary::-webkit-details-marker]:hidden [&>summary::marker]:hidden">
-                      <summary className="text-muted-foreground hover:text-foreground border-border flex cursor-pointer items-center justify-between border-b pb-2 font-mono text-xs font-medium tracking-wide uppercase transition-colors">
-                        <span>Tags ({tags.length})</span>
-                        <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
-                      </summary>
-                      <ul
-                        aria-label="Tags"
-                        className="mt-3 flex flex-wrap items-center gap-1.5"
-                      >
-                        {tags.map((tag) => (
-                          <li key={tag.id}>
-                            <Link
-                              href={`/?tag=${encodeURIComponent(tag.name)}`}
-                              className="border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong rounded-sm border px-2 py-0.5 font-mono text-[0.7rem] tracking-wide transition-colors"
-                            >
-                              #{tag.name}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  ) : null}
-
-                  {/* Outbound links */}
-                  {links && links.outbound.length > 0 ? (
-                    <details className="group [&>summary::-webkit-details-marker]:hidden [&>summary::marker]:hidden">
-                      <summary className="text-muted-foreground hover:text-foreground border-border flex cursor-pointer items-center justify-between border-b pb-2 font-mono text-xs font-medium tracking-wide uppercase transition-colors">
-                        <span>Links ({links.outbound.length})</span>
-                        <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
-                      </summary>
-                      <ul className="mt-3 flex flex-col gap-2">
-                        {links.outbound.map((link) => (
-                          <LinkRow
-                            key={link.id}
-                            href={`/item/${link.target.id}`}
-                            title={link.target.title}
-                            type={link.target.type}
-                            linkType={link.link_type}
-                          />
-                        ))}
-                      </ul>
-                    </details>
-                  ) : null}
-
-                  {/* Backlinks */}
-                  {links && links.inbound.length > 0 ? (
-                    <details className="group [&>summary::-webkit-details-marker]:hidden [&>summary::marker]:hidden">
-                      <summary className="text-muted-foreground hover:text-foreground border-border flex cursor-pointer items-center justify-between border-b pb-2 font-mono text-xs font-medium tracking-wide uppercase transition-colors">
-                        <span>Backlinks ({links.inbound.length})</span>
-                        <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
-                      </summary>
-                      <ul className="mt-3 flex flex-col gap-2">
-                        {links.inbound.map((link) => (
-                          <LinkRow
-                            key={link.id}
-                            href={`/item/${link.source.id}`}
-                            title={link.source.title}
-                            type={link.source.type}
-                            linkType={link.link_type}
-                          />
-                        ))}
-                      </ul>
-                    </details>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Edit dialog */}
-            {data && (
-              <EditDialog
-                item={data.item}
-                tags={data.tags}
-                open={editOpen}
-                onOpenChange={setEditOpen}
-                onSaved={handleEditSaved}
-              />
-            )}
-          </div>
-        ) : null}
-      </SheetContent>
-    </Sheet>
+      {/* Edit dialog rendered outside the sheet to avoid stacking context issues */}
+      {data && (
+        <EditDialog
+          item={data.item}
+          tags={data.tags}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          onSaved={handleEditSaved}
+        />
+      )}
+    </>
   );
 }
