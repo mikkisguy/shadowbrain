@@ -35,145 +35,18 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { BookmarkMetadata } from "@/lib/metadata-fetcher";
 import { useAddDialog } from "./use-add-dialog";
-
-// ---------------------------------------------------------------------------
-// Draft shape — one flat record so a single ref can carry the entire form
-// state across close/reopen cycles. Field names mirror the backend metadata
-// keys from src/app/api/items/route.ts so the submit handler can map them
-// 1:1 without translation.
-// ---------------------------------------------------------------------------
-
-interface Draft {
-  type: string;
-  content: string;
-  title: string;
-  // bookmark — top-level `source_url` on the API
-  sourceUrl: string;
-  // person — metadata.{email, phone_number, role}
-  email: string;
-  phoneNumber: string;
-  role: string;
-  // project — metadata.{status, repo, started, goal_end_date}
-  status: string;
-  repo: string;
-  started: string;
-  goalEndDate: string;
-  // event — metadata.{start_date, end_date, duration}
-  startDate: string;
-  endDate: string;
-  duration: string;
-  // dream — metadata.mood
-  mood: string;
-}
-
-function emptyDraft(): Draft {
-  return {
-    type: "raw_text",
-    content: "",
-    title: "",
-    sourceUrl: "",
-    email: "",
-    phoneNumber: "",
-    role: "",
-    status: "",
-    repo: "",
-    started: "",
-    goalEndDate: "",
-    startDate: "",
-    endDate: "",
-    duration: "",
-    mood: "",
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Type vocabulary (matches src/lib/content-types.ts labels)
-// ---------------------------------------------------------------------------
-
-const TYPE_ITEMS: Record<string, string> = {
-  raw_text: "Raw",
-  note: "Note",
-  journal: "Journal",
-  bookmark: "Bookmark",
-  question: "Question",
-  person: "Person",
-  project: "Project",
-  event: "Event",
-  dream: "Dream",
-};
-
-// ---------------------------------------------------------------------------
-// Per-type UI configuration: placeholders, field visibility, and the
-// content-fallback used when the user leaves the content textarea empty
-// for types where content is secondary (bookmark, person, project, event).
-// ---------------------------------------------------------------------------
-
-/** Content textarea placeholder per type. */
-const CONTENT_PLACEHOLDER: Record<string, string> = {
-  raw_text: "Type or paste anything\u2026",
-  note: "Write a quick note\u2026",
-  journal: "What happened today?",
-  bookmark: "Notes about this bookmark (optional)\u2026",
-  question: "What\u2019s your question?",
-  person: "Notes about this person (optional)\u2026",
-  project: "Notes about this project (optional)\u2026",
-  event: "Describe this event (optional)\u2026",
-  dream: "Describe your dream\u2026",
-};
-
-/** Title input placeholder per type. Falls back to "Title (optional)". */
-const TITLE_PLACEHOLDER: Record<string, string> = {
-  person: "Name",
-  project: "Project name",
-  event: "Event name",
-  bookmark: "Bookmark title (optional)",
-};
-
-function titlePlaceholder(type: string): string {
-  return TITLE_PLACEHOLDER[type] ?? "Title (optional)";
-}
-
-/** Whether the content textarea is required for this type. When false,
- *  the submit handler auto-fills content from the URL (bookmark) or the
- *  title (person/project/event) so the API's `content: min(1)` validation
- *  still passes. */
-const CONTENT_REQUIRED: Record<string, boolean> = {
-  raw_text: true,
-  note: true,
-  journal: true,
-  bookmark: false,
-  question: true,
-  person: false,
-  project: false,
-  event: false,
-  dream: true,
-};
-
-function isContentRequired(type: string): boolean {
-  return CONTENT_REQUIRED[type] ?? true;
-}
-
-/** Resolve the effective content value at submit time. For types where
- *  content is optional, fall back to the URL (bookmark) or the title
- *  (person/project/event) so the API's `min(1)` validation passes. */
-function resolveContent(draft: Draft): string {
-  const content = draft.content.trim();
-  if (content) return content;
-  if (draft.type === "bookmark") return draft.sourceUrl.trim();
-  if (draft.title.trim()) return draft.title.trim();
-  return "";
-}
-
-/** Whether the form has enough data to submit. */
-function canSubmit(draft: Draft): boolean {
-  if (resolveContent(draft)) return true;
-  return false;
-}
-
-/** Whether the current type has any type-specific metadata fields. */
-function hasTypeSpecificFields(type: string): boolean {
-  return ["bookmark", "person", "project", "event", "dream"].includes(type);
-}
+import {
+  type Draft,
+  emptyDraft,
+  TYPE_ITEMS,
+  CONTENT_PLACEHOLDER,
+  titlePlaceholder,
+  isContentRequired,
+  resolveContent,
+  canSubmit,
+  hasTypeSpecificFields,
+} from "@/lib/add-form/types";
+import { TypeSpecificFields } from "@/components/add-form/type-specific-fields";
 
 // ---------------------------------------------------------------------------
 // Dialog
@@ -459,15 +332,6 @@ function AddForm({
     }
   }
 
-  /** Handle bookmark URL change — also resets preview state. */
-  function handleSourceUrlChange(value: string) {
-    updateField("sourceUrl", value);
-    // Reset preview state immediately so stale data doesn't linger
-    setPreviewMetadata(null);
-    setPreviewError(null);
-    setPreviewLoading(false);
-  }
-
   const handleSubmit = useCallback(() => {
     if (!canSubmit(draft) || mutation.isPending) return;
     mutation.mutate(draft);
@@ -570,224 +434,114 @@ function AddForm({
         {/* Type-specific metadata — compact, secondary, below the hero
           writing surface so it never competes for attention. */}
         {hasTypeSpecificFields(draft.type) && (
-          <div className="space-y-2">
-            <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-              Details
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {draft.type === "bookmark" && (
-                <>
-                  <Input
-                    data-testid="add-dialog-bookmark-url"
-                    className="col-span-2 h-7 text-xs"
-                    placeholder="URL"
-                    value={draft.sourceUrl}
-                    onChange={(e) => handleSourceUrlChange(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onBlur={() => {
-                      // Flush the debounce immediately on blur.
-                      const url = draft.sourceUrl.trim();
-                      if (!url) return;
-                      if (previewTimeoutRef.current) {
-                        clearTimeout(previewTimeoutRef.current);
-                        previewTimeoutRef.current = null;
-                      }
-                      triggerPreviewFetch(url);
-                    }}
-                    type="url"
-                  />
-
-                  {/* ---- Bookmark preview card ---- */}
-                  {previewLoading && (
-                    <div className="bg-muted/30 text-muted-foreground col-span-2 flex items-center gap-2 rounded-lg border p-3 text-xs">
-                      <svg
-                        className="size-3.5 animate-spin"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                        />
-                      </svg>
-                      Loading preview…
-                    </div>
-                  )}
-
-                  {previewError && !previewLoading && (
-                    <div className="bg-muted/30 text-muted-foreground col-span-2 flex items-center gap-2 rounded-lg border p-3 text-xs">
-                      <svg
-                        className="size-3.5 shrink-0"
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="12" y1="8" x2="12" y2="12" />
-                        <line x1="12" y1="16" x2="12.01" y2="16" />
-                      </svg>
-                      <span>Preview unavailable</span>
-                    </div>
-                  )}
-
-                  {previewMetadata && !previewLoading && (
-                    <div
-                      data-testid="add-dialog-bookmark-preview"
-                      className="bg-muted/30 col-span-2 flex items-start gap-3 rounded-lg border p-3"
+          <>
+            <TypeSpecificFields
+              draft={draft}
+              updateField={updateField}
+              handleKeyDown={handleKeyDown}
+              bookmarkUrlProps={{
+                onChange: (e) => {
+                  updateField("sourceUrl", e.target.value);
+                  // Reset preview state immediately so stale data doesn't linger
+                  setPreviewMetadata(null);
+                  setPreviewError(null);
+                  setPreviewLoading(false);
+                },
+                onBlur: () => {
+                  // Flush the debounce immediately on blur.
+                  const url = draft.sourceUrl.trim();
+                  if (!url) return;
+                  if (previewTimeoutRef.current) {
+                    clearTimeout(previewTimeoutRef.current);
+                    previewTimeoutRef.current = null;
+                  }
+                  triggerPreviewFetch(url);
+                },
+              }}
+            />
+            {/* Bookmark preview card — stays in add-dialog */}
+            {draft.type === "bookmark" && (
+              <>
+                {previewLoading && (
+                  <div className="bg-muted/30 text-muted-foreground col-span-2 flex items-center gap-2 rounded-lg border p-3 text-xs">
+                    <svg
+                      className="size-3.5 animate-spin"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
                     >
-                      {previewMetadata.favicon && (
-                        <img
-                          src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(previewMetadata.favicon)}`}
-                          alt=""
-                          className="mt-0.5 size-4 shrink-0 rounded"
-                        />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {previewMetadata.title || draft.title || "Untitled"}
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
+                    </svg>
+                    Loading preview…
+                  </div>
+                )}
+
+                {previewError && !previewLoading && (
+                  <div className="bg-muted/30 text-muted-foreground col-span-2 flex items-center gap-2 rounded-lg border p-3 text-xs">
+                    <svg
+                      className="size-3.5 shrink-0"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <span>Preview unavailable</span>
+                  </div>
+                )}
+
+                {previewMetadata && !previewLoading && (
+                  <div
+                    data-testid="add-dialog-bookmark-preview"
+                    className="bg-muted/30 col-span-2 flex items-start gap-3 rounded-lg border p-3"
+                  >
+                    {previewMetadata.favicon && (
+                      <img
+                        src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(previewMetadata.favicon)}`}
+                        alt=""
+                        className="mt-0.5 size-4 shrink-0 rounded"
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {previewMetadata.title || draft.title || "Untitled"}
+                      </p>
+                      {previewMetadata.description && (
+                        <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                          {previewMetadata.description}
                         </p>
-                        {previewMetadata.description && (
-                          <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
-                            {previewMetadata.description}
-                          </p>
-                        )}
-                        {previewMetadata.site_name && (
-                          <p className="text-muted-foreground mt-1 text-[10px]">
-                            {previewMetadata.site_name}
-                          </p>
-                        )}
-                      </div>
+                      )}
+                      {previewMetadata.site_name && (
+                        <p className="text-muted-foreground mt-1 text-[10px]">
+                          {previewMetadata.site_name}
+                        </p>
+                      )}
                     </div>
-                  )}
-                </>
-              )}
-
-              {draft.type === "person" && (
-                <>
-                  <Input
-                    data-testid="add-dialog-person-email"
-                    className="col-span-2 h-7 text-xs"
-                    placeholder="Email"
-                    value={draft.email}
-                    onChange={(e) => updateField("email", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    type="email"
-                  />
-                  <Input
-                    data-testid="add-dialog-person-phone"
-                    className="h-7 text-xs"
-                    placeholder="Phone"
-                    value={draft.phoneNumber}
-                    onChange={(e) => updateField("phoneNumber", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    type="tel"
-                  />
-                  <Input
-                    data-testid="add-dialog-person-role"
-                    className="h-7 text-xs"
-                    placeholder="Role"
-                    value={draft.role}
-                    onChange={(e) => updateField("role", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                </>
-              )}
-
-              {draft.type === "project" && (
-                <>
-                  <Input
-                    data-testid="add-dialog-project-status"
-                    className="h-7 text-xs"
-                    placeholder="Status"
-                    value={draft.status}
-                    onChange={(e) => updateField("status", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                  <Input
-                    data-testid="add-dialog-project-repo"
-                    className="h-7 text-xs"
-                    placeholder="Repository"
-                    value={draft.repo}
-                    onChange={(e) => updateField("repo", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    type="url"
-                  />
-                  <Input
-                    data-testid="add-dialog-project-started"
-                    className="h-7 text-xs"
-                    type="datetime-local"
-                    value={draft.started}
-                    onChange={(e) => updateField("started", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                  <Input
-                    data-testid="add-dialog-project-goal-end"
-                    className="h-7 text-xs"
-                    type="datetime-local"
-                    value={draft.goalEndDate}
-                    onChange={(e) => updateField("goalEndDate", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                </>
-              )}
-
-              {draft.type === "event" && (
-                <>
-                  <Input
-                    data-testid="add-dialog-event-start"
-                    className="h-7 text-xs"
-                    type="datetime-local"
-                    value={draft.startDate}
-                    onChange={(e) => updateField("startDate", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                  <Input
-                    data-testid="add-dialog-event-end"
-                    className="h-7 text-xs"
-                    type="datetime-local"
-                    value={draft.endDate}
-                    onChange={(e) => updateField("endDate", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                  <Input
-                    data-testid="add-dialog-event-duration"
-                    className="col-span-2 h-7 text-xs"
-                    placeholder="Duration (e.g. 2h, 90m)"
-                    value={draft.duration}
-                    onChange={(e) => updateField("duration", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                </>
-              )}
-
-              {draft.type === "dream" && (
-                <Input
-                  data-testid="add-dialog-dream-mood"
-                  className="col-span-2 h-7 text-xs"
-                  placeholder="Mood"
-                  value={draft.mood}
-                  onChange={(e) => updateField("mood", e.target.value)}
-                  onKeyDown={handleKeyDown}
-                />
-              )}
-            </div>
-          </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
         )}
 
         {error && (
