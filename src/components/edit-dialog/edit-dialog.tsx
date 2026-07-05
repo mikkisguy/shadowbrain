@@ -62,118 +62,22 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { ContentItem, Tag } from "@/db/index";
 import { MarkdownContent } from "@/app/item/[id]/markdown-content";
-// ---------------------------------------------------------------------------
-// Type vocabulary (matches src/lib/content-types.ts labels)
-// ---------------------------------------------------------------------------
+import {
+  type Draft,
+  TYPE_ITEMS,
+  hasTypeSpecificFields,
+} from "@/lib/add-form/types";
+import {
+  metadataToDraftFields,
+  draftToMetadata,
+} from "@/lib/add-form/metadata-helpers";
+import { TypeSpecificFields } from "@/components/add-form/type-specific-fields";
 
-const TYPE_ITEMS: Record<string, string> = {
-  raw_text: "Raw",
-  note: "Note",
-  journal: "Journal",
-  bookmark: "Bookmark",
-  question: "Question",
-  person: "Person",
-  project: "Project",
-  event: "Event",
-  dream: "Dream",
-};
-
-// ---------------------------------------------------------------------------
-// Draft shape — mirrors AddDialog's Draft but starts from the item's data.
-// ---------------------------------------------------------------------------
-
-interface EditDraft {
-  type: string;
-  title: string;
-  content: string;
-  sourceUrl: string;
+interface EditDraft extends Draft {
   source: string;
   is_private: number;
   is_hidden: number;
   tags: string[];
-  // person
-  email: string;
-  phoneNumber: string;
-  role: string;
-  // project
-  status: string;
-  repo: string;
-  started: string;
-  goalEndDate: string;
-  // event
-  startDate: string;
-  endDate: string;
-  duration: string;
-  // dream
-  mood: string;
-}
-
-/** Parse metadata JSON into a flat record keyed by the draft field names. */
-function metadataToDraftFields(
-  type: string,
-  metadata: string | null
-): Partial<EditDraft> {
-  if (!metadata) return {};
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(metadata);
-  } catch {
-    return {};
-  }
-
-  const fields: Partial<EditDraft> = {};
-  if (type === "person") {
-    if (typeof parsed.email === "string") fields.email = parsed.email;
-    if (typeof parsed.phone_number === "string")
-      fields.phoneNumber = parsed.phone_number;
-    if (typeof parsed.role === "string") fields.role = parsed.role;
-  }
-  if (type === "project") {
-    if (typeof parsed.status === "string") fields.status = parsed.status;
-    if (typeof parsed.repo === "string") fields.repo = parsed.repo;
-    if (typeof parsed.started === "string") fields.started = parsed.started;
-    if (typeof parsed.goal_end_date === "string")
-      fields.goalEndDate = parsed.goal_end_date;
-  }
-  if (type === "event") {
-    if (typeof parsed.start_date === "string")
-      fields.startDate = parsed.start_date;
-    if (typeof parsed.end_date === "string") fields.endDate = parsed.end_date;
-    if (
-      typeof parsed.duration === "string" ||
-      typeof parsed.duration === "number"
-    )
-      fields.duration = String(parsed.duration);
-  }
-  if (type === "dream") {
-    if (typeof parsed.mood === "string") fields.mood = parsed.mood;
-  }
-  return fields;
-}
-
-/** Convert draft type-specific fields back to a metadata object for the API. */
-function draftToMetadata(draft: EditDraft): Record<string, unknown> | null {
-  const meta: Record<string, unknown> = {};
-  if (draft.type === "person") {
-    if (draft.email.trim()) meta.email = draft.email;
-    if (draft.phoneNumber.trim()) meta.phone_number = draft.phoneNumber;
-    if (draft.role.trim()) meta.role = draft.role;
-  }
-  if (draft.type === "project") {
-    if (draft.status.trim()) meta.status = draft.status;
-    if (draft.repo.trim()) meta.repo = draft.repo;
-    if (draft.started) meta.started = draft.started;
-    if (draft.goalEndDate) meta.goal_end_date = draft.goalEndDate;
-  }
-  if (draft.type === "event") {
-    if (draft.startDate) meta.start_date = draft.startDate;
-    if (draft.endDate) meta.end_date = draft.endDate;
-    if (draft.duration.trim()) meta.duration = draft.duration;
-  }
-  if (draft.type === "dream") {
-    if (draft.mood.trim()) meta.mood = draft.mood;
-  }
-  return Object.keys(meta).length > 0 ? meta : null;
 }
 
 /** Build an initial draft from an item's data. */
@@ -226,11 +130,6 @@ function draftsEqual(a: EditDraft, b: EditDraft): boolean {
     a.duration === b.duration &&
     a.mood === b.mood
   );
-}
-
-/** Whether the current type has type-specific metadata fields. */
-function hasTypeSpecificFields(type: string): boolean {
-  return ["bookmark", "person", "project", "event", "dream"].includes(type);
 }
 
 // ---------------------------------------------------------------------------
@@ -837,112 +736,12 @@ function EditForm({
           </label>
         </div>
 
-        {/* Type-specific metadata */}
         {hasTypeSpecificFields(draft.type) && (
-          <div className="space-y-2">
-            <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-              Details
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {draft.type === "person" && (
-                <>
-                  <Input
-                    className="col-span-2 h-7 text-xs"
-                    placeholder="Email"
-                    value={draft.email}
-                    onChange={(e) => updateField("email", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    type="email"
-                  />
-                  <Input
-                    className="h-7 text-xs"
-                    placeholder="Phone"
-                    value={draft.phoneNumber}
-                    onChange={(e) => updateField("phoneNumber", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    type="tel"
-                  />
-                  <Input
-                    className="h-7 text-xs"
-                    placeholder="Role"
-                    value={draft.role}
-                    onChange={(e) => updateField("role", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                </>
-              )}
-
-              {draft.type === "project" && (
-                <>
-                  <Input
-                    className="h-7 text-xs"
-                    placeholder="Status"
-                    value={draft.status}
-                    onChange={(e) => updateField("status", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                  <Input
-                    className="h-7 text-xs"
-                    placeholder="Repository"
-                    value={draft.repo}
-                    onChange={(e) => updateField("repo", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    type="url"
-                  />
-                  <Input
-                    className="h-7 text-xs"
-                    type="datetime-local"
-                    value={draft.started}
-                    onChange={(e) => updateField("started", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                  <Input
-                    className="h-7 text-xs"
-                    type="datetime-local"
-                    value={draft.goalEndDate}
-                    onChange={(e) => updateField("goalEndDate", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                </>
-              )}
-
-              {draft.type === "event" && (
-                <>
-                  <Input
-                    className="h-7 text-xs"
-                    type="datetime-local"
-                    value={draft.startDate}
-                    onChange={(e) => updateField("startDate", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                  <Input
-                    className="h-7 text-xs"
-                    type="datetime-local"
-                    value={draft.endDate}
-                    onChange={(e) => updateField("endDate", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                  <Input
-                    className="col-span-2 h-7 text-xs"
-                    placeholder="Duration (e.g. 2h, 90m)"
-                    value={draft.duration}
-                    onChange={(e) => updateField("duration", e.target.value)}
-                    onKeyDown={handleKeyDown}
-                  />
-                </>
-              )}
-
-              {draft.type === "dream" && (
-                <Input
-                  className="col-span-2 h-7 text-xs"
-                  placeholder="Mood"
-                  value={draft.mood}
-                  onChange={(e) => updateField("mood", e.target.value)}
-                  onKeyDown={handleKeyDown}
-                />
-              )}
-            </div>
-          </div>
+          <TypeSpecificFields
+            draft={draft}
+            updateField={updateField}
+            handleKeyDown={handleKeyDown}
+          />
         )}
 
         {/* Read-only dates */}
