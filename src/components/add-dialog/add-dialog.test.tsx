@@ -189,6 +189,8 @@ describe("AddDialog", () => {
     // Submit
     await user.click(screen.getByTestId("add-dialog-submit"));
 
+    // The debounced preview fetch may also have fired by now; find the
+    // POST /api/items call among all fetch calls.
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/items",
@@ -199,8 +201,11 @@ describe("AddDialog", () => {
       );
     });
 
-    const [[, callInit]] = fetchMock.mock.calls as [[string, RequestInit]];
-    const body = JSON.parse(callInit.body as string);
+    const itemsCall = fetchMock.mock.calls.find(
+      (call: unknown[]) => (call[0] as string) === "/api/items"
+    ) as [string, RequestInit] | undefined;
+    expect(itemsCall).toBeDefined();
+    const body = JSON.parse(itemsCall![1].body as string);
 
     expect(body).toEqual({
       type: "bookmark",
