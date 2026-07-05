@@ -254,45 +254,105 @@ export function EditDialog({
   onSaved,
 }: EditDialogProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+
+  const handleClose = useCallback(() => {
+    if (hasChanges) {
+      setShowUnsavedWarning(true);
+    } else {
+      onOpenChange(false);
+    }
+  }, [hasChanges, onOpenChange]);
+
+  const handleConfirmClose = useCallback(() => {
+    setShowUnsavedWarning(false);
+    onOpenChange(false);
+  }, [onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPortal>
-        <DialogOverlay />
-        <DialogPrimitive.Popup
-          className={cn(
-            "bg-popover text-popover-foreground border-border fixed z-50 flex flex-col overflow-hidden border p-4 outline-none",
-            // Mobile (< 768px): full screen
-            "top-0 right-0 bottom-0 left-0 rounded-none",
-            // Desktop (≥ 768px): centered modal — size varies by expanded state
-            isExpanded
-              ? "md:top-1/2 md:right-auto md:bottom-auto md:left-1/2 md:max-h-[90vh] md:w-[min(56rem,calc(100%-3rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl"
-              : "md:top-1/2 md:right-auto md:bottom-auto md:left-1/2 md:max-h-[70vh] md:w-[min(36rem,calc(100%-3rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl"
-          )}
-        >
-          <EditForm
-            item={item}
-            initialTags={initialTags}
-            onClose={() => onOpenChange(false)}
-            onSaved={onSaved}
-            isExpanded={isExpanded}
-            onToggleExpand={() => setIsExpanded((v) => !v)}
-          />
-          <DialogClose
-            render={
-              <Button
-                variant="ghost"
-                className="absolute top-3 right-3"
-                size="icon-sm"
-              />
-            }
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            handleClose();
+          } else {
+            onOpenChange(true);
+          }
+        }}
+      >
+        <DialogPortal>
+          <DialogOverlay />
+          <DialogPrimitive.Popup
+            className={cn(
+              "bg-popover text-popover-foreground border-border fixed z-50 flex flex-col overflow-hidden border p-4 outline-none",
+              // Mobile (< 768px): full screen
+              "top-0 right-0 bottom-0 left-0 rounded-none",
+              // Desktop (≥ 768px): centered modal — size varies by expanded state
+              isExpanded
+                ? "md:top-1/2 md:right-auto md:bottom-auto md:left-1/2 md:max-h-[90vh] md:w-[min(56rem,calc(100%-3rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl"
+                : "md:top-1/2 md:right-auto md:bottom-auto md:left-1/2 md:max-h-[70vh] md:w-[min(36rem,calc(100%-3rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl"
+            )}
           >
-            <XIcon />
-            <span className="sr-only">Close</span>
-          </DialogClose>
-        </DialogPrimitive.Popup>
-      </DialogPortal>
-    </Dialog>
+            <EditForm
+              item={item}
+              initialTags={initialTags}
+              onClose={handleClose}
+              onSaved={onSaved}
+              isExpanded={isExpanded}
+              onToggleExpand={() => setIsExpanded((v) => !v)}
+              hasChanges={hasChanges}
+              onHasChangesChange={setHasChanges}
+            />
+            <DialogClose
+              render={
+                <Button
+                  variant="ghost"
+                  className="absolute top-3 right-3"
+                  size="icon-sm"
+                />
+              }
+              onClick={handleClose}
+            >
+              <XIcon />
+              <span className="sr-only">Close</span>
+            </DialogClose>
+          </DialogPrimitive.Popup>
+        </DialogPortal>
+      </Dialog>
+
+      {/* Unsaved changes warning dialog */}
+      <Dialog open={showUnsavedWarning} onOpenChange={setShowUnsavedWarning}>
+        <DialogPortal>
+          <DialogOverlay />
+          <DialogPrimitive.Popup
+            className={cn(
+              "bg-popover text-popover-foreground border-border fixed top-1/2 left-1/2 z-[60] w-[min(24rem,calc(100%-3rem))] -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6 shadow-lg outline-none"
+            )}
+          >
+            <DialogHeader className="mb-4">
+              <DialogTitle className="text-lg">Discard changes?</DialogTitle>
+            </DialogHeader>
+            <p className="text-muted-foreground mb-6 text-sm">
+              You have unsaved changes. Are you sure you want to close? Your
+              changes will be lost.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowUnsavedWarning(false)}
+              >
+                Keep editing
+              </Button>
+              <Button variant="destructive" onClick={handleConfirmClose}>
+                Discard
+              </Button>
+            </div>
+          </DialogPrimitive.Popup>
+        </DialogPortal>
+      </Dialog>
+    </>
   );
 }
 
@@ -307,6 +367,8 @@ function EditForm({
   onSaved,
   isExpanded,
   onToggleExpand,
+  hasChanges,
+  onHasChangesChange,
 }: {
   item: ContentItem;
   initialTags: Tag[];
@@ -314,12 +376,13 @@ function EditForm({
   onSaved?: () => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
+  hasChanges: boolean;
+  onHasChangesChange: (hasChanges: boolean) => void;
 }) {
   const [draft, setDraft] = useState<EditDraft>(() =>
     draftFromItem(item, initialTags)
   );
   const [showPreview, setShowPreview] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
   const mountedRef = useRef(true);
@@ -346,7 +409,7 @@ function EditForm({
     initialDraftRef.current = fresh;
     startTransition(() => {
       setDraft(fresh);
-      setHasChanges(false);
+      onHasChangesChange(false);
       setShowPreview(false);
     });
   }, [item.id, item.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -448,7 +511,7 @@ function EditForm({
       queryClient.invalidateQueries({ queryKey: queryKeys.browse.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.tags.all });
 
-      setHasChanges(false);
+      onHasChangesChange(false);
       toast.success("Item updated.");
       onSaved?.();
       onClose();
@@ -463,15 +526,15 @@ function EditForm({
       setDraft((prev) => {
         const next = { ...prev, [field]: value };
         if (!draftsEqual(next, initialDraftRef.current)) {
-          setHasChanges(true);
+          onHasChangesChange(true);
         } else {
-          setHasChanges(false);
+          onHasChangesChange(false);
         }
         return next;
       });
       if (mutation.error) mutation.reset();
     },
-    [mutation]
+    [mutation, onHasChangesChange]
   );
 
   const handleSubmit = useCallback(() => {
@@ -545,7 +608,7 @@ function EditForm({
     [tagInput, addTag, removeTag, draft.tags]
   );
 
-  const submitDisabled = mutation.isPending;
+  const submitDisabled = mutation.isPending || !hasChanges;
   const error = mutation.error ? mutation.error.message : null;
 
   return (
@@ -896,12 +959,14 @@ function EditForm({
         <span className="text-muted-foreground mr-auto hidden text-xs md:inline">
           Ctrl+Enter to save
         </span>
-        <DialogClose
-          render={<Button type="button" variant="outline" />}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
           disabled={mutation.isPending}
         >
           Cancel
-        </DialogClose>
+        </Button>
         <Button
           variant="inverted"
           onClick={handleSubmit}
