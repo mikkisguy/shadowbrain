@@ -169,6 +169,14 @@ export async function POST(request: Request) {
     const sourceUrl =
       parsed.data.source_url ?? (fetchOutcome?.metadata.url || null) ?? null;
 
+    // For bookmarks, if the user didn't provide a title, use the fetched
+    // og:title. This ensures the item has a meaningful title instead of
+    // just the URL. The user can still override by passing a title.
+    const title =
+      parsed.data.title ??
+      (isBookmark && fetchOutcome?.ok ? fetchOutcome.metadata.title : null) ??
+      null;
+
     // Visibility flags are admin-only. The proxy already gates every
     // request reaching this route, so the `auth.ok` branch above is
     // the "authenticated" path; the body fields are trusted.
@@ -179,7 +187,7 @@ export async function POST(request: Request) {
       contentItems.create(db, {
         id,
         type: parsed.data.type,
-        title: parsed.data.title ?? null,
+        title,
         content: parsed.data.content,
         source: parsed.data.source ?? "manual",
         source_url: sourceUrl,

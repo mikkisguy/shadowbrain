@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import type { BookmarkMetadata } from "@/lib/metadata-fetcher";
 import { useAddDialog } from "./use-add-dialog";
 
 // ---------------------------------------------------------------------------
@@ -256,6 +257,78 @@ function AddForm({
     };
   }, []);
 
+  // ---- Bookmark preview state ----
+
+  const [previewMetadata, setPreviewMetadata] =
+    useState<BookmarkMetadata | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Fire the preview fetch immediately (used on blur). */
+  const triggerPreviewFetch = useCallback(async (url: string) => {
+    if (!url) return;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewMetadata(null);
+    try {
+      const res = await fetch(
+        `/api/bookmarks/preview?url=${encodeURIComponent(url)}`
+      );
+      const data = await res.json();
+      if (data.ok) {
+        setPreviewMetadata(data.metadata);
+        // Pre-fill title from metadata when the user hasn't typed one.
+        setDraft((prev) => {
+          if (!prev.title.trim() && data.metadata.title) {
+            const next = { ...prev, title: data.metadata.title };
+            draftRef.current = next;
+            return next;
+          }
+          return prev;
+        });
+      } else {
+        setPreviewError(data.reason ?? "Could not preview this URL");
+      }
+    } catch {
+      setPreviewError("Network error");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, []);
+
+  /** Debounced preview fetch — waits 500ms after the last URL change. */
+  useEffect(() => {
+    // Only fetch preview for bookmark type
+    if (draft.type !== "bookmark") return;
+
+    const url = draft.sourceUrl.trim();
+    if (!url) return;
+
+    // Basic URL sanity check — reject obviously invalid URLs without
+    // hitting the server.
+    try {
+      new URL(url);
+    } catch {
+      return;
+    }
+
+    // Cancel any pending debounce.
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+    }
+
+    previewTimeoutRef.current = setTimeout(() => {
+      triggerPreviewFetch(url);
+    }, 500);
+
+    return () => {
+      if (previewTimeoutRef.current) {
+        clearTimeout(previewTimeoutRef.current);
+      }
+    };
+  }, [draft.sourceUrl, draft.type, triggerPreviewFetch]);
+
   // Re-initialise from the persisted draft every time the form mounts
   // (dialog opens), so a prior close-then-reopen picks up any unsaved
   // content. The initial render starts with an empty draft; this effect
@@ -298,6 +371,22 @@ function AddForm({
       // are present in the API's per-type metadata schemas are
       // included; the superRefine in route.ts will validate them.
       const meta: Record<string, unknown> = {};
+
+      // For bookmarks, include the preview metadata if available.
+      // This preserves the metadata fetched during preview (which may
+      // have been more complete than what the API re-fetches, especially
+      // for JavaScript-heavy sites like YouTube).
+      if (draftToSubmit.type === "bookmark" && previewMetadata) {
+        if (previewMetadata.title) meta.title = previewMetadata.title;
+        if (previewMetadata.description)
+          meta.description = previewMetadata.description;
+        if (previewMetadata.favicon) meta.favicon = previewMetadata.favicon;
+        if (previewMetadata.site_name)
+          meta.site_name = previewMetadata.site_name;
+        if (previewMetadata.image) meta.image = previewMetadata.image;
+        if (previewMetadata.url) meta.url = previewMetadata.url;
+      }
+
       if (draftToSubmit.type === "person") {
         if (draftToSubmit.email.trim()) meta.email = draftToSubmit.email;
         if (draftToSubmit.phoneNumber.trim())
@@ -370,6 +459,15 @@ function AddForm({
     }
   }
 
+  /** Handle bookmark URL change — also resets preview state. */
+  function handleSourceUrlChange(value: string) {
+    updateField("sourceUrl", value);
+    // Reset preview state immediately so stale data doesn't linger
+    setPreviewMetadata(null);
+    setPreviewError(null);
+    setPreviewLoading(false);
+  }
+
   const handleSubmit = useCallback(() => {
     if (!canSubmit(draft) || mutation.isPending) return;
     mutation.mutate(draft);
@@ -400,7 +498,15 @@ function AddForm({
           <Select
             value={draft.type}
             onValueChange={(v) => {
-              if (v) updateField("type", v);
+              if (v) {
+                updateField("type", v);
+                // Clear preview state when switching away from bookmark
+                if (v !== "bookmark") {
+                  setPreviewMetadata(null);
+                  setPreviewError(null);
+                  setPreviewLoading(false);
+                }
+              }
             }}
             items={TYPE_ITEMS}
           >
@@ -470,15 +576,106 @@ function AddForm({
             </p>
             <div className="grid grid-cols-2 gap-2">
               {draft.type === "bookmark" && (
-                <Input
-                  data-testid="add-dialog-bookmark-url"
-                  className="col-span-2 h-7 text-xs"
-                  placeholder="URL"
-                  value={draft.sourceUrl}
-                  onChange={(e) => updateField("sourceUrl", e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  type="url"
-                />
+                <>
+                  <Input
+                    data-testid="add-dialog-bookmark-url"
+                    className="col-span-2 h-7 text-xs"
+                    placeholder="URL"
+                    value={draft.sourceUrl}
+                    onChange={(e) => handleSourceUrlChange(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onBlur={() => {
+                      // Flush the debounce immediately on blur.
+                      const url = draft.sourceUrl.trim();
+                      if (!url) return;
+                      if (previewTimeoutRef.current) {
+                        clearTimeout(previewTimeoutRef.current);
+                        previewTimeoutRef.current = null;
+                      }
+                      triggerPreviewFetch(url);
+                    }}
+                    type="url"
+                  />
+
+                  {/* ---- Bookmark preview card ---- */}
+                  {previewLoading && (
+                    <div className="bg-muted/30 text-muted-foreground col-span-2 flex items-center gap-2 rounded-lg border p-3 text-xs">
+                      <svg
+                        className="size-3.5 animate-spin"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        />
+                      </svg>
+                      Loading preview…
+                    </div>
+                  )}
+
+                  {previewError && !previewLoading && (
+                    <div className="bg-muted/30 text-muted-foreground col-span-2 flex items-center gap-2 rounded-lg border p-3 text-xs">
+                      <svg
+                        className="size-3.5 shrink-0"
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <span>Preview unavailable</span>
+                    </div>
+                  )}
+
+                  {previewMetadata && !previewLoading && (
+                    <div
+                      data-testid="add-dialog-bookmark-preview"
+                      className="bg-muted/30 col-span-2 flex items-start gap-3 rounded-lg border p-3"
+                    >
+                      {previewMetadata.favicon && (
+                        <img
+                          src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(previewMetadata.favicon)}`}
+                          alt=""
+                          className="mt-0.5 size-4 shrink-0 rounded"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {previewMetadata.title || draft.title || "Untitled"}
+                        </p>
+                        {previewMetadata.description && (
+                          <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                            {previewMetadata.description}
+                          </p>
+                        )}
+                        {previewMetadata.site_name && (
+                          <p className="text-muted-foreground mt-1 text-[10px]">
+                            {previewMetadata.site_name}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {draft.type === "person" && (

@@ -398,7 +398,18 @@ export async function validateFetchUrl(
 
   // Build a lookup callback that re-resolves and re-validates at connect
   // time, closing the DNS rebinding window.
-  const safeLookup: LookupFunction = (lookupHostname, _opts, cb) => {
+  // The LookupFunction type is overloaded: when options.all is true, the
+  // callback expects (err, addresses[]); otherwise (err, address, family).
+  // We handle both cases to ensure compatibility with all callers.
+  const safeLookup = ((
+    lookupHostname: string,
+    opts: number | { family?: number; hints?: number; all?: boolean },
+    cb: (
+      err: Error | null,
+      addressOrAddresses: string | Array<{ address: string; family: number }>,
+      family?: number
+    ) => void
+  ) => {
     resolveBounded(lookupHostname)
       .then((recs) => {
         if (recs.length === 0) {
@@ -420,17 +431,27 @@ export async function validateFetchUrl(
             return;
           }
         }
-        // Prefer IPv4 results regardless of the caller's family
-        // preference — IPv4 is universally reachable and avoids the
-        // rare case where the remote has a misconfigured AAAA.
-        const v4 = recs.find((r) => r.family === 4);
-        const chosen = v4 ?? recs[0]!;
-        cb(null, chosen.ip, chosen.family);
+        // Check if caller wants all addresses (options.all === true)
+        const allMode = typeof opts === "object" && opts.all === true;
+        if (allMode) {
+          // Return all addresses in the array format
+          cb(
+            null,
+            recs.map((r) => ({ address: r.ip, family: r.family }))
+          );
+        } else {
+          // Prefer IPv4 results regardless of the caller's family
+          // preference — IPv4 is universally reachable and avoids the
+          // rare case where the remote has a misconfigured AAAA.
+          const v4 = recs.find((r) => r.family === 4);
+          const chosen = v4 ?? recs[0]!;
+          cb(null, chosen.ip, chosen.family);
+        }
       })
       .catch((err: unknown) => {
         cb(err instanceof Error ? err : new Error(String(err)), "", 0);
       });
-  };
+  }) as LookupFunction;
 
   return { ok: true, url: parsed, safeLookup };
 }

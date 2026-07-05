@@ -333,12 +333,46 @@ describe("/api/items bookmark auto-fetch", () => {
 
     expect(json.type).toBe("bookmark");
     expect(json.source_url).toBe("https://example.com/article");
+    // The item's title should be populated from the fetched og:title
+    // when the user didn't provide one.
+    expect(json.title).toBe("Real Title");
     const md = JSON.parse(json.metadata);
     expect(md.title).toBe("Real Title");
     expect(md.description).toBe("Real Desc");
     expect(md.favicon).toBe("https://example.com/f.ico");
     expect(md.url).toBe("https://example.com/article");
     expect(mockFetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses user-provided title over fetched og:title for bookmarks", async () => {
+    mockFetcher.mockResolvedValue({
+      ok: true,
+      metadata: {
+        url: "https://example.com/article",
+        title: "Fetched Title",
+        description: null,
+        favicon: null,
+        site_name: null,
+        image: null,
+        fetched_at: "2026-06-20T00:00:00.000Z",
+      },
+    });
+
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "bookmark",
+        content: "https://example.com/article",
+        title: "User Title",
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+
+    // User-provided title should win over fetched og:title
+    expect(json.title).toBe("User Title");
   });
 
   it("still saves the bookmark when the fetcher fails (graceful fallback)", async () => {

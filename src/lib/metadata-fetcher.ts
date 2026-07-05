@@ -58,6 +58,13 @@ export interface FetchOptions {
   dnsTimeoutMs?: number;
   /** Response body cap in bytes. */
   maxBytes?: number;
+  /**
+   * When true, only read the `<head>` section (stop at `</head>`).
+   * Metadata (og:title, description, favicon) lives in `<head>`, so
+   * this avoids downloading megabytes of `<body>` for large pages.
+   * Defaults to false for backward compatibility.
+   */
+  headOnly?: boolean;
 }
 
 // Re-export HostRecord for backward compatibility with test imports
@@ -170,6 +177,7 @@ export async function safeFetchHtml(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const dnsTimeoutMs = options.dnsTimeoutMs ?? DEFAULT_DNS_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
+  const headOnly = options.headOnly ?? false;
 
   let currentUrl: URL;
   if (typeof url === "string") {
@@ -247,7 +255,11 @@ export async function safeFetchHtml(
       throw new FetchError("non-HTML response");
     }
     try {
-      return await readCappedBody(res.body, maxBytes);
+      // Use headOnly mode for metadata extraction — stops at </head>
+      // to avoid downloading megabytes of <body> content.
+      return await (headOnly
+        ? readHeadSection(res.body, maxBytes)
+        : readCappedBody(res.body, maxBytes));
     } catch (err) {
       res.body.destroy();
       throw err;
@@ -368,6 +380,49 @@ async function readCappedBody(
     }
     chunks.push(buf);
   }
+  return Buffer.concat(chunks).toString("utf-8");
+}
+
+/**
+ * Read only the `<head>` section of an HTML document. Metadata (og:title,
+ * og:description, favicon, etc.) lives in `<head>`, so we can stop reading
+ * once we hit `</head>` — this avoids downloading megabytes of `<body>`
+ * content for large pages like YouTube.
+ *
+ * Falls back to reading up to `maxBytes` if `</head>` is never found
+ * (malformed HTML or non-HTML response).
+ */
+async function readHeadSection(
+  body: Readable,
+  maxBytes: number
+): Promise<string> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  let accumulated = "";
+
+  for await (const chunk of body) {
+    const buf = Buffer.isBuffer(chunk)
+      ? chunk
+      : Buffer.from(chunk as Uint8Array);
+    total += buf.byteLength;
+    if (total > maxBytes) {
+      throw new FetchError("response body too large");
+    }
+    chunks.push(buf);
+
+    // Build a running string — avoids O(n²) Buffer.concat on every chunk.
+    accumulated += buf.toString("utf-8");
+
+    // Search for </head> directly. The risk of </head> appearing inside
+    // a script/style block is low, and early truncation still captures
+    // meta tags that appear before the script/style block.
+    const headEndMatch = accumulated.match(/<\/head[^>]*>/i);
+    if (headEndMatch && headEndMatch.index !== undefined) {
+      return accumulated.slice(0, headEndMatch.index + headEndMatch[0].length);
+    }
+  }
+
+  // If we didn't find </head>, return what we have (up to maxBytes)
   return Buffer.concat(chunks).toString("utf-8");
 }
 
@@ -598,7 +653,12 @@ export async function fetchBookmarkMetadata(
 
   let html: string;
   try {
-    html = await safeFetchHtml(url, options);
+    // Default to headOnly mode for metadata extraction — metadata
+    // (og:title, description, favicon) lives in <head>, so we don't
+    // need to download the entire <body>. This is critical for large
+    // pages like YouTube (several MB). Callers can override by passing
+    // headOnly: false explicitly.
+    html = await safeFetchHtml(url, { headOnly: true, ...options });
   } catch (err) {
     const reason = err instanceof Error ? err.message : "fetch failed";
     return {

@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { getDb, contentItems, contentLinks } from "@/db/index";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
 import { formatAbsolute } from "@/lib/dates";
-import { extractMetadataFields } from "@/lib/metadata-fields";
+import {
+  extractMetadataFields,
+  parseBookmarkMeta,
+} from "@/lib/metadata-fields";
 
 import { CoverBackground } from "./cover-background";
 import { DetailLayout } from "./detail-layout";
@@ -73,6 +76,10 @@ export default async function ItemDetailPage({
       ? `/api/images/${item.image_path.replace(/^\/+/, "")}`
       : null;
 
+  // Parse bookmark metadata for rich display (favicon, og:image).
+  const isBookmark = item.type === "bookmark";
+  const bookmarkMeta = isBookmark ? parseBookmarkMeta(item.metadata) : null;
+
   return (
     <>
       {coverImageUrl ? <CoverBackground imageUrl={coverImageUrl} /> : null}
@@ -123,6 +130,18 @@ export default async function ItemDetailPage({
             </dl>
           </header>
 
+          {/* Bookmark: show og:image as a preview image */}
+          {bookmarkMeta?.image ? (
+            <figure className="flex flex-col gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(bookmarkMeta.image)}`}
+                alt={item.title ?? ""}
+                className="border-border h-auto max-w-full rounded-sm border"
+              />
+            </figure>
+          ) : null}
+
           {/* Image-type items: show the image inline in the content area */}
           {inlineImageUrl ? (
             <figure className="flex flex-col gap-2">
@@ -161,10 +180,12 @@ export default async function ItemDetailPage({
                 <dl className="text-sm">
                   {fields.map((f) => (
                     <div key={f.label} className="flex gap-4 py-0.5">
-                      <dt className="text-muted-foreground min-w-[5rem] font-medium">
+                      <dt className="text-muted-foreground min-w-20 font-medium">
                         {f.label}
                       </dt>
-                      <dd className="text-foreground break-words">{f.value}</dd>
+                      <dd className="text-foreground wrap-break-word">
+                        {f.value}
+                      </dd>
                     </div>
                   ))}
                 </dl>
@@ -172,8 +193,17 @@ export default async function ItemDetailPage({
             );
           })()}
 
-          {item.source_url ? (
-            <p className="font-sans text-sm">
+          {/* Source URL with favicon */}
+          {item.source_url && item.source_url !== item.content ? (
+            <p className="text-foreground flex items-center gap-2 font-sans text-sm">
+              {bookmarkMeta?.favicon ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(bookmarkMeta.favicon)}`}
+                  alt=""
+                  className="size-4 shrink-0 rounded"
+                />
+              ) : null}
               <a
                 href={item.source_url}
                 rel="noopener noreferrer"
@@ -182,6 +212,11 @@ export default async function ItemDetailPage({
               >
                 {item.source_url}
               </a>
+              {bookmarkMeta?.siteName ? (
+                <span className="text-muted-foreground">
+                  ({bookmarkMeta.siteName})
+                </span>
+              ) : null}
             </p>
           ) : null}
         </DetailLayout>
