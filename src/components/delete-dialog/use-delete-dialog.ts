@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 /**
  * Per-instance delete dialog state.
@@ -17,5 +17,10 @@ export function useDeleteDialog() {
 
   const stableSetOpen = useCallback((next: boolean) => setOpen(next), []);
 
-  return { open, setOpen: stableSetOpen };
+  const value = useMemo(
+    () => ({ open, setOpen: stableSetOpen }),
+    [open, stableSetOpen]
+  );
+
+  return value;
 }

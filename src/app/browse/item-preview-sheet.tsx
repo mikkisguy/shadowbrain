@@ -279,8 +279,8 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
       setDeleteOpen(false);
       onClose();
     },
-    onError: () => {
-      toast.error("Failed to delete item.");
+    onError: (error: Error) => {
+      toast.error(error.message ?? "Failed to delete item.");
     },
   });
 

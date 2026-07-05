@@ -58,8 +58,8 @@ export function ItemEditor({ item, tags }: ItemEditorProps) {
       deleteDialog.setOpen(false);
       router.push("/");
     },
-    onError: () => {
-      toast.error("Failed to delete item.");
+    onError: (error: Error) => {
+      toast.error(error.message ?? "Failed to delete item.");
     },
   });
 
