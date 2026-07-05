@@ -3,6 +3,34 @@ export type MetadataField = {
   value: string;
 };
 
+/** Parsed bookmark metadata for rich display (images, description, site). */
+export interface BookmarkMeta {
+  favicon: string | null;
+  image: string | null;
+  description: string | null;
+  siteName: string | null;
+}
+
+/** Parse a bookmark's stored metadata JSON into a typed object. */
+export function parseBookmarkMeta(
+  metadata: string | null
+): BookmarkMeta | null {
+  if (!metadata) return null;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(metadata);
+  } catch {
+    return null;
+  }
+  return {
+    favicon: typeof parsed.favicon === "string" ? parsed.favicon : null,
+    image: typeof parsed.image === "string" ? parsed.image : null,
+    description:
+      typeof parsed.description === "string" ? parsed.description : null,
+    siteName: typeof parsed.site_name === "string" ? parsed.site_name : null,
+  };
+}
+
 export function extractMetadataFields(
   type: string,
   metadata: string | null,
@@ -20,6 +48,27 @@ export function extractMetadataFields(
   const fields: MetadataField[] = [];
 
   switch (type) {
+    case "bookmark": {
+      const description = parsed.description;
+      if (typeof description === "string" && description.trim()) {
+        fields.push({ label: "Description", value: description.trim() });
+      }
+      const siteName = parsed.site_name;
+      if (typeof siteName === "string" && siteName.trim()) {
+        fields.push({ label: "Site", value: siteName.trim() });
+      }
+      const autoFetch = parsed.auto_fetch;
+      if (autoFetch && typeof autoFetch === "object") {
+        const af = autoFetch as Record<string, unknown>;
+        if (af.status === "error") {
+          fields.push({
+            label: "Auto-fetch",
+            value: `Failed: ${String(af.reason ?? "unknown")}`,
+          });
+        }
+      }
+      break;
+    }
     case "person": {
       const email = parsed.email;
       if (typeof email === "string" && email.trim()) {

@@ -371,6 +371,22 @@ function AddForm({
       // are present in the API's per-type metadata schemas are
       // included; the superRefine in route.ts will validate them.
       const meta: Record<string, unknown> = {};
+
+      // For bookmarks, include the preview metadata if available.
+      // This preserves the metadata fetched during preview (which may
+      // have been more complete than what the API re-fetches, especially
+      // for JavaScript-heavy sites like YouTube).
+      if (draftToSubmit.type === "bookmark" && previewMetadata) {
+        if (previewMetadata.title) meta.title = previewMetadata.title;
+        if (previewMetadata.description)
+          meta.description = previewMetadata.description;
+        if (previewMetadata.favicon) meta.favicon = previewMetadata.favicon;
+        if (previewMetadata.site_name)
+          meta.site_name = previewMetadata.site_name;
+        if (previewMetadata.image) meta.image = previewMetadata.image;
+        if (previewMetadata.url) meta.url = previewMetadata.url;
+      }
+
       if (draftToSubmit.type === "person") {
         if (draftToSubmit.email.trim()) meta.email = draftToSubmit.email;
         if (draftToSubmit.phoneNumber.trim())

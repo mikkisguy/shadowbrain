@@ -23,7 +23,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
 import { formatAbsolute } from "@/lib/dates";
-import { extractMetadataFields } from "@/lib/metadata-fields";
+import {
+  extractMetadataFields,
+  parseBookmarkMeta,
+} from "@/lib/metadata-fields";
 import { queryKeys } from "@/lib/query-config";
 import {
   Sheet,
@@ -362,6 +365,10 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
   const links = data?.links;
   const isImageType = item?.type === "image";
 
+  // Parse bookmark metadata for rich display
+  const bm =
+    item?.type === "bookmark" ? parseBookmarkMeta(item.metadata) : null;
+
   return (
     <>
       <Sheet open={open} onOpenChange={handleOpenChange}>
@@ -473,15 +480,35 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                   </dl>
                 </header>
 
+                {/* Bookmark: og:image preview */}
+                {bm?.image ? (
+                  <figure className="flex flex-col gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/api/bookmarks/favicon?url=${encodeURIComponent(bm.image)}`}
+                      alt={item.title ?? ""}
+                      className="border-border h-auto max-w-full rounded-sm border"
+                    />
+                  </figure>
+                ) : null}
+
                 {/* Markdown body */}
                 <MarkdownContent content={item.content} />
 
                 {/* Type-specific metadata */}
                 <MetadataSection type={item.type} metadata={item.metadata} />
 
-                {/* Source URL */}
-                {item.source_url ? (
-                  <p className="font-sans text-sm">
+                {/* Source URL with favicon */}
+                {item.source_url && item.source_url !== item.content ? (
+                  <p className="text-foreground flex items-center gap-2 font-sans text-sm">
+                    {bm?.favicon ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={`/api/bookmarks/favicon?url=${encodeURIComponent(bm.favicon)}`}
+                        alt=""
+                        className="size-4 shrink-0 rounded"
+                      />
+                    ) : null}
                     <a
                       href={item.source_url}
                       rel="noopener noreferrer"
@@ -490,6 +517,11 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                     >
                       {item.source_url}
                     </a>
+                    {bm?.siteName ? (
+                      <span className="text-muted-foreground">
+                        ({bm.siteName})
+                      </span>
+                    ) : null}
                   </p>
                 ) : null}
               </div>
