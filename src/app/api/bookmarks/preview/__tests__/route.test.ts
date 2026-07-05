@@ -110,7 +110,9 @@ describe("GET /api/bookmarks/preview", () => {
     );
     await GET(req);
 
-    expect(mockSafeFetchHtml).toHaveBeenCalledWith("https://example.com");
+    expect(mockSafeFetchHtml).toHaveBeenCalledWith("https://example.com", {
+      headOnly: true,
+    });
   });
 
   it("calls extractBookmarkMetadata with the fetched HTML", async () => {

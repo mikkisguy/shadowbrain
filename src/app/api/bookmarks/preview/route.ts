@@ -44,7 +44,10 @@ export async function GET(request: Request) {
 
     let html: string;
     try {
-      html = await safeFetchHtml(url);
+      // Only read the <head> section — metadata (og:title, description,
+      // favicon) lives there, so we don't need to download the entire
+      // <body>. This is critical for large pages like YouTube (several MB).
+      html = await safeFetchHtml(url, { headOnly: true });
     } catch (err) {
       const reason = err instanceof Error ? err.message : "fetch failed";
       return Response.json({
