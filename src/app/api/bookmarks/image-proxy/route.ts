@@ -16,15 +16,15 @@ const querySchema = z.object({
 });
 
 /**
- * GET /api/bookmarks/favicon?url=...
+ * GET /api/bookmarks/image-proxy?url=...
  *
- * Proxies an external favicon through our origin so the browser's CSP
- * (which restricts img-src to 'self') doesn't block it. The URL is
- * validated through the SSRF guard before fetching, preventing the
- * endpoint from being used to probe internal services.
+ * Proxies an external image (favicon, og:image, etc.) through our origin
+ * so the browser's CSP (which restricts img-src to 'self') doesn't block
+ * it. The URL is validated through the SSRF guard before fetching,
+ * preventing the endpoint from being used to probe internal services.
  *
- * Returns the favicon image with appropriate Content-Type and cache
- * headers. Failures return 404 (not found) or 400 (invalid URL).
+ * Returns the image with appropriate Content-Type and cache headers.
+ * Failures return 404 (not found) or 400 (invalid URL).
  */
 export async function GET(request: Request) {
   const auth = await requireAuthenticated(request);
@@ -47,19 +47,19 @@ export async function GET(request: Request) {
       return errorResponse("VALIDATION_ERROR", "Invalid URL", 400);
     }
 
-    // Fetch the favicon
-    const faviconUrl = validation.url;
+    // Fetch the image
+    const imageUrl = validation.url;
     const protocol =
-      faviconUrl.protocol === "https:" ? httpsRequest : httpRequest;
+      imageUrl.protocol === "https:" ? httpsRequest : httpRequest;
 
     const requestOptions: HttpRequestOptions | HttpsRequestOptions = {
       method: "GET",
-      protocol: faviconUrl.protocol,
-      hostname: faviconUrl.hostname,
-      port: faviconUrl.port || (faviconUrl.protocol === "https:" ? 443 : 80),
-      path: `${faviconUrl.pathname}${faviconUrl.search}`,
+      protocol: imageUrl.protocol,
+      hostname: imageUrl.hostname,
+      port: imageUrl.port || (imageUrl.protocol === "https:" ? 443 : 80),
+      path: `${imageUrl.pathname}${imageUrl.search}`,
       headers: {
-        Host: faviconUrl.host,
+        Host: imageUrl.host,
         "User-Agent": "ShadowBrain/1.0 (+bookmark-metadata)",
         Accept: "image/*,*/*;q=0.8",
       },
@@ -81,13 +81,13 @@ export async function GET(request: Request) {
           res.headers["content-type"] ?? "application/octet-stream";
         const chunks: Buffer[] = [];
         let size = 0;
-        const maxSize = 256 * 1024; // 256KB limit for favicons
+        const maxSize = 256 * 1024; // 256KB limit
 
         res.on("data", (chunk: Buffer) => {
           size += chunk.length;
           if (size > maxSize) {
             res.destroy();
-            rejectReq(new Error("favicon too large"));
+            rejectReq(new Error("image too large"));
             return;
           }
           chunks.push(chunk);
@@ -110,7 +110,7 @@ export async function GET(request: Request) {
       req.end();
     });
 
-    // Cache for 1 day (favicons don't change often)
+    // Cache for 1 day (images don't change often)
     return new Response(new Uint8Array(image.buffer), {
       status: 200,
       headers: {
@@ -126,9 +126,12 @@ export async function GET(request: Request) {
         error.message.includes("timeout") ||
         error.message.includes("too large"))
     ) {
-      return errorResponse("NOT_FOUND", "Favicon not found", 404);
+      return errorResponse("NOT_FOUND", "Image not found", 404);
     }
-    logServerError(error, { route: "/api/bookmarks/favicon", method: "GET" });
-    return errorResponse("INTERNAL_ERROR", "Failed to fetch favicon", 500);
+    logServerError(error, {
+      route: "/api/bookmarks/image-proxy",
+      method: "GET",
+    });
+    return errorResponse("INTERNAL_ERROR", "Failed to fetch image", 500);
   }
 }

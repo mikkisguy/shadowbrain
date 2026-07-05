@@ -485,7 +485,7 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                   <figure className="flex flex-col gap-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={`/api/bookmarks/favicon?url=${encodeURIComponent(bm.image)}`}
+                      src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(bm.image)}`}
                       alt={item.title ?? ""}
                       className="border-border h-auto max-w-full rounded-sm border"
                     />
@@ -504,7 +504,7 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                     {bm?.favicon ? (
                       /* eslint-disable-next-line @next/next/no-img-element */
                       <img
-                        src={`/api/bookmarks/favicon?url=${encodeURIComponent(bm.favicon)}`}
+                        src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(bm.favicon)}`}
                         alt=""
                         className="size-4 shrink-0 rounded"
                       />

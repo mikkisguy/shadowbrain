@@ -135,7 +135,7 @@ export default async function ItemDetailPage({
             <figure className="flex flex-col gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`/api/bookmarks/favicon?url=${encodeURIComponent(bookmarkMeta.image)}`}
+                src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(bookmarkMeta.image)}`}
                 alt={item.title ?? ""}
                 className="border-border h-auto max-w-full rounded-sm border"
               />
@@ -199,7 +199,7 @@ export default async function ItemDetailPage({
               {bookmarkMeta?.favicon ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
-                  src={`/api/bookmarks/favicon?url=${encodeURIComponent(bookmarkMeta.favicon)}`}
+                  src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(bookmarkMeta.favicon)}`}
                   alt=""
                   className="size-4 shrink-0 rounded"
                 />
