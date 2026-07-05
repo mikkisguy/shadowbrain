@@ -389,9 +389,6 @@ async function readCappedBody(
  * once we hit `</head>` — this avoids downloading megabytes of `<body>`
  * content for large pages like YouTube.
  *
- * Strips `<script>` and `<style>` blocks before searching for `</head>`
- * to avoid matching the literal string inside inline code.
- *
  * Falls back to reading up to `maxBytes` if `</head>` is never found
  * (malformed HTML or non-HTML response).
  */
@@ -416,18 +413,12 @@ async function readHeadSection(
     // Build a running string — avoids O(n²) Buffer.concat on every chunk.
     accumulated += buf.toString("utf-8");
 
-    // Strip <script> and <style> blocks before searching for </head>
-    // to avoid matching the literal string inside inline code.
-    // Use [^>]* to match any attributes/whitespace before the closing >.
-    const stripped = accumulated
-      .replace(/<script[\s\S]*?<\/script[^>]*>/gi, "")
-      .replace(/<style[\s\S]*?<\/style[^>]*>/gi, "");
-
-    const headEndMatch = stripped.match(/<\/head\s*>/i);
+    // Search for </head> directly. The risk of </head> appearing inside
+    // a script/style block is low, and early truncation still captures
+    // meta tags that appear before the script/style block.
+    const headEndMatch = accumulated.match(/<\/head[^>]*>/i);
     if (headEndMatch && headEndMatch.index !== undefined) {
-      // Return the stripped content up to and including </head>.
-      // This is safe for metadata extraction since we only need meta tags.
-      return stripped.slice(0, headEndMatch.index + headEndMatch[0].length);
+      return accumulated.slice(0, headEndMatch.index + headEndMatch[0].length);
     }
   }
 
