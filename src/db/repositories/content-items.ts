@@ -212,6 +212,9 @@ export const contentItems = {
     updates: {
       title?: string | null;
       content?: string;
+      type?: string;
+      source?: string;
+      source_url?: string | null;
       metadata?: string | null;
       is_private?: number;
       is_hidden?: number;
@@ -228,6 +231,18 @@ export const contentItems = {
     if (updates.content !== undefined) {
       fields.push("content = ?");
       params.push(updates.content);
+    }
+    if (updates.type !== undefined) {
+      fields.push("type = ?");
+      params.push(updates.type);
+    }
+    if (updates.source !== undefined) {
+      fields.push("source = ?");
+      params.push(updates.source);
+    }
+    if (updates.source_url !== undefined) {
+      fields.push("source_url = ?");
+      params.push(updates.source_url ?? null);
     }
     if (updates.metadata !== undefined) {
       fields.push("metadata = ?");

@@ -153,6 +153,102 @@ describe("/api/items/[id]", () => {
     expect(patched.item.title).toBeNull();
   });
 
+  it("updates type, source, and source_url", async () => {
+    const createReq = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "note", content: "hello", source: "web" }),
+    });
+    const createRes = await POST(createReq);
+    const created = await createRes.json();
+
+    const patchReq = await authedRequest(
+      `http://localhost/api/items/${created.id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "bookmark",
+          source: "import",
+          source_url: "https://example.com",
+        }),
+      }
+    );
+    const patchRes = await PATCH(patchReq, {
+      params: Promise.resolve({ id: created.id }),
+    });
+    const patched = await patchRes.json();
+    expect(patched.item.type).toBe("bookmark");
+    expect(patched.item.source).toBe("import");
+    expect(patched.item.source_url).toBe("https://example.com");
+  });
+
+  it("syncs tags: creates new tags and removes old ones", async () => {
+    const createReq = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "note", content: "hello", source: "web" }),
+    });
+    const createRes = await POST(createReq);
+    const created = await createRes.json();
+
+    // Add initial tags
+    const patchReq1 = await authedRequest(
+      `http://localhost/api/items/${created.id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: ["tag1", "tag2"] }),
+      }
+    );
+    await PATCH(patchReq1, { params: Promise.resolve({ id: created.id }) });
+
+    // Replace tags with a different set
+    const patchReq2 = await authedRequest(
+      `http://localhost/api/items/${created.id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: ["tag2", "tag3"] }),
+      }
+    );
+    const patchRes2 = await PATCH(patchReq2, {
+      params: Promise.resolve({ id: created.id }),
+    });
+    const patched = await patchRes2.json();
+    const tagNames = patched.tags.map((t: { name: string }) => t.name).sort();
+    expect(tagNames).toEqual(["tag2", "tag3"]);
+  });
+
+  it("clears source_url when set to null", async () => {
+    const createReq = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "bookmark",
+        content: "https://example.com",
+        source: "web",
+        source_url: "https://example.com",
+      }),
+    });
+    const createRes = await POST(createReq);
+    const created = await createRes.json();
+
+    const patchReq = await authedRequest(
+      `http://localhost/api/items/${created.id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_url: null }),
+      }
+    );
+    const patchRes = await PATCH(patchReq, {
+      params: Promise.resolve({ id: created.id }),
+    });
+    const patched = await patchRes.json();
+    expect(patched.item.source_url).toBeNull();
+  });
+
   it("returns 400 for invalid JSON body", async () => {
     const createReq = await authedRequest("http://localhost/api/items", {
       method: "POST",
