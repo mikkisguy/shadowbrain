@@ -283,10 +283,10 @@ export function EditDialog({
         }}
       >
         <DialogPortal>
-          <DialogOverlay />
+          <DialogOverlay className="z-[60]" />
           <DialogPrimitive.Popup
             className={cn(
-              "bg-popover text-popover-foreground border-border fixed z-50 flex flex-col overflow-hidden border p-4 outline-none",
+              "bg-popover text-popover-foreground border-border fixed z-[60] flex flex-col overflow-hidden border p-4 outline-none",
               // Mobile (< 768px): full screen
               "top-0 right-0 bottom-0 left-0 rounded-none",
               // Desktop (≥ 768px): centered modal — size varies by expanded state
@@ -326,10 +326,10 @@ export function EditDialog({
       {/* Unsaved changes warning dialog */}
       <Dialog open={showUnsavedWarning} onOpenChange={setShowUnsavedWarning}>
         <DialogPortal>
-          <DialogOverlay />
+          <DialogOverlay className="z-[70]" />
           <DialogPrimitive.Popup
             className={cn(
-              "bg-popover text-popover-foreground border-border fixed top-1/2 left-1/2 z-[60] w-[min(24rem,calc(100%-3rem))] -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6 shadow-lg outline-none"
+              "bg-popover text-popover-foreground border-border fixed top-1/2 left-1/2 z-[70] w-[min(24rem,calc(100%-3rem))] -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6 shadow-lg outline-none"
             )}
           >
             <DialogHeader className="mb-4">
