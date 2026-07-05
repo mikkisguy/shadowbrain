@@ -7,6 +7,7 @@ import { extractMetadataFields } from "@/lib/metadata-fields";
 
 import { CoverBackground } from "./cover-background";
 import { DetailLayout } from "./detail-layout";
+import { ItemEditor } from "./item-editor";
 import { ItemSidebar } from "./item-sidebar";
 import { MarkdownContent } from "./markdown-content";
 
@@ -84,6 +85,7 @@ export default async function ItemDetailPage({
               inbound={links.inbound}
             />
           }
+          headerActions={<ItemEditor item={item} tags={tags} />}
         >
           <header className="flex flex-col gap-3">
             {/* Coloured type badge — the chip background is the type's

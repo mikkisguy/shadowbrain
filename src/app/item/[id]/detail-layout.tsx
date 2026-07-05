@@ -43,9 +43,16 @@ const DESKTOP_QUERY = "(min-width: 1024px)";
 export interface DetailLayoutProps {
   children: React.ReactNode;
   sidebar: React.ReactNode;
+  /** Optional extra buttons rendered next to the back button in the
+   *  header toolbar. Used by the edit button on the item detail page. */
+  headerActions?: React.ReactNode;
 }
 
-export function DetailLayout({ children, sidebar }: DetailLayoutProps) {
+export function DetailLayout({
+  children,
+  sidebar,
+  headerActions,
+}: DetailLayoutProps) {
   // First render is closed on both server and client so the hydrated
   // markup matches. The mount effects below resolve the real defaults.
   const [inlineOpen, setInlineOpen] = useState(false);
@@ -117,7 +124,10 @@ export function DetailLayout({ children, sidebar }: DetailLayoutProps) {
       className="mx-auto flex w-full max-w-screen-lg flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12"
     >
       <div className="flex items-center justify-between gap-4">
-        <BackButton fallbackHref="/" />
+        <div className="flex items-center gap-2">
+          <BackButton fallbackHref="/" />
+          {headerActions}
+        </div>
         <button
           type="button"
           data-testid="sidebar-toggle"
