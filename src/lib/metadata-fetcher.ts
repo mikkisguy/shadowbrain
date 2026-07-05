@@ -389,6 +389,9 @@ async function readCappedBody(
  * once we hit `</head>` — this avoids downloading megabytes of `<body>`
  * content for large pages like YouTube.
  *
+ * Strips `<script>` and `<style>` blocks before searching for `</head>`
+ * to avoid matching the literal string inside inline code.
+ *
  * Falls back to reading up to `maxBytes` if `</head>` is never found
  * (malformed HTML or non-HTML response).
  */
@@ -398,7 +401,7 @@ async function readHeadSection(
 ): Promise<string> {
   const chunks: Buffer[] = [];
   let total = 0;
-  let foundHeadEnd = false;
+  let accumulated = "";
 
   for await (const chunk of body) {
     const buf = Buffer.isBuffer(chunk)
@@ -410,26 +413,24 @@ async function readHeadSection(
     }
     chunks.push(buf);
 
-    // Check if we've found </head> in the accumulated data
-    const accumulated = Buffer.concat(chunks).toString("utf-8");
-    if (/<\/head\s*>/i.test(accumulated)) {
-      foundHeadEnd = true;
-      // Extract only up to </head>
-      const headEndMatch = accumulated.match(/<\/head\s*>/i);
-      if (headEndMatch && headEndMatch.index !== undefined) {
-        return accumulated.slice(
-          0,
-          headEndMatch.index + headEndMatch[0].length
-        );
-      }
+    // Build a running string — avoids O(n²) Buffer.concat on every chunk.
+    accumulated += buf.toString("utf-8");
+
+    // Strip <script> and <style> blocks before searching for </head>
+    // to avoid matching the literal string inside inline code.
+    const stripped = accumulated
+      .replace(/<script[\s\S]*?<\/script\s*>/gi, "")
+      .replace(/<style[\s\S]*?<\/style\s*>/gi, "");
+
+    const headEndMatch = stripped.match(/<\/head\s*>/i);
+    if (headEndMatch && headEndMatch.index !== undefined) {
+      // Return the stripped content up to and including </head>.
+      // This is safe for metadata extraction since we only need meta tags.
+      return stripped.slice(0, headEndMatch.index + headEndMatch[0].length);
     }
   }
 
   // If we didn't find </head>, return what we have (up to maxBytes)
-  if (!foundHeadEnd) {
-    return Buffer.concat(chunks).toString("utf-8");
-  }
-
   return Buffer.concat(chunks).toString("utf-8");
 }
 

@@ -256,11 +256,10 @@ const CSP_DIRECTIVE_TEMPLATES: readonly string[] = [
   "script-src 'self' 'nonce-${nonce}' 'strict-dynamic'",
   "style-src 'self' 'nonce-${nonce}'",
   // External images (OpenGraph, bookmark thumbnails) are served
-  // through /_next/image, which is a static-asset route and outside
-  // CSP scope — so `'self'` is correct here. If a future change
-  // ever renders an <img> with a raw external src, it will be
-  // blocked by this directive. `data:` covers inline data URIs
-  // (e.g. SVG icons) and `blob:` covers object URLs.
+  // through /api/bookmarks/image-proxy, which is a same-origin API
+  // route — so `'self'` is correct here. The image proxy validates
+  // all URLs through the SSRF guard before fetching. `data:` covers
+  // inline data URIs (e.g. SVG icons) and `blob:` covers object URLs.
   "img-src 'self' data: blob:",
   "font-src 'self'",
   "connect-src 'self'",
