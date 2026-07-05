@@ -637,7 +637,7 @@ function AddForm({
                     >
                       {previewMetadata.favicon && (
                         <img
-                          src={previewMetadata.favicon}
+                          src={`/api/bookmarks/favicon?url=${encodeURIComponent(previewMetadata.favicon)}`}
                           alt=""
                           className="mt-0.5 size-4 shrink-0 rounded"
                         />
