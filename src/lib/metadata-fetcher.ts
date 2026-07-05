@@ -418,9 +418,10 @@ async function readHeadSection(
 
     // Strip <script> and <style> blocks before searching for </head>
     // to avoid matching the literal string inside inline code.
+    // Use [^>]* to match any attributes/whitespace before the closing >.
     const stripped = accumulated
-      .replace(/<script[\s\S]*?<\/script\s*>/gi, "")
-      .replace(/<style[\s\S]*?<\/style\s*>/gi, "");
+      .replace(/<script[\s\S]*?<\/script[^>]*>/gi, "")
+      .replace(/<style[\s\S]*?<\/style[^>]*>/gi, "");
 
     const headEndMatch = stripped.match(/<\/head\s*>/i);
     if (headEndMatch && headEndMatch.index !== undefined) {
