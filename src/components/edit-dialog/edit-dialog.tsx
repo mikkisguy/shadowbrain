@@ -299,6 +299,7 @@ export function EditDialog({
               item={item}
               initialTags={initialTags}
               onClose={handleClose}
+              onForceClose={() => onOpenChange(false)}
               onSaved={onSaved}
               isExpanded={isExpanded}
               onToggleExpand={() => setIsExpanded((v) => !v)}
@@ -364,6 +365,7 @@ function EditForm({
   item,
   initialTags,
   onClose,
+  onForceClose,
   onSaved,
   isExpanded,
   onToggleExpand,
@@ -373,6 +375,7 @@ function EditForm({
   item: ContentItem;
   initialTags: Tag[];
   onClose: () => void;
+  onForceClose: () => void;
   onSaved?: () => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
@@ -514,7 +517,7 @@ function EditForm({
       onHasChangesChange(false);
       toast.success("Item updated.");
       onSaved?.();
-      onClose();
+      onForceClose();
     },
     onError: (error: Error) => {
       toast.error(error.message ?? "Failed to save changes");
