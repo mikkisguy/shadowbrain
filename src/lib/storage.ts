@@ -74,11 +74,8 @@ export function getImageFullPath(relativePath: string): string {
  * Delete an image file. Returns `false` if the file does not exist,
  * re-throws any other filesystem error.
  *
- * Not used by the read-only `/api/images/[...path]` route — included
- * for the future image-management endpoints (e.g. delete from the
- * Discord / web capture pipeline, see phases.md §2.6).
- *
- * TODO(#44): Used by future image delete endpoint.
+ * Called by the DELETE /api/items/[id] handler when deleting an
+ * image-type content item to prevent orphaned files on disk.
  */
 export async function deleteImage(relativePath: string): Promise<boolean> {
   try {

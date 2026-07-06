@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { log } from "@/lib/logger";
 import { requireAuthenticated } from "@/lib/auth/guard";
+import { deleteImage } from "@/lib/storage";
 
 const visibilityFlag = z.coerce.number().int().min(0).max(1).optional();
 
@@ -300,6 +301,24 @@ export async function DELETE(
       });
     });
     tx();
+
+    // If this is an image-type item with an image_path, delete the
+    // actual file from disk to prevent orphaned files. This happens
+    // after the transaction completes to ensure the DB is the source
+    // of truth. If file deletion fails, we log a warning but the
+    // item is still considered deleted.
+    if (existing.type === "image" && existing.image_path) {
+      try {
+        await deleteImage(existing.image_path);
+      } catch (err) {
+        log("warn", "failed to delete image file", {
+          event: "image.delete.failed",
+          id,
+          image_path: existing.image_path,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     log("info", "content_item deleted", {
       event: "content_item.delete",
