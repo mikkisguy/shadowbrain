@@ -7,7 +7,7 @@ import { allItems, pages, searchHaystack, utilities } from "./command-items";
  * palette's "Pages" and "Utilities" groups. These tests pin
  * the contract the spec calls out:
  *
- *   - 5 page entries (Browse, Chat, Graph, Tags, Settings)
+ *   - 6 page entries (Browse, Chat, Graph, Add, Tags, Settings)
  *   - The `/search` route is NOT in the page list (the spec
  *     removes the dedicated search page in favour of the
  *     palette's content search)
@@ -18,11 +18,12 @@ import { allItems, pages, searchHaystack, utilities } from "./command-items";
  */
 
 describe("command-items catalogue", () => {
-  it("exposes exactly 5 page entries in a fixed order", () => {
+  it("exposes exactly 6 page entries in a fixed order", () => {
     expect(pages.map((p) => p.label)).toEqual([
       "Browse",
       "Chat",
       "Graph",
+      "Add",
       "Tags",
       "Settings",
     ]);
@@ -51,14 +52,15 @@ describe("command-items catalogue", () => {
     }
   });
 
-  it("includes /chat, /graph, /tags, /settings as page hrefs", () => {
-    // The acceptance criteria promise all 5 routes are
+  it("includes /chat, /graph, /add, /tags, /settings as page hrefs", () => {
+    // The acceptance criteria promise all routes are
     // reachable from the palette's default view. Pin the
     // hrefs so a typo cannot silently ship a broken link.
     const hrefs = pages.map((p) => p.href);
     expect(hrefs).toContain("/");
     expect(hrefs).toContain("/chat");
     expect(hrefs).toContain("/graph");
+    expect(hrefs).toContain("/add");
     expect(hrefs).toContain("/tags");
     expect(hrefs).toContain("/settings");
   });
