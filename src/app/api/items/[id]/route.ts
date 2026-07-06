@@ -236,6 +236,26 @@ export async function PATCH(
     });
     tx();
 
+    // If the item was an image and the type is changing away from
+    // "image", delete the orphaned file from disk.
+    if (
+      existing.type === "image" &&
+      existing.image_path &&
+      parsed.data.type &&
+      parsed.data.type !== "image"
+    ) {
+      try {
+        await deleteImage(existing.image_path);
+      } catch (err) {
+        log("warn", "failed to delete orphaned image file after type change", {
+          event: "image.delete.failed",
+          id,
+          image_path: existing.image_path,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     const updated = contentItems.findWithRelations(db, id, {
       includeHidden: true,
       includePrivate: true,
