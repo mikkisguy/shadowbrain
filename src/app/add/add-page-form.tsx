@@ -15,7 +15,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Image, Loader2, Trash2, XIcon } from "lucide-react";
+import { Eye, EyeOff, ImageIcon, Loader2, Trash2, XIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -49,7 +49,6 @@ import { useDraftPersistence } from "@/lib/add-form/use-draft-persistence";
 import { uploadImage } from "@/lib/add-form/upload-image";
 import { TypeSpecificFields } from "@/components/add-form/type-specific-fields";
 import { BookmarkPreview } from "./bookmark-preview";
-import { DraftIndicator } from "./draft-indicator";
 
 // Types that get the split-pane markdown editor + preview
 const MARKDOWN_TYPES = new Set([
@@ -426,7 +425,7 @@ export function AddPageForm({
                 />
               ) : (
                 <>
-                  <Image className="text-muted-foreground/50 size-10" />
+                  <ImageIcon className="text-muted-foreground/50 size-10" />
                   <p className="text-muted-foreground text-sm">
                     Drop an image here, paste from clipboard, or click to browse
                   </p>

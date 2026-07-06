@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import {
-  Image,
+  ImageIcon,
   Loader2,
   Maximize2,
   Minimize2,
@@ -453,7 +453,7 @@ function AddForm({
                   />
                 ) : (
                   <>
-                    <Image className="text-muted-foreground/50 size-10" />
+                    <ImageIcon className="text-muted-foreground/50 size-10" />
                     <p className="text-muted-foreground text-sm">
                       Drop an image here, paste from clipboard, or click to
                       browse
