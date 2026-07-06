@@ -350,4 +350,43 @@ describe("downloadImage", () => {
     const result = await downloadImage("https://example.com/unknown");
     expect(result.contentType).toBe("application/octet-stream");
   });
+
+  it("rejects when Content-Length exceeds maxBytes", async () => {
+    const req = createMockRequest();
+    const res = createMockResponse(200, "image/png");
+    res.headers["content-length"] = "200"; // 200 bytes declared
+
+    mockHttpsRequest.mockImplementation((_options, callback) => {
+      process.nextTick(() => {
+        callback(res);
+        res.emit("end");
+      });
+      return req;
+    });
+
+    await expect(
+      downloadImage("https://example.com/huge.png", undefined, 100)
+    ).rejects.toThrow(/exceeds maximum/);
+    expect(req.destroy).toHaveBeenCalled();
+  });
+
+  it("rejects when cumulative data exceeds maxBytes", async () => {
+    const req = createMockRequest();
+    const res = createMockResponse(200, "image/png");
+    // No Content-Length header — size discovered only as data arrives
+
+    mockHttpsRequest.mockImplementation((_options, callback) => {
+      process.nextTick(() => {
+        callback(res);
+        res.emit("data", Buffer.alloc(60));
+        res.emit("data", Buffer.alloc(60)); // total 120 > 100 limit
+      });
+      return req;
+    });
+
+    await expect(
+      downloadImage("https://example.com/huge.png", undefined, 100)
+    ).rejects.toThrow(/exceeds maximum/);
+    expect(req.destroy).toHaveBeenCalled();
+  });
 });

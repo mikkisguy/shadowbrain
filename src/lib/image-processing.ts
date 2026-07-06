@@ -90,8 +90,10 @@ export async function processImage(
 
 export async function downloadImage(
   url: string,
-  safeLookup?: LookupFunction
+  safeLookup?: LookupFunction,
+  maxBytes?: number
 ): Promise<{ buffer: Buffer; contentType: string }> {
+  const limit = maxBytes ?? getEnv().MAX_UPLOAD_SIZE_MB * 1024 * 1024;
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(url);
     const isHttps = parsedUrl.protocol === "https:";
@@ -112,8 +114,31 @@ export async function downloadImage(
     }
 
     const req = transport.request(options, (res) => {
+      // Fast-fail: if Content-Length is present and exceeds the limit,
+      // abort before buffering any data.
+      const contentLength = res.headers["content-length"];
+      if (contentLength) {
+        const declared = parseInt(contentLength, 10);
+        if (!Number.isNaN(declared) && declared > limit) {
+          req.destroy();
+          reject(
+            new Error(
+              `Response size (${declared} bytes) exceeds maximum of ${limit} bytes`
+            )
+          );
+          return;
+        }
+      }
+
       const chunks: Buffer[] = [];
+      let totalBytes = 0;
       res.on("data", (chunk: Buffer) => {
+        totalBytes += chunk.length;
+        if (totalBytes > limit) {
+          req.destroy();
+          reject(new Error(`Response size exceeds maximum of ${limit} bytes`));
+          return;
+        }
         chunks.push(chunk);
       });
       res.on("end", () => {

@@ -1,10 +1,12 @@
 import path from "path";
+import { promises as fs } from "fs";
 import { z } from "zod";
 import { getDb, contentItems, auditLogs } from "@/db/index";
 import { errorResponse, parseJson, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
 import { requireAuthenticated } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
+import { getImagesDir } from "@/lib/storage";
 import {
   processImage,
   validateImageMime,
@@ -109,12 +111,22 @@ async function handleFileUpload(request: Request) {
   const title = formData.get("title");
   const content = formData.get("content");
 
-  return createImageItem(
-    processed.imagePath,
-    processed.metadata,
-    typeof title === "string" ? title : null,
-    typeof content === "string" ? content : null
-  );
+  try {
+    return await createImageItem(
+      processed.imagePath,
+      processed.metadata,
+      typeof title === "string" ? title : null,
+      typeof content === "string" ? content : null
+    );
+  } catch (err) {
+    // Roll back the file — DB is the source of truth
+    try {
+      await fs.unlink(path.join(getImagesDir(), processed.imagePath));
+    } catch {
+      // Best-effort cleanup
+    }
+    throw err;
+  }
 }
 
 async function handleUrlUpload(request: Request) {
@@ -193,12 +205,22 @@ async function handleUrlUpload(request: Request) {
     );
   }
 
-  return createImageItem(
-    processed.imagePath,
-    processed.metadata,
-    title ?? null,
-    content ?? null
-  );
+  try {
+    return await createImageItem(
+      processed.imagePath,
+      processed.metadata,
+      title ?? null,
+      content ?? null
+    );
+  } catch (err) {
+    // Roll back the file — DB is the source of truth
+    try {
+      await fs.unlink(path.join(getImagesDir(), processed.imagePath));
+    } catch {
+      // Best-effort cleanup
+    }
+    throw err;
+  }
 }
 
 async function createImageItem(
