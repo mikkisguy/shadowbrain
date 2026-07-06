@@ -66,12 +66,16 @@ getEnv();
  *  The proxy is the source of truth for gating — this
  *  server-component check is just a hint to render auth-aware
  *  chrome (top nav, footer, user menu). The proxy still
- *  enforces the real boundary on every request. */
+ *  enforces the real boundary on every request.
+ *
+ *  In e2e mode, always return true so the TopNav (with AddButton)
+ *  renders without requiring a session cookie. */
 async function isRequestAuthenticated(): Promise<boolean> {
+  const env = getEnv();
+  if (env.NODE_ENV === "e2e") return true;
   const store = await cookies();
   const cookie = store.get("sb_session");
   if (!cookie) return false;
-  const env = getEnv();
   return isSessionCookieValid(cookie.value, env.SESSION_SECRET);
 }
 

@@ -11,10 +11,11 @@ import {
   useEffect,
   useRef,
   useState,
+  type DragEvent,
   type KeyboardEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Loader2, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Image, Loader2, Trash2, XIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -45,6 +46,7 @@ import {
 } from "@/lib/add-form/types";
 import { draftToMetadata } from "@/lib/add-form/metadata-helpers";
 import { useDraftPersistence } from "@/lib/add-form/use-draft-persistence";
+import { uploadImage } from "@/lib/add-form/upload-image";
 import { TypeSpecificFields } from "@/components/add-form/type-specific-fields";
 import { BookmarkPreview } from "./bookmark-preview";
 import { DraftIndicator } from "./draft-indicator";
@@ -76,7 +78,11 @@ export function AddPageForm({
   const [showPreview, setShowPreview] = useState(false);
   const [previewMetadata, setPreviewMetadata] =
     useState<BookmarkMetadata | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
   const prefillAppliedRef = useRef(false);
 
   // Draft persistence
@@ -130,6 +136,22 @@ export function AddPageForm({
   // Mutation
   const mutation = useMutation({
     mutationFn: async (draftToSubmit: Draft) => {
+      if (draftToSubmit.type === "image") {
+        if (selectedFile) {
+          return uploadImage(selectedFile, {
+            title: draftToSubmit.title,
+            content: draftToSubmit.content,
+          });
+        }
+        if (draftToSubmit.imageUrl.trim()) {
+          return uploadImage(draftToSubmit.imageUrl.trim(), {
+            title: draftToSubmit.title,
+            content: draftToSubmit.content,
+          });
+        }
+        throw new Error("No image selected");
+      }
+
       const content = resolveContent(draftToSubmit);
       if (!content) throw new Error("Content is required");
 
@@ -188,11 +210,11 @@ export function AddPageForm({
       clearDraft();
       toast.success("Saved.");
       // Redirect to the new item's detail page
-      const itemId = data?.item?.id;
+      const itemId = data?.id;
       if (itemId) {
         router.push(`/item/${itemId}`);
       } else {
-        router.push("/browse");
+        router.push("/");
       }
     },
     onError: (error: Error) => {
@@ -208,10 +230,15 @@ export function AddPageForm({
     [mutation]
   );
 
+  const canSubmitImage =
+    draft.type === "image"
+      ? selectedFile !== null || draft.imageUrl.trim().length > 0
+      : canSubmit(draft);
+
   const handleSubmit = useCallback(() => {
-    if (!canSubmit(draft) || mutation.isPending) return;
+    if (!canSubmitImage || mutation.isPending) return;
     mutation.mutate(draft);
-  }, [draft, mutation]);
+  }, [draft, mutation, canSubmitImage]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -226,6 +253,79 @@ export function AddPageForm({
   const handleDiscardDraft = useCallback(() => {
     clearDraft();
   }, [clearDraft]);
+
+  // ---- Image file handlers ----
+
+  const clearSelectedFile = useCallback(() => {
+    setSelectedFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+  }, [previewUrl]);
+
+  const handleFile = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file.");
+      return;
+    }
+    setSelectedFile(file);
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+  }, []);
+
+  const handleFileInput = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) handleFile(file);
+      e.target.value = "";
+    },
+    [handleFile]
+  );
+
+  const handleDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const file = e.dataTransfer.files?.[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
+
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setIsDragOver(false);
+  }, []);
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item?.type.startsWith("image/")) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) handleFile(file);
+          return;
+        }
+      }
+    },
+    [handleFile]
+  );
+
+  // ---- Cleanup object URLs on unmount ----
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleMetadataFetched = useCallback(
     (metadata: BookmarkMetadata | null) => {
@@ -243,7 +343,7 @@ export function AddPageForm({
 
   const isMarkdownType = MARKDOWN_TYPES.has(draft.type);
   const contentRequired = isContentRequired(draft.type);
-  const submitDisabled = mutation.isPending || !canSubmit(draft);
+  const submitDisabled = mutation.isPending || !canSubmitImage;
   const error = mutation.error ? mutation.error.message : null;
 
   return (
@@ -261,6 +361,9 @@ export function AddPageForm({
                 updateField("type", v);
                 if (v !== "bookmark") {
                   setPreviewMetadata(null);
+                }
+                if (v !== "image") {
+                  clearSelectedFile();
                 }
               }
             }}
@@ -280,20 +383,92 @@ export function AddPageForm({
               ))}
             </SelectContent>
           </Select>
-          {hasDraft && (
-            <Button variant="ghost" size="sm" onClick={handleDiscardDraft}>
-              <Trash2 className="mr-1.5 size-3.5" aria-hidden />
-              Discard draft
-            </Button>
-          )}
         </div>
       </div>
 
-      {/* Draft indicator */}
-      {hasDraft && <DraftIndicator onDiscard={handleDiscardDraft} />}
-
       {/* Main form area */}
-      {isMarkdownType ? (
+      {draft.type === "image" ? (
+        // Image upload: drop zone in card
+        <div className="flex flex-col gap-3" onPaste={handlePaste}>
+          <div className="bg-muted/30 ring-border/40 focus-within:bg-muted/40 focus-within:ring-border/60 flex flex-col gap-2 rounded-xl p-4 ring-1 transition-colors">
+            <Input
+              className="border-border/80 placeholder:text-muted-foreground/50 focus-visible:border-border/50 h-auto border-0 border-b bg-transparent px-0 pb-2 font-serif text-xl font-medium focus-visible:ring-0 md:text-xl"
+              placeholder={titlePlaceholder(draft.type)}
+              value={draft.title}
+              onChange={(e) => updateField("title", e.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+            <div
+              ref={dropZoneRef}
+              data-testid="add-dialog-drop-zone"
+              className={cn(
+                "flex flex-1 cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-6 transition-colors",
+                isDragOver
+                  ? "border-border bg-muted/40"
+                  : "border-border/50 hover:border-border hover:bg-muted/20",
+                previewUrl ? "min-h-[200px] pb-4" : "min-h-[300px]"
+              )}
+              onClick={() => {
+                const input = dropZoneRef.current?.querySelector(
+                  "input[type=file]"
+                ) as HTMLInputElement | null;
+                input?.click();
+              }}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+            >
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="Image preview"
+                  className="max-h-[300px] rounded-md object-contain"
+                />
+              ) : (
+                <>
+                  <Image className="text-muted-foreground/50 size-10" />
+                  <p className="text-muted-foreground text-sm">
+                    Drop an image here, paste from clipboard, or click to browse
+                  </p>
+                </>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileInput}
+                data-testid="add-dialog-file-input"
+              />
+            </div>
+            {previewUrl && (
+              <div className="flex items-center gap-2">
+                <p className="text-muted-foreground truncate text-xs">
+                  {selectedFile?.name ?? "Image selected"}
+                </p>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearSelectedFile();
+                  }}
+                  aria-label="Remove image"
+                >
+                  <XIcon className="size-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+          {hasTypeSpecificFields(draft.type) && (
+            <TypeSpecificFields
+              draft={draft}
+              updateField={updateField}
+              handleKeyDown={handleKeyDown}
+              imageUrlProps={{ disabled: selectedFile !== null }}
+            />
+          )}
+        </div>
+      ) : isMarkdownType ? (
         // Split pane: editor left, preview right (desktop)
         // Toggle on mobile — the toggle sits above both panes so it
         // is always reachable regardless of which pane is visible.
@@ -442,9 +617,12 @@ export function AddPageForm({
         <span className="text-muted-foreground mr-auto hidden text-xs md:inline">
           Ctrl+Enter to save
         </span>
-        <Button variant="outline" onClick={() => router.push("/browse")}>
-          Cancel
-        </Button>
+        {hasDraft && (
+          <Button variant="ghost" size="sm" onClick={handleDiscardDraft}>
+            <Trash2 className="mr-1.5 size-3.5" aria-hidden />
+            Discard draft
+          </Button>
+        )}
         <Button
           variant="inverted"
           onClick={handleSubmit}
@@ -454,7 +632,7 @@ export function AddPageForm({
           {mutation.isPending && (
             <Loader2 aria-hidden className="size-3.5 animate-spin" />
           )}
-          Save
+          {draft.type === "image" ? "Upload" : "Save"}
         </Button>
       </div>
     </div>

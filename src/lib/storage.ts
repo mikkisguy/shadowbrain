@@ -77,6 +77,8 @@ export function getImageFullPath(relativePath: string): string {
  * Not used by the read-only `/api/images/[...path]` route — included
  * for the future image-management endpoints (e.g. delete from the
  * Discord / web capture pipeline, see phases.md §2.6).
+ *
+ * TODO(#44): Used by future image delete endpoint.
  */
 export async function deleteImage(relativePath: string): Promise<boolean> {
   try {

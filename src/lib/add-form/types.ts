@@ -33,6 +33,8 @@ export interface Draft {
   duration: string;
   // dream — metadata.mood
   mood: string;
+  // image — remote URL (local file tracked in React state, not Draft)
+  imageUrl: string;
 }
 
 export function emptyDraft(): Draft {
@@ -52,6 +54,7 @@ export function emptyDraft(): Draft {
     endDate: "",
     duration: "",
     mood: "",
+    imageUrl: "",
   };
 }
 
@@ -62,12 +65,13 @@ export function emptyDraft(): Draft {
 export const TYPE_ITEMS: Record<string, string> = {
   raw_text: "Raw",
   note: "Note",
-  journal: "Journal",
+  image: "Image",
   bookmark: "Bookmark",
   question: "Question",
-  person: "Person",
   project: "Project",
   event: "Event",
+  person: "Person",
+  journal: "Journal",
   dream: "Dream",
 };
 
@@ -116,6 +120,7 @@ const CONTENT_REQUIRED: Record<string, boolean> = {
   project: false,
   event: false,
   dream: true,
+  image: false,
 };
 
 export function isContentRequired(type: string): boolean {
@@ -129,6 +134,7 @@ export function resolveContent(draft: Draft): string {
   const content = draft.content.trim();
   if (content) return content;
   if (draft.type === "bookmark") return draft.sourceUrl.trim();
+  if (draft.type === "image") return draft.title.trim() || "Image";
   if (draft.title.trim()) return draft.title.trim();
   return "";
 }
@@ -141,5 +147,7 @@ export function canSubmit(draft: Draft): boolean {
 
 /** Whether the current type has any type-specific metadata fields. */
 export function hasTypeSpecificFields(type: string): boolean {
-  return ["bookmark", "person", "project", "event", "dream"].includes(type);
+  return ["bookmark", "person", "project", "event", "dream", "image"].includes(
+    type
+  );
 }

@@ -49,6 +49,10 @@ const envSchema = z.object({
   // `src/lib/auth/client-ip.ts` and the App Security Baseline design
   // spec §5. Default: X-Forwarded-For.
   TRUSTED_PROXY_HEADER: z.string().default("X-Forwarded-For"),
+
+  // Image capture
+  WEBP_QUALITY: z.coerce.number().int().min(1).max(100).default(95),
+  MAX_UPLOAD_SIZE_MB: z.coerce.number().positive().default(10),
 });
 
 export type Env = z.infer<typeof envSchema>;
