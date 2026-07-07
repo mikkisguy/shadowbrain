@@ -21,7 +21,6 @@ import {
   startTransition,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -35,12 +34,9 @@ import {
   Pencil,
   XIcon,
 } from "lucide-react";
-import { toast } from "sonner";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@/lib/utils";
-import { queryKeys } from "@/lib/query-config";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -62,76 +58,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { ContentItem, Tag } from "@/db/index";
 import { MarkdownContent } from "@/app/item/[id]/markdown-content";
-import {
-  type Draft,
-  TYPE_ITEMS,
-  hasTypeSpecificFields,
-} from "@/lib/add-form/types";
-import {
-  metadataToDraftFields,
-  draftToMetadata,
-} from "@/lib/add-form/metadata-helpers";
+import { TYPE_ITEMS, hasTypeSpecificFields } from "@/lib/add-form/types";
 import { TypeSpecificFields } from "@/components/add-form/type-specific-fields";
-
-interface EditDraft extends Draft {
-  source: string;
-  is_private: number;
-  is_hidden: number;
-  tags: string[];
-}
-
-/** Build an initial draft from an item's data. */
-function draftFromItem(item: ContentItem, tags: Tag[]): EditDraft {
-  const meta = metadataToDraftFields(item.type, item.metadata);
-  return {
-    type: item.type,
-    title: item.title ?? "",
-    content: item.content,
-    sourceUrl: item.source_url ?? "",
-    source: item.source,
-    is_private: item.is_private,
-    is_hidden: item.is_hidden,
-    tags: tags.map((t) => t.name),
-    email: meta.email ?? "",
-    phoneNumber: meta.phoneNumber ?? "",
-    role: meta.role ?? "",
-    status: meta.status ?? "",
-    repo: meta.repo ?? "",
-    started: meta.started ?? "",
-    goalEndDate: meta.goalEndDate ?? "",
-    startDate: meta.startDate ?? "",
-    endDate: meta.endDate ?? "",
-    duration: meta.duration ?? "",
-    mood: meta.mood ?? "",
-    imageUrl: "",
-  };
-}
-
-/** Deep compare two drafts for unsaved-changes detection. */
-function draftsEqual(a: EditDraft, b: EditDraft): boolean {
-  return (
-    a.type === b.type &&
-    a.title === b.title &&
-    a.content === b.content &&
-    a.sourceUrl === b.sourceUrl &&
-    a.source === b.source &&
-    a.is_private === b.is_private &&
-    a.is_hidden === b.is_hidden &&
-    a.tags.length === b.tags.length &&
-    a.tags.every((t, i) => t === b.tags[i]) &&
-    a.email === b.email &&
-    a.phoneNumber === b.phoneNumber &&
-    a.role === b.role &&
-    a.status === b.status &&
-    a.repo === b.repo &&
-    a.started === b.started &&
-    a.goalEndDate === b.goalEndDate &&
-    a.startDate === b.startDate &&
-    a.endDate === b.endDate &&
-    a.duration === b.duration &&
-    a.mood === b.mood
-  );
-}
+import { type EditDraft, draftFromItem } from "./draft-helpers";
+import { TagAutocomplete } from "./tag-autocomplete";
+import { useEditForm } from "./use-edit-form";
 
 // ---------------------------------------------------------------------------
 // Edit dialog — public API
@@ -287,24 +218,9 @@ function EditForm({
   );
   const [showPreview, setShowPreview] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
-  const queryClient = useQueryClient();
-  const mountedRef = useRef(true);
-
-  // Tag autocomplete state
-  const [allTags, setAllTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState("");
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const tagInputRef = useRef<HTMLInputElement>(null);
 
   // Track initial draft for change detection.
   const initialDraftRef = useRef<EditDraft>(draftFromItem(item, initialTags));
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
 
   // Re-initialise when item changes (e.g. navigating between items).
   useEffect(() => {
@@ -316,20 +232,6 @@ function EditForm({
       setShowPreview(false);
     });
   }, [item.id, item.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch existing tags when the dialog opens.
-  useEffect(() => {
-    fetch("/api/tags")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.tags) {
-          setAllTags(data.tags.map((t: { name: string }) => t.name));
-        }
-      })
-      .catch(() => {
-        // Silently fail — the tag input still works without suggestions.
-      });
-  }, []);
 
   // Autofocus the content textarea on mount.
   useEffect(() => {
@@ -350,95 +252,15 @@ function EditForm({
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasChanges]);
 
-  // Mutation
-  const mutation = useMutation({
-    mutationFn: async (draftToSubmit: EditDraft) => {
-      const body: Record<string, unknown> = {};
-
-      if (draftToSubmit.title !== initialDraftRef.current.title) {
-        body.title = draftToSubmit.title || null;
-      }
-      if (draftToSubmit.content !== initialDraftRef.current.content) {
-        body.content = draftToSubmit.content;
-      }
-      if (draftToSubmit.type !== initialDraftRef.current.type) {
-        body.type = draftToSubmit.type;
-      }
-      if (draftToSubmit.source !== initialDraftRef.current.source) {
-        body.source = draftToSubmit.source;
-      }
-      if (draftToSubmit.sourceUrl !== initialDraftRef.current.sourceUrl) {
-        body.source_url = draftToSubmit.sourceUrl || null;
-      }
-      if (draftToSubmit.is_private !== initialDraftRef.current.is_private) {
-        body.is_private = draftToSubmit.is_private;
-      }
-      if (draftToSubmit.is_hidden !== initialDraftRef.current.is_hidden) {
-        body.is_hidden = draftToSubmit.is_hidden;
-      }
-
-      // Tags: always send if different.
-      const initialTagsArr = initialDraftRef.current.tags;
-      const currentTags = draftToSubmit.tags;
-      const tagsChanged =
-        initialTagsArr.length !== currentTags.length ||
-        !initialTagsArr.every((t, i) => t === currentTags[i]);
-      if (tagsChanged) {
-        body.tags = currentTags;
-      }
-
-      // Metadata: build from type-specific fields and compare.
-      const meta = draftToMetadata(draftToSubmit);
-      const initialMeta = draftToMetadata(initialDraftRef.current);
-      if (JSON.stringify(meta) !== JSON.stringify(initialMeta)) {
-        body.metadata = meta ?? undefined;
-      }
-
-      const res = await fetch(`/api/items/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        const msg: string | undefined = payload?.error?.message;
-        throw new Error(msg ?? "Failed to save changes");
-      }
-
-      return res.json();
-    },
-    onSuccess: () => {
-      if (!mountedRef.current) return;
-
-      queryClient.invalidateQueries({ queryKey: queryKeys.browse.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all });
-
-      onHasChangesChange(false);
-      toast.success("Item updated.");
-      onSaved?.();
-      onForceClose();
-    },
-    onError: (error: Error) => {
-      toast.error(error.message ?? "Failed to save changes");
-    },
+  // Mutation + field updater
+  const { mutation, updateField } = useEditForm({
+    item,
+    initialDraftRef,
+    setDraft,
+    onHasChangesChange,
+    onSaved,
+    onForceClose,
   });
-
-  const updateField = useCallback(
-    <K extends keyof EditDraft>(field: K, value: EditDraft[K]) => {
-      setDraft((prev) => {
-        const next = { ...prev, [field]: value };
-        if (!draftsEqual(next, initialDraftRef.current)) {
-          onHasChangesChange(true);
-        } else {
-          onHasChangesChange(false);
-        }
-        return next;
-      });
-      if (mutation.error) mutation.reset();
-    },
-    [mutation, onHasChangesChange]
-  );
 
   const handleSubmit = useCallback(() => {
     if (mutation.isPending) return;
@@ -454,61 +276,6 @@ function EditForm({
       }
     },
     [handleSubmit]
-  );
-
-  // Tag handling
-  const filteredSuggestions = useMemo(() => {
-    if (!tagInput.trim()) return [];
-    const lower = tagInput.toLowerCase();
-    return allTags.filter(
-      (name) => name.toLowerCase().includes(lower) && !draft.tags.includes(name)
-    );
-  }, [tagInput, allTags, draft.tags]);
-
-  const addTag = useCallback(
-    (name: string) => {
-      const trimmed = name.trim();
-      if (!trimmed || draft.tags.includes(trimmed)) return;
-      updateField("tags", [...draft.tags, trimmed]);
-      setTagInput("");
-      setShowSuggestions(false);
-      tagInputRef.current?.focus();
-    },
-    [draft.tags, updateField]
-  );
-
-  const removeTag = useCallback(
-    (name: string) => {
-      updateField(
-        "tags",
-        draft.tags.filter((t) => t !== name)
-      );
-    },
-    [draft.tags, updateField]
-  );
-
-  const handleTagKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter" || e.key === ",") {
-        e.preventDefault();
-        const value = tagInput.trim();
-        if (value) {
-          addTag(value);
-        }
-      }
-      if (e.key === "Backspace" && !tagInput && draft.tags.length > 0) {
-        removeTag(draft.tags[draft.tags.length - 1]);
-      }
-      if (e.key === "Escape") {
-        setShowSuggestions(false);
-      }
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        // Let the suggestions list handle navigation — we keep it simple
-        // and just prevent the cursor from moving in the input.
-        e.preventDefault();
-      }
-    },
-    [tagInput, addTag, removeTag, draft.tags]
   );
 
   const submitDisabled = mutation.isPending || !hasChanges;
@@ -615,82 +382,7 @@ function EditForm({
         </div>
 
         {/* Tags */}
-        <div className="space-y-1.5">
-          <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-            Tags
-          </p>
-          <div className="border-border/60 focus-within:border-ring/60 flex flex-wrap items-center gap-1.5 rounded-lg border px-2.5 py-1.5 transition-colors">
-            {draft.tags.map((tag) => (
-              <span
-                key={tag}
-                className="bg-muted text-foreground flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-xs"
-              >
-                #{tag}
-                <button
-                  type="button"
-                  onClick={() => removeTag(tag)}
-                  className="text-muted-foreground hover:text-foreground inline-flex"
-                  aria-label={`Remove tag ${tag}`}
-                >
-                  <XIcon className="size-3" />
-                </button>
-              </span>
-            ))}
-            <div className="relative min-w-[120px] flex-1">
-              <input
-                ref={tagInputRef}
-                type="text"
-                value={tagInput}
-                onChange={(e) => {
-                  setTagInput(e.target.value);
-                  setShowSuggestions(true);
-                }}
-                onFocus={() => setShowSuggestions(true)}
-                onBlur={() => {
-                  // Delay hiding so click on suggestion registers.
-                  setTimeout(() => setShowSuggestions(false), 150);
-                }}
-                onKeyDown={handleTagKeyDown}
-                placeholder={draft.tags.length === 0 ? "Add tags\u2026" : ""}
-                className="placeholder:text-muted-foreground/50 h-6 min-w-0 flex-1 border-0 bg-transparent px-0 text-sm outline-none"
-              />
-              {showSuggestions && filteredSuggestions.length > 0 && (
-                <div className="bg-popover border-border absolute left-0 z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border p-1 shadow-md">
-                  {filteredSuggestions.map((name) => (
-                    <button
-                      key={name}
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        addTag(name);
-                      }}
-                      className="text-foreground hover:bg-muted w-full rounded-md px-2 py-1.5 text-left text-sm"
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {showSuggestions &&
-                tagInput.trim() &&
-                filteredSuggestions.length === 0 &&
-                !draft.tags.includes(tagInput.trim()) && (
-                  <div className="bg-popover border-border absolute left-0 z-50 mt-1 w-full rounded-lg border p-1 shadow-md">
-                    <button
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        addTag(tagInput.trim());
-                      }}
-                      className="text-foreground hover:bg-muted w-full rounded-md px-2 py-1.5 text-left text-sm"
-                    >
-                      Create &ldquo;{tagInput.trim()}&rdquo;
-                    </button>
-                  </div>
-                )}
-            </div>
-          </div>
-        </div>
+        <TagAutocomplete tags={draft.tags} updateField={updateField} />
 
         {/* URL and Source */}
         <div className="grid grid-cols-2 gap-2">
