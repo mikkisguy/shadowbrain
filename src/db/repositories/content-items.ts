@@ -1,7 +1,10 @@
 import Database from "better-sqlite3";
 import { contentLinks } from "./content-links";
 import { contentTags } from "./content-tags";
-import { splitTags } from "@/lib/tags";
+import {
+  buildVisibilityClauses,
+  buildListWhereClause,
+} from "./content-item-queries";
 
 /**
  * Two-level visibility flags.
@@ -154,18 +157,13 @@ export const contentItems = {
     id: string,
     options: VisibilityOptions = {}
   ): ContentItem | null => {
-    const includeHidden = options.includeHidden ?? false;
-    const includePrivate = options.includePrivate ?? false;
-    const stmt = db.prepare(`
-      SELECT * FROM content_items
-      WHERE id = ?
-        AND (is_hidden = 0 OR ?)
-        AND (is_private = 0 OR ?)
-    `);
-    return (
-      (stmt.get(id, includeHidden ? 1 : 0, includePrivate ? 1 : 0) as
-        ContentItem | undefined) ?? null
+    const vis = buildVisibilityClauses(options);
+    const where = ["id = ?", ...vis.clauses];
+    const params = [id, ...vis.params];
+    const stmt = db.prepare(
+      `SELECT * FROM content_items WHERE ${where.join(" AND ")}`
     );
+    return (stmt.get(...params) as ContentItem | undefined) ?? null;
   },
 
   findAll: (
@@ -176,13 +174,9 @@ export const contentItems = {
       offset?: number;
     } & VisibilityOptions
   ) => {
-    const includeHidden = options?.includeHidden ?? false;
-    const includePrivate = options?.includePrivate ?? false;
-    const where: string[] = ["(is_hidden = 0 OR ?)", "(is_private = 0 OR ?)"];
-    const params: (string | number)[] = [
-      includeHidden ? 1 : 0,
-      includePrivate ? 1 : 0,
-    ];
+    const vis = buildVisibilityClauses(options ?? {});
+    const where: string[] = [...vis.clauses];
+    const params: (string | number)[] = [...vis.params];
 
     if (options?.type) {
       where.push("type = ?");
@@ -286,52 +280,7 @@ export const contentItems = {
       offset: number;
     } & VisibilityOptions
   ) => {
-    const includeHidden = options.includeHidden ?? false;
-    const includePrivate = options.includePrivate ?? false;
-
-    const where: string[] = [
-      "(ci.is_hidden = 0 OR ?)",
-      "(ci.is_private = 0 OR ?)",
-    ];
-    const params: (string | number)[] = [
-      includeHidden ? 1 : 0,
-      includePrivate ? 1 : 0,
-    ];
-
-    if (options.type) {
-      where.push("ci.type = ?");
-      params.push(options.type);
-    }
-    if (options.source) {
-      where.push("ci.source = ?");
-      params.push(options.source);
-    }
-    if (options.startDate) {
-      where.push("ci.created_at >= ?");
-      params.push(options.startDate);
-    }
-    if (options.endDate) {
-      where.push("ci.created_at <= ?");
-      params.push(options.endDate);
-    }
-
-    // Tag filter uses a correlated EXISTS subquery instead of a JOIN
-    // so that (a) multiple comma-separated tags match with OR
-    // (any-of) semantics without producing duplicate rows, and
-    // (b) the COUNT(*) stays correct. `tags.name` is COLLATE NOCASE
-    // so matching is case-insensitive.
-    if (options.tag) {
-      const tagNames = splitTags(options.tag);
-      if (tagNames.length > 0) {
-        const placeholders = tagNames.map(() => "?").join(",");
-        where.push(
-          `EXISTS (SELECT 1 FROM content_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.content_id = ci.id AND t.name IN (${placeholders}))`
-        );
-        params.push(...tagNames);
-      }
-    }
-
-    const whereSql = `WHERE ${where.join(" AND ")}`;
+    const { whereSql, params } = buildListWhereClause(options);
 
     const countStmt = db.prepare(`
       SELECT COUNT(*) as count
