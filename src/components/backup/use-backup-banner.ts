@@ -31,11 +31,21 @@ export function useBackupBanner(initialStatus: BackupStatus) {
   const [status, setStatus] = useState<BackupStatus>(() =>
     deriveBackupStatus(initialStatus.lastBackupAt, initialStatus.snoozeCount)
   );
-  const [snoozedUntil, setSnoozedUntil] = useState<number | null>(() =>
-    readStoredSnoozeUntil()
-  );
-  const [now, setNow] = useState<number>(() => Date.now());
+  // Defer client-only state until after hydration to avoid SSR mismatch.
+  // The server cannot access localStorage or know the exact client time,
+  // so we initialize to safe defaults and update in useEffect.
+  const [snoozedUntil, setSnoozedUntil] = useState<number | null>(null);
+  const [now, setNow] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
+
+  // Read client-only state after hydration to avoid SSR mismatch.
+  // The server cannot access localStorage, so we defer until mounted.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setSnoozedUntil(readStoredSnoozeUntil());
+    setNow(Date.now());
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Keep the wall clock fresh for snooze-expiry checks in long-open tabs.
   useEffect(() => {
