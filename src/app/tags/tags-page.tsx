@@ -16,110 +16,35 @@
  * A search box and an All/Unused filter narrow the list client-side.
  */
 
-import {
-  ArrowDown,
-  ArrowUp,
-  GitMerge,
-  Pencil,
-  Plus,
-  Search,
-  Tag,
-  Trash2,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-
-import { queryKeys } from "@/lib/query-config";
 import { CelestialCluster } from "@/components/visual/celestial-motif";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  createTag,
-  deleteTag,
-  deleteUnusedTags,
-  mergeTag,
-  renameTag,
-} from "./api";
 import { DeleteTagDialog } from "./delete-tag-dialog";
 import { DeleteUnusedTagsDialog } from "./delete-unused-tags-dialog";
+import { filterTags, sortTags } from "./filter-helpers";
+import type { UsageFilter } from "./filter-helpers";
 import { MergeTagDialog } from "./merge-tag-dialog";
 import { TagFormDialog } from "./tag-form-dialog";
+import { TagRow } from "./tag-row";
+import { useTagMutations } from "./use-tag-mutations";
 import { useTags } from "./use-tags";
 import type { TagSort, TagSortField, TagWithCount } from "./types";
-
-type UsageFilter = "all" | "unused";
-
-function sortTags(tags: TagWithCount[], sort: TagSort): TagWithCount[] {
-  const sorted = [...tags].sort((a, b) => {
-    if (sort.field === "count") {
-      if (a.count !== b.count) return a.count - b.count;
-      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-    }
-    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-  });
-  return sort.direction === "desc" ? sorted.reverse() : sorted;
-}
-
-function filterTags(
-  tags: TagWithCount[],
-  query: string,
-  usageFilter: UsageFilter
-): TagWithCount[] {
-  let result = tags;
-  if (usageFilter === "unused") {
-    result = result.filter((tag) => tag.count === 0);
-  }
-  const q = query.trim().toLowerCase();
-  if (q) {
-    result = result.filter((tag) => tag.name.toLowerCase().includes(q));
-  }
-  return result;
-}
 
 const SKELETON_ROW_COUNT = 5;
 
 export function TagsPage() {
   const { tags, status, error, refresh } = useTags();
-  const queryClient = useQueryClient();
-
-  const createTagMutation = useMutation({
-    mutationFn: createTag,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }),
-  });
-
-  const renameTagMutation = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) =>
-      renameTag(id, name),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }),
-  });
-
-  const deleteTagMutation = useMutation({
-    mutationFn: deleteTag,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }),
-  });
-
-  const mergeTagMutation = useMutation({
-    mutationFn: ({
-      sourceId,
-      targetId,
-    }: {
-      sourceId: string;
-      targetId: string;
-    }) => mergeTag(sourceId, targetId),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }),
-  });
-
-  const deleteUnusedMutation = useMutation({
-    mutationFn: deleteUnusedTags,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all }),
-  });
+  const {
+    createTagMutation,
+    renameTagMutation,
+    deleteTagMutation,
+    mergeTagMutation,
+    deleteUnusedMutation,
+  } = useTagMutations();
 
   const [sort, setSort] = useState<TagSort>({
     field: "name",
@@ -486,60 +411,13 @@ function TagsList({
       className="border-border divide-border bg-surface-elevated/40 flex flex-col divide-y rounded-sm border"
     >
       {tags.map((tag) => (
-        <li
+        <TagRow
           key={tag.id}
-          data-testid="tag-row"
-          className="group/row flex items-center justify-between gap-4 p-4"
-        >
-          <div className="flex min-w-0 items-center gap-3">
-            <Tag
-              aria-hidden
-              className="text-muted-foreground size-4 shrink-0"
-            />
-            <span className="text-foreground truncate font-sans text-sm font-medium">
-              {tag.name}
-            </span>
-            <span
-              data-testid="tag-count"
-              className="text-muted-foreground bg-surface-muted shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-xs"
-            >
-              {tag.count}
-            </span>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Merge ${tag.name}`}
-              data-testid="tag-merge-button"
-              onClick={() => onMerge(tag)}
-            >
-              <GitMerge className="size-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Rename ${tag.name}`}
-              data-testid="tag-rename-button"
-              onClick={() => onRename(tag)}
-            >
-              <Pencil className="size-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Delete ${tag.name}`}
-              data-testid="tag-delete-button"
-              onClick={() => onDelete(tag)}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
-          </div>
-        </li>
+          tag={tag}
+          onRename={onRename}
+          onDelete={onDelete}
+          onMerge={onMerge}
+        />
       ))}
     </ul>
   );
