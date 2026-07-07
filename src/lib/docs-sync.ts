@@ -12,193 +12,37 @@
  *   docs are browsable verbatim from the web UI / chat.
  * - `metadata` carries `{ "file_path": "docs/<rel>" }` for reference.
  * - Every doc is tagged `project:shadowbrain`, `docs`, and a
- *   category tag derived from its path (see {@link categoryTagForRelPath}).
- *   Tag names are stored without a leading `#`; the web UI renders the
- *   `#` prefix (so a stored `docs` tag displays as `#docs`) and the tag
- *   filter matches on the bare name.
+ *   path-derived category tag — bare names (no `#` prefix).
  *
  * Re-runs are idempotent. Files removed from disk are pruned from the
  * database so the doc set tracks the repository exactly for files under
  * the size cap. See issue #106.
+ *
+ * Public API re-exports from the sub-modules:
+ *   {@link DOCS_SYNC_SOURCE},
+ *   {@link DocsSyncOptions}, {@link DocsSyncResult},
+ *   {@link generateDocsId}, {@link categoryTagForRelPath},
+ *   {@link syncDocsDirectory}, {@link formatDocsSyncResult}
+ *
+ * @module
  */
-import { createHash, randomUUID } from "crypto";
-import { readdir, readFile, stat } from "fs/promises";
-import { basename, extname, join, relative, resolve, sep } from "path";
+import { basename, relative, resolve, sep } from "path";
+import { stat } from "fs/promises";
 import type Database from "better-sqlite3";
-import { contentItems, contentTags, tags, auditLogs } from "@/db/index";
 import { log } from "@/lib/logger";
+import {
+  type DocsSyncOptions,
+  type DocsSyncResult,
+  type SyncFailure,
+} from "./docs-sync/types";
+import { walkMarkdownFiles } from "./docs-sync/discovery";
+import { generateDocsId, processFile, pruneMissing } from "./docs-sync/db-ops";
 
-/**
- * Maximum file size (in bytes) the syncer will read. Matches the markdown
- * importer cap so a stray binary masquerading as `.md` cannot exhaust
- * memory.
- */
-const MAX_FILE_BYTES = 5 * 1024 * 1024;
-
-/** `content_items.source` value for rows owned by the docs syncer. */
-export const DOCS_SYNC_SOURCE = "docs-sync";
-
-/** Tag applied to every doc — groups all ShadowBrain content. */
-const PROJECT_TAG = "project:shadowbrain";
-
-/** Tag applied to every doc — marks it as documentation. */
-const DOCS_TAG = "docs";
-
-export interface DocsSyncOptions {
-  /**
-   * If `true` (default), files whose content and metadata have not changed
-   * since the last sync are skipped (no DB write, no audit log). Set
-   * `false` for `--force`, which re-writes every file.
-   */
-  skipUnchanged?: boolean;
-  /**
-   * If `true`, compute the full plan (creates / updates / skips / deletes)
-   * but write nothing to the database. Used by `--dry-run`.
-   */
-  dryRun?: boolean;
-}
-
-interface SyncFailure {
-  relPath: string;
-  reason: string;
-}
-
-export interface DocsSyncResult {
-  created: number;
-  updated: number;
-  skipped: number;
-  deleted: number;
-  failed: number;
-  failures: SyncFailure[];
-  /** Total `.md` files discovered (recursively). */
-  total: number;
-  /** Absolute path of the directory that was synced. */
-  directory: string;
-  /** Whether this was a dry run. */
-  dryRun: boolean;
-}
-
-/**
- * Deterministic, UUID-shaped id for a doc file, derived from its path
- * relative to the sync root. Distinct from {@link generateStableId} in
- * the markdown importer (different prefix) so docs and notes with the
- * same relative path cannot collide on the same `content_items` row.
- *
- * Format: `docs-sync-<32 hex chars>`.
- *
- * **Caveat:** the id is derived from the *relative* path only. Syncing
- * `--dir docs/a` (relPaths like `x.md`) and then `--dir docs/b` (relPaths
- * like `y.md`) makes the second run's prune delete every row the first
- * run created, because neither sees the other's files on disk. Use a
- * single sync root per ShadowBrain install unless you want rows from
- * different roots to clobber each other.
- */
-export function generateDocsId(relPath: string): string {
-  const hash = createHash("sha256").update(relPath).digest("hex");
-  return `docs-sync-${hash.slice(0, 32)}`;
-}
-
-/**
- * Derive the doc title from its relative path: the final path segment
- * with the extension stripped (e.g. `api/getting-started.md` →
- * `getting-started`). Computed inline rather than via `parseMarkdownFile`
- * because docs-sync stores the raw body verbatim and never reads the
- * parsed body / frontmatter, so running the full gray-matter parser
- * would be wasted work and could emit misleading frontmatter warnings.
- */
-function filenameTitleFromRelPath(relPath: string): string {
-  return relPath.replace(/\.md$/i, "").split("/").pop()!;
-}
-
-/**
- * Derive the category tag for a doc from its path relative to the sync
- * root.
- *
- * - A file in a subdirectory takes the top-level directory as its
- *   category: `api/endpoints/auth.md` → `docs:api`.
- * - A file at the root takes its filename stem: `getting-started.md` →
- *   `docs:getting-started`.
- *
- * The relative path uses forward slashes regardless of platform.
- */
-export function categoryTagForRelPath(relPath: string): string {
-  const parts = relPath.split("/");
-  if (parts.length > 1) {
-    return `docs:${parts[0]}`;
-  }
-  const stem = parts[0].replace(/\.[^.]+$/, "");
-  return `docs:${stem}`;
-}
-
-/**
- * Build the `metadata` JSON for a doc. Currently just the file path
- * relative to the project root (e.g. `docs/getting-started.md`), which
- * lets the UI / chat cite the source file.
- */
-function buildMetadata(docsRootName: string, relPath: string): string {
-  return JSON.stringify({ file_path: `${docsRootName}/${relPath}` });
-}
-
-/**
- * Find a tag by name (case-insensitive), creating it if absent. Returns
- * the tag id. Safe to call repeatedly — the second call hits the existing
- * row and does not insert.
- */
-function ensureTag(db: Database.Database, name: string, now: string): string {
-  const existing = tags.findByName(db, name);
-  if (existing) return existing.id;
-  const id = randomUUID();
-  tags.create(db, { id, name, created_at: now });
-  return id;
-}
-
-/**
- * Ensure the project, docs, and category tags are all linked to a content
- * item. Uses `INSERT OR IGNORE` so it is idempotent and self-healing: a
- * manually removed tag association is restored on the next sync.
- */
-function ensureDocTags(
-  db: Database.Database,
-  contentId: string,
-  relPath: string,
-  now: string
-): void {
-  const tagNames = [PROJECT_TAG, DOCS_TAG, categoryTagForRelPath(relPath)];
-  for (const name of tagNames) {
-    const tagId = ensureTag(db, name, now);
-    contentTags.addTag(db, contentId, tagId, now);
-  }
-}
-
-/** Files whose name starts with a dot are conventionally hidden / config. */
-function isHiddenPath(relPath: string): boolean {
-  return relPath.split("/").some((part) => part.startsWith("."));
-}
-
-/** Recursively collect every non-hidden `.md` file under `root`. */
-async function walkMarkdownFiles(root: string): Promise<string[]> {
-  const out: string[] = [];
-
-  async function walk(dir: string): Promise<void> {
-    const entries = await readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        await walk(full);
-        continue;
-      }
-      if (!entry.isFile()) continue;
-      if (extname(entry.name).toLowerCase() !== ".md") continue;
-      const rel = relative(root, full).split(sep).join("/");
-      if (isHiddenPath(rel)) continue;
-      out.push(full);
-    }
-  }
-
-  await walk(root);
-  out.sort();
-  return out;
-}
+// ── Public re-exports ─────────────────────────────────────────────
+export { DOCS_SYNC_SOURCE } from "./docs-sync/types";
+export type { DocsSyncOptions, DocsSyncResult } from "./docs-sync/types";
+export { generateDocsId } from "./docs-sync/db-ops";
+export { categoryTagForRelPath } from "./docs-sync/tags";
 
 /**
  * Sync every `.md` file under `dir` (recursively) into the database as a
@@ -232,15 +76,16 @@ export async function syncDocsDirectory(
   const failures: SyncFailure[] = [];
   const currentIds = new Set<string>();
 
+  // ── validate and discover ──
   let files: string[];
   try {
     const stats = await stat(root);
     if (!stats.isDirectory()) {
       return {
-        created,
-        updated,
-        skipped,
-        deleted,
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        deleted: 0,
         failed: 1,
         failures: [{ relPath: root, reason: "Sync path is not a directory" }],
         total: 0,
@@ -252,10 +97,10 @@ export async function syncDocsDirectory(
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     return {
-      created,
-      updated,
-      skipped,
-      deleted,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      deleted: 0,
       failed: 1,
       failures: [{ relPath: root, reason }],
       total: 0,
@@ -266,116 +111,31 @@ export async function syncDocsDirectory(
 
   total = files.length;
 
+  // ── per-file processing ──
   for (const absPath of files) {
     const relPath = relative(root, absPath).split(sep).join("/");
     const id = generateDocsId(relPath);
     currentIds.add(id);
 
     try {
-      const fileStats = await stat(absPath);
-      if (fileStats.size > MAX_FILE_BYTES) {
-        const reason = `File too large (${fileStats.size} bytes > ${MAX_FILE_BYTES})`;
-        log("warn", "docs sync skipped", { relPath, reason });
-        failures.push({ relPath, reason });
-        failed += 1;
-        continue;
-      }
-
-      const raw = await readFile(absPath, "utf-8");
-      const filenameTitle = filenameTitleFromRelPath(relPath);
-      const metadata = buildMetadata(docsRootName, relPath);
-      const now = new Date().toISOString();
-
-      if (dryRun) {
-        const existing = contentItems.findById(db, id, {
-          includeHidden: true,
-          includePrivate: true,
-        });
-        if (!existing) {
-          created += 1;
-        } else if (
-          skipUnchanged &&
-          existing.content === raw &&
-          existing.metadata === metadata
-        ) {
-          skipped += 1;
-        } else {
-          updated += 1;
+      const outcome = await processFile(
+        db,
+        absPath,
+        relPath,
+        id,
+        docsRootName,
+        {
+          skipUnchanged,
+          dryRun,
         }
-        continue;
-      }
-
-      // Per-file transaction: the content_item upsert, its audit_log,
-      // and tag associations succeed or fail together.
-      const perFileTx = db.transaction(() => {
-        const existing = contentItems.findById(db, id, {
-          includeHidden: true,
-          includePrivate: true,
-        });
-        if (existing) {
-          const contentUnchanged = existing.content === raw;
-          const metaUnchanged = existing.metadata === metadata;
-          if (skipUnchanged && contentUnchanged && metaUnchanged) {
-            // Self-heal tag associations even when the body is unchanged.
-            ensureDocTags(db, id, relPath, now);
-            return "skipped" as const;
-          }
-          contentItems.update(db, id, {
-            title: filenameTitle,
-            content: raw,
-            metadata,
-            updated_at: now,
-          });
-          auditLogs.create(db, {
-            id: randomUUID(),
-            actor_type: "system",
-            action: "content_item.import",
-            entity_type: "content_item",
-            entity_id: id,
-            success: 1,
-            metadata: JSON.stringify({
-              source: DOCS_SYNC_SOURCE,
-              relPath,
-              op: "update",
-            }),
-            created_at: now,
-          });
-          ensureDocTags(db, id, relPath, now);
-          return "updated" as const;
-        }
-
-        contentItems.create(db, {
-          id,
-          type: "note",
-          title: filenameTitle,
-          content: raw,
-          source: DOCS_SYNC_SOURCE,
-          metadata,
-          created_at: now,
-          updated_at: now,
-        });
-        auditLogs.create(db, {
-          id: randomUUID(),
-          actor_type: "system",
-          action: "content_item.import",
-          entity_type: "content_item",
-          entity_id: id,
-          success: 1,
-          metadata: JSON.stringify({
-            source: DOCS_SYNC_SOURCE,
-            relPath,
-            op: "create",
-          }),
-          created_at: now,
-        });
-        ensureDocTags(db, id, relPath, now);
-        return "created" as const;
-      });
-
-      const outcome = perFileTx();
+      );
       if (outcome === "created") created += 1;
       else if (outcome === "updated") updated += 1;
-      else skipped += 1;
+      else if (outcome === "skipped") skipped += 1;
+      else {
+        failures.push({ relPath, reason: outcome });
+        failed += 1;
+      }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       log("error", "docs sync failed for file", { relPath, reason });
@@ -384,53 +144,8 @@ export async function syncDocsDirectory(
     }
   }
 
-  // Prune docs that no longer exist on disk. A row owned by the docs
-  // syncer whose id is not in the current file set corresponds to a
-  // deleted file. Cascading FKs remove its content_tags rows. The row's
-  // metadata is read back so the prune audit log records the file path
-  // (the id alone is an opaque one-way hash).
-  const docsRows = db
-    .prepare("SELECT id, metadata FROM content_items WHERE source = ?")
-    .all(DOCS_SYNC_SOURCE) as Array<{ id: string; metadata: string | null }>;
-
-  if (dryRun) {
-    for (const row of docsRows) {
-      if (!currentIds.has(row.id)) deleted += 1;
-    }
-  } else {
-    const now = new Date().toISOString();
-    const pruneTx = db.transaction(() => {
-      for (const row of docsRows) {
-        if (!currentIds.has(row.id)) {
-          let filePath: string | undefined;
-          try {
-            filePath = row.metadata
-              ? (JSON.parse(row.metadata).file_path as string | undefined)
-              : undefined;
-          } catch {
-            // Malformed metadata — leave file_path out of the audit entry.
-          }
-          contentItems.delete(db, row.id);
-          auditLogs.create(db, {
-            id: randomUUID(),
-            actor_type: "system",
-            action: "content_item.delete",
-            entity_type: "content_item",
-            entity_id: row.id,
-            success: 1,
-            metadata: JSON.stringify({
-              source: DOCS_SYNC_SOURCE,
-              op: "prune",
-              ...(filePath ? { file_path: filePath } : {}),
-            }),
-            created_at: now,
-          });
-          deleted += 1;
-        }
-      }
-    });
-    pruneTx();
-  }
+  // ── prune orphaned rows ──
+  deleted = pruneMissing(db, currentIds, { dryRun });
 
   return {
     created,
