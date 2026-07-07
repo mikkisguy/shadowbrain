@@ -1,9 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { toast } from "sonner";
 import { AlertCircle, HardDrive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,149 +14,29 @@ import {
 import { cn } from "@/lib/utils";
 import {
   type BackupStatus,
-  type BackupSeverity,
-  deriveBackupStatus,
   formatBackupAge,
   BACKUP_SNOOZE_LIMIT,
-  SNOOZE_DURATION_MS,
-  BACKUP_SNOOZE_STORAGE_KEY,
 } from "@/lib/backup/severity";
+import { useBackupBanner } from "./use-backup-banner";
+import { getSeverityColor } from "./backup-banner-styles";
 
 interface BackupReminderBannerProps {
   initialStatus: BackupStatus;
 }
 
-function readStoredSnoozeUntil(): number | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const stored = localStorage.getItem(BACKUP_SNOOZE_STORAGE_KEY);
-    if (!stored) return null;
-    const ts = parseInt(stored, 10);
-    if (Number.isFinite(ts) && ts > Date.now()) return ts;
-    localStorage.removeItem(BACKUP_SNOOZE_STORAGE_KEY);
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function getSeverityColor(severity: Exclude<BackupSeverity, "hidden">): {
-  bg: string;
-  border: string;
-  text: string;
-  accent: string;
-} {
-  switch (severity) {
-    case "gentle":
-      return {
-        bg: "bg-surface-elevated",
-        border: "border-border",
-        text: "text-muted-foreground",
-        accent: "text-muted-foreground",
-      };
-    case "prominent":
-      return {
-        bg: "bg-warning/5",
-        border: "border-warning/40",
-        text: "text-warning",
-        accent: "text-warning",
-      };
-    case "enforce":
-      return {
-        bg: "bg-error/5",
-        border: "border-error/40",
-        text: "text-error",
-        accent: "text-error",
-      };
-  }
-}
-
 export function BackupReminderBanner({
   initialStatus,
 }: BackupReminderBannerProps) {
-  const pathname = usePathname();
-  const isBackupPage = pathname === "/backup";
-
-  // Derive live severity from the server-provided initialStatus
-  const [status, setStatus] = useState<BackupStatus>(() =>
-    deriveBackupStatus(initialStatus.lastBackupAt, initialStatus.snoozeCount)
-  );
-  const [snoozedUntil, setSnoozedUntil] = useState<number | null>(() =>
-    readStoredSnoozeUntil()
-  );
-  const [now, setNow] = useState<number>(() => Date.now());
-  const [submitting, setSubmitting] = useState(false);
-
-  // Keep the wall clock fresh for snooze-expiry checks in long-open tabs.
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 60_000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  // Recompute live severity on each render so long-open tabs stay accurate
-  const liveStatus = deriveBackupStatus(
-    status.lastBackupAt,
-    status.snoozeCount
-  );
-  const severity = liveStatus.severity;
-  const daysSince = liveStatus.daysSince;
-
-  // Hidden while snoozed
-  const isSnoozed = snoozedUntil !== null && now < snoozedUntil;
-
-  async function handleMark() {
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/backup", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { Accept: "application/json" },
-      });
-      if (!res.ok) throw new Error("Request failed");
-      const newStatus = await res.json();
-      setStatus(newStatus);
-      setSnoozedUntil(null);
-      try {
-        localStorage.removeItem(BACKUP_SNOOZE_STORAGE_KEY);
-      } catch {
-        // ignore
-      }
-      toast.success("Marked as backed up.");
-    } catch {
-      toast.error("Couldn't update backup status. Try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleSnooze() {
-    const until = now + SNOOZE_DURATION_MS;
-    setSnoozedUntil(until);
-    try {
-      localStorage.setItem(BACKUP_SNOOZE_STORAGE_KEY, String(until));
-    } catch {
-      // ignore
-    }
-
-    // At enforce severity, also hit the server to increment the persistent count
-    if (severity === "enforce") {
-      setSubmitting(true);
-      try {
-        const res = await fetch("/api/backup/snooze", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { Accept: "application/json" },
-        });
-        if (!res.ok) throw new Error("Request failed");
-        const newStatus = await res.json();
-        setStatus(newStatus);
-      } catch {
-        toast.error("Couldn't record snooze. Try again.");
-      } finally {
-        setSubmitting(false);
-      }
-    }
-  }
+  const {
+    isBackupPage,
+    severity,
+    daysSince,
+    isSnoozed,
+    submitting,
+    status,
+    handleMark,
+    handleSnooze,
+  } = useBackupBanner(initialStatus);
 
   if (isSnoozed || severity === "hidden") return null;
 
