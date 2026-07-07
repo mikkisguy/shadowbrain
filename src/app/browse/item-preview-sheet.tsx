@@ -14,7 +14,7 @@
  *   4. Bottom: tags, outbound links, backlinks
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback } from "react";
 import Link from "next/link";
 import { ChevronRight, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -23,10 +23,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
 import { formatAbsolute } from "@/lib/dates";
-import {
-  extractMetadataFields,
-  parseBookmarkMeta,
-} from "@/lib/metadata-fields";
+import { parseBookmarkMeta } from "@/lib/metadata-fields";
 import { queryKeys } from "@/lib/query-config";
 import {
   Sheet,
@@ -36,203 +33,14 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { MarkdownContent } from "@/app/item/[id]/markdown-content";
-import { formatLinkType } from "@/app/item/[id]/item-sidebar";
 import { EditDialog } from "@/components/edit-dialog/edit-dialog";
 import { useEditDialog } from "@/components/edit-dialog/use-edit-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-dialog/delete-confirmation-dialog";
 import { useDeleteDialog } from "@/components/delete-dialog/use-delete-dialog";
-
-/* ------------------------------------------------------------------ */
-/*  Types matching the API response from GET /api/items/[id]          */
-/* ------------------------------------------------------------------ */
-
-interface ItemDetail {
-  id: string;
-  type: string;
-  title: string | null;
-  content: string;
-  image_path: string | null;
-  source: string;
-  source_url: string | null;
-  /** JSON string stored in the DB; must be parsed before use. */
-  metadata: string | null;
-  is_private: number;
-  is_hidden: number;
-  created_at: string;
-  updated_at: string;
-}
-
-interface Tag {
-  id: string;
-  name: string;
-  color: string | null;
-  created_at: string;
-}
-
-interface LinkedItem {
-  id: string;
-  title: string | null;
-  type: string;
-}
-
-interface OutboundLink {
-  id: string;
-  target: LinkedItem;
-  link_type: string;
-}
-
-interface InboundLink {
-  id: string;
-  source: LinkedItem;
-  link_type: string;
-}
-
-interface ItemDetailResponse {
-  item: ItemDetail;
-  tags: Tag[];
-  links: {
-    outbound: OutboundLink[];
-    inbound: InboundLink[];
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/*  Metadata section                                                  */
-/* ------------------------------------------------------------------ */
-
-function MetadataSection({
-  type,
-  metadata,
-}: {
-  type: string;
-  metadata: string | null;
-}) {
-  const fields = useMemo(
-    () => extractMetadataFields(type, metadata, formatAbsolute),
-    [type, metadata]
-  );
-
-  if (!fields) return null;
-
-  return (
-    <section
-      className="border-border bg-surface-elevated flex flex-col gap-3 rounded-sm border p-4"
-      aria-label="Metadata"
-    >
-      <h3 className="text-muted-foreground font-mono text-xs font-medium tracking-wide uppercase">
-        Metadata
-      </h3>
-      <dl className="text-sm">
-        {fields.map((f) => (
-          <div key={f.label} className="flex gap-4 py-0.5">
-            <dt className="text-muted-foreground min-w-20 font-medium">
-              {f.label}
-            </dt>
-            <dd className="text-foreground wrap-break-word">{f.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Link row (simplified version of LinkRow from item-sidebar)        */
-/* ------------------------------------------------------------------ */
-
-function LinkRow({
-  href,
-  title,
-  type,
-  linkType,
-}: {
-  href: string;
-  title: string | null;
-  type: string;
-  linkType: string;
-}) {
-  return (
-    <li>
-      <Link
-        href={href}
-        className={cn(
-          "group border-border bg-background hover:border-border-strong flex flex-col gap-1.5 rounded-sm border px-3 py-2 transition-colors",
-          "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
-        )}
-      >
-        <span className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className={cn("size-2 shrink-0 rounded-full", typeColorClass(type))}
-          />
-          <span className="text-foreground line-clamp-2 font-sans text-sm leading-snug font-medium wrap-break-word">
-            {title?.trim() ? title : "Untitled"}
-          </span>
-        </span>
-        <span className="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.65rem] tracking-wide uppercase">
-          <span>{formatLinkType(linkType)}</span>
-          <span aria-hidden>·</span>
-          <span>{typeLabel(type)}</span>
-        </span>
-      </Link>
-    </li>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Loading skeleton                                                   */
-/* ------------------------------------------------------------------ */
-
-function SheetSkeleton() {
-  return (
-    <div className="flex flex-col gap-6 p-6" data-testid="sheet-loading">
-      {/* Image placeholder */}
-      <div className="bg-surface-muted h-40 w-full animate-pulse rounded-sm" />
-      {/* Badge + title */}
-      <div className="flex flex-col gap-3">
-        <div className="bg-surface-muted h-5 w-16 animate-pulse rounded-sm" />
-        <div className="bg-surface-muted h-8 w-3/4 animate-pulse rounded-sm" />
-      </div>
-      {/* Date/source row */}
-      <div className="flex gap-4">
-        <div className="bg-surface-muted h-4 w-24 animate-pulse rounded-sm" />
-        <div className="bg-surface-muted h-4 w-28 animate-pulse rounded-sm" />
-      </div>
-      {/* Content paragraphs */}
-      <div className="flex flex-col gap-2">
-        <div className="bg-surface-muted h-4 w-full animate-pulse rounded-sm" />
-        <div className="bg-surface-muted h-4 w-5/6 animate-pulse rounded-sm" />
-        <div className="bg-surface-muted h-4 w-4/6 animate-pulse rounded-sm" />
-        <div className="bg-surface-muted h-4 w-full animate-pulse rounded-sm" />
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Error state                                                        */
-/* ------------------------------------------------------------------ */
-
-function SheetError({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div
-      className="flex flex-col items-start gap-3 p-6"
-      data-testid="sheet-error"
-    >
-      <p className="text-error font-sans text-sm font-medium">
-        Couldn&apos;t load this item right now.
-      </p>
-      <button
-        type="button"
-        onClick={onRetry}
-        data-testid="sheet-retry"
-        className="text-primary font-sans text-sm hover:underline"
-      >
-        Try again
-      </button>
-    </div>
-  );
-}
+import { MetadataSection } from "./metadata-section";
+import { LinkRow } from "./link-list";
+import { SheetSkeleton, SheetError } from "./sheet-states";
+import { useItemDetail } from "./use-item-detail";
 
 /* ------------------------------------------------------------------ */
 /*  Main component                                                     */
@@ -251,10 +59,7 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
   // controls visibility via the URL param.
   const open = itemId !== null;
 
-  const [data, setData] = useState<ItemDetailResponse | null>(null);
-  const [status, setStatus] = useState<
-    "idle" | "loading" | "success" | "error"
-  >("idle");
+  const { data, status, handleRetry, refetch } = useItemDetail(itemId);
 
   // Edit dialog state
   const { open: editOpen, setOpen: setEditOpen } = useEditDialog();
@@ -287,63 +92,6 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
     },
   });
 
-  // Shared fetch helper — used by both the effect (on itemId change)
-  // and the retry button. The `cancelled` ref lets the effect's cleanup
-  // suppress setState after unmount; the retry handler shares the same
-  // ref so a rapid close after retry does not setState on a closed sheet.
-  const cancelledRef = useRef(false);
-
-  const fetchItem = useCallback((id: string, { reset }: { reset: boolean }) => {
-    if (reset) {
-      setStatus("loading");
-      setData(null);
-    }
-    fetch(`/api/items/${id}`, {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const text = await res.text().catch(() => "Request failed");
-          throw new Error(text);
-        }
-        return res.json() as Promise<ItemDetailResponse>;
-      })
-      .then((json) => {
-        if (!cancelledRef.current) {
-          setData(json);
-          setStatus("success");
-        }
-      })
-      .catch(() => {
-        if (!cancelledRef.current) {
-          setStatus("error");
-        }
-      });
-  }, []);
-
-  // When `itemId` changes, fetch the item detail. When it becomes null
-  // the sheet closes (via `open` being false) so there is no need to
-  // reset local state — the next non-null `itemId` will overwrite it.
-  // The synchronous setState calls here are the standard React pattern
-  // for data-fetching effects (same pattern in use-browse-state.ts).
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (!itemId) return;
-    cancelledRef.current = false;
-    fetchItem(itemId, { reset: true });
-    return () => {
-      cancelledRef.current = true;
-    };
-  }, [itemId, fetchItem]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  const handleRetry = useCallback(() => {
-    if (!itemId) return;
-    cancelledRef.current = false;
-    fetchItem(itemId, { reset: false });
-  }, [itemId, fetchItem]);
-
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
       if (!newOpen) {
@@ -355,10 +103,8 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
 
   // Refresh item data after edit
   const handleEditSaved = useCallback(() => {
-    if (itemId) {
-      fetchItem(itemId, { reset: true });
-    }
-  }, [itemId, fetchItem]);
+    refetch();
+  }, [refetch]);
 
   const item = data?.item;
   const tags = data?.tags;
