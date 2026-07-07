@@ -39,17 +39,15 @@
  */
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
 import { parseSnippet } from "@/lib/snippet";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { BrowseItem } from "./types";
+import { CardImage } from "./card-image";
+import { CardTags } from "./card-tags";
+import { CardTimestamp } from "./card-timestamp";
 
 export interface ContentCardProps {
   item: BrowseItem;
@@ -85,59 +83,9 @@ export interface ContentCardProps {
   variant?: "pill" | "larger-dot";
 }
 
-const RELATIVE = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-
-/** Shared absolute formatter for the timestamp tooltip. `medium`
- *  date + `short` time reads as "Jun 22, 2026, 9:55 PM" — precise
- *  enough to disambiguate, compact enough for a one-line tip. */
-const ABSOLUTE = new Intl.DateTimeFormat("en", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
-/** Format a created_at timestamp as a short relative phrase
- *  ("just now", "12m ago", "3h ago", "2d ago", or the absolute
- *  date for anything older than a month). Falls back to the raw
- *  ISO string when the input is unparseable. */
-export function formatRelativeTime(
-  iso: string,
-  now: Date = new Date()
-): string {
-  const then = new Date(iso);
-  const thenMs = then.getTime();
-  if (Number.isNaN(thenMs)) return iso;
-  const diffMs = thenMs - now.getTime();
-  if (!Number.isFinite(diffMs)) return iso;
-  const absMs = Math.abs(diffMs);
-
-  const minute = 60 * 1000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-  const week = 7 * day;
-  const month = 30 * day;
-  const year = 365 * day;
-
-  if (absMs < minute) return "just now";
-  if (absMs < hour)
-    return RELATIVE.format(Math.round(diffMs / minute), "minute");
-  if (absMs < day) return RELATIVE.format(Math.round(diffMs / hour), "hour");
-  if (absMs < week) return RELATIVE.format(Math.round(diffMs / day), "day");
-  if (absMs < month) return RELATIVE.format(Math.round(diffMs / week), "week");
-  if (absMs < year) return RELATIVE.format(Math.round(diffMs / month), "month");
-  return RELATIVE.format(Math.round(diffMs / year), "year");
-}
-
-/** Format a created_at timestamp as an absolute, human-readable
- *  date+time ("Jun 22, 2026, 9:55 PM"). Surfaced via the
- *  timestamp's hover/focus tooltip so the exact time is one hover
- *  away from the relative phrase. Falls back to the raw ISO string
- *  when the input is unparseable. */
-export function formatAbsoluteTime(iso: string): string {
-  const then = new Date(iso);
-  const thenMs = then.getTime();
-  if (Number.isNaN(thenMs)) return iso;
-  return ABSOLUTE.format(then);
-}
+// Re-exported for backwards compatibility — the canonical
+// implementations live in `card-time-format.ts`.
+export { formatRelativeTime, formatAbsoluteTime } from "./card-time-format";
 
 /** Truncate a string to `max` characters at a word boundary
  *  and append an ellipsis. Used for the content preview. */
@@ -193,14 +141,6 @@ export function ContentCard({
   // Prefer an explicit `tags` prop (the feed may pre-resolve them);
   // fall back to the tags attached to the item by the API.
   const tagsList = tags ?? item.tags;
-  const relative = useMemo(
-    () => formatRelativeTime(item.created_at),
-    [item.created_at]
-  );
-  const absolute = useMemo(
-    () => formatAbsoluteTime(item.created_at),
-    [item.created_at]
-  );
   const summary = metadataSummary(item.type, item.metadata);
   // Parse the FTS5 snippet (search results only) into highlighted
   // segments. `null` when there is no snippet (the regular list view)
@@ -233,66 +173,13 @@ export function ContentCard({
         "[contain:content]"
       )}
     >
-      {/* Cover image as a fading card background (non-image types). */}
-      {!isImageType && hasCover ? (
-        <div className="pointer-events-none absolute inset-0" aria-hidden>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={item.image_url!}
-            alt=""
-            width={640}
-            height={360}
-            loading="lazy"
-            decoding="async"
-            onError={() => setImageError(true)}
-            className="absolute inset-0 size-full object-cover"
-            data-testid="content-card-bg-image"
-          />
-          {/* Strong scrim using the app's background color. The image
-              is only subtly visible at the top — the overlay starts at
-              ~40% opacity and builds quickly to near-opaque at the
-              bottom, matching the journal-shadows card treatment. */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(rgba(10,10,10,0.9) 0%, rgba(10,10,10,0.95) 30%, rgba(10,10,10,0.98) 60%, rgba(10,10,10,1) 100%)",
-            }}
-          />
-        </div>
-      ) : null}
-
-      {/* Image-type cards render a top banner (16:9) above the body. */}
-      {isImageType && item.image_url && !imageError ? (
-        <div className="border-border bg-surface-muted pointer-events-none relative h-36 w-full overflow-hidden border-b">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={item.image_url!}
-            alt=""
-            width={640}
-            height={360}
-            loading="lazy"
-            decoding="async"
-            onError={() => setImageError(true)}
-            className="absolute inset-0 size-full object-cover brightness-50 transition-[filter] duration-200 group-hover:brightness-100"
-            data-testid="content-card-image"
-          />
-        </div>
-      ) : null}
-
-      {/* Fallback for broken / missing images: a subtle placeholder
-          so cards with and without images still feel like part of
-          the same grid, rather than showing a browser broken-icon. */}
-      {isImageType && item.image_url && imageError ? (
-        <div
-          className="border-border bg-surface-muted pointer-events-none flex h-36 w-full items-center justify-center border-b"
-          data-testid="content-card-image-error"
-        >
-          <p className="text-muted-foreground font-sans text-xs">
-            Image unavailable
-          </p>
-        </div>
-      ) : null}
+      <CardImage
+        imageUrl={item.image_url}
+        isImageType={isImageType}
+        imageError={imageError}
+        onImageError={() => setImageError(true)}
+        hasCoverBg={hasCoverBg}
+      />
 
       {/* `pointer-events-none` on the body so a click anywhere on the
           card falls through to the stretched link below. Interactive
@@ -334,24 +221,7 @@ export function ContentCard({
               {label}
             </span>
           )}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <time
-                  dateTime={item.created_at}
-                  className={cn(
-                    "pointer-events-auto relative z-20 cursor-help font-mono text-[0.7rem] transition-colors",
-                    hasCoverBg
-                      ? "text-white/60 hover:text-white"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                />
-              }
-            >
-              {relative}
-            </TooltipTrigger>
-            <TooltipContent side="top">{absolute}</TooltipContent>
-          </Tooltip>
+          <CardTimestamp createdAt={item.created_at} hasCoverBg={hasCoverBg} />
         </header>
 
         {item.title ? (
@@ -408,44 +278,11 @@ export function ContentCard({
           </p>
         ) : null}
 
-        {tagsList.length > 0 ? (
-          <ul
-            aria-label="Tags"
-            className="mt-auto flex flex-wrap items-center gap-1.5 pt-2"
-          >
-            {/* Mobile compact: a tag count replaces the pill strip so a
-                dense row of tiny pills doesn't shrink already-small tap
-                targets on a narrow card. Pills return at md+ where the
-                card has room. */}
-            <li
-              className={cn(
-                "font-mono text-[0.65rem] tracking-wide md:hidden",
-                hasCoverBg ? "text-white/60" : "text-muted-foreground"
-              )}
-            >
-              {tagsList.length} {tagsList.length === 1 ? "tag" : "tags"}
-            </li>
-            {tagsList.slice(0, 4).map((tag) => (
-              <li key={tag} className="hidden md:list-item">
-                <button
-                  type="button"
-                  data-testid="content-card-tag"
-                  onClick={() => onTagClick?.(tag)}
-                  aria-label={`Filter by tag ${tag}`}
-                  className={cn(
-                    "pointer-events-auto relative z-20 rounded-sm border px-1.5 py-0.5 font-mono text-[0.65rem] tracking-wide transition-colors",
-                    "focus-visible:ring-ring focus-visible:rounded-sm focus-visible:ring-2 focus-visible:outline-none",
-                    hasCoverBg
-                      ? "border-white/20 bg-black/30 text-white/80 hover:border-white/40 hover:text-white"
-                      : "border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong"
-                  )}
-                >
-                  #{tag}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <CardTags
+          tags={tagsList}
+          onTagClick={onTagClick}
+          hasCoverBg={hasCoverBg}
+        />
       </div>
 
       {/* Stretched link: covers the whole card so a click anywhere
