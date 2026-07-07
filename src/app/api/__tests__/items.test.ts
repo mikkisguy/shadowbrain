@@ -11,10 +11,17 @@ vi.mock("@/lib/metadata-fetcher", () => ({
   fetchBookmarkMetadata: vi.fn(),
 }));
 
+// Mock the storage module so tests don't touch the filesystem.
+vi.mock("@/lib/storage", () => ({
+  deleteImage: vi.fn().mockResolvedValue(true),
+}));
+
 // Imported lazily after the mock is registered so the route handler
 // picks up the mocked implementation.
 import { fetchBookmarkMetadata } from "@/lib/metadata-fetcher";
+import { deleteImage } from "@/lib/storage";
 const mockFetcher = vi.mocked(fetchBookmarkMetadata);
+const mockDeleteImage = vi.mocked(deleteImage);
 
 describe("/api/items", () => {
   beforeEach(() => {
@@ -291,6 +298,136 @@ describe("/api/items/[id]", () => {
       params: Promise.resolve({ id: created.id }),
     });
     expect(deleteRes.status).toBe(200);
+  });
+
+  it("deletes the image file when deleting an image-type item", async () => {
+    mockDeleteImage.mockClear();
+
+    // Create an image-type item with an image_path
+    const db = getDb();
+    const now = new Date().toISOString();
+    const id = "test-image-item";
+    db.prepare(
+      `INSERT INTO content_items (id, type, title, content, image_path, source, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      "image",
+      "Test Image",
+      "test content",
+      "2026-07/test.webp",
+      "web",
+      now,
+      now
+    );
+
+    const deleteReq = await authedRequest(`http://localhost/api/items/${id}`, {
+      method: "DELETE",
+    });
+    const deleteRes = await DELETE(deleteReq, {
+      params: Promise.resolve({ id }),
+    });
+    expect(deleteRes.status).toBe(200);
+
+    // Verify deleteImage was called with the correct path
+    expect(mockDeleteImage).toHaveBeenCalledWith("2026-07/test.webp");
+  });
+
+  it("does not call deleteImage when deleting a non-image item", async () => {
+    mockDeleteImage.mockClear();
+
+    const createReq = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "note",
+        content: "not an image",
+        source: "web",
+      }),
+    });
+    const createRes = await POST(createReq);
+    const created = await createRes.json();
+
+    const deleteReq = await authedRequest(
+      `http://localhost/api/items/${created.id}`,
+      { method: "DELETE" }
+    );
+    const deleteRes = await DELETE(deleteReq, {
+      params: Promise.resolve({ id: created.id }),
+    });
+    expect(deleteRes.status).toBe(200);
+
+    // Verify deleteImage was NOT called
+    expect(mockDeleteImage).not.toHaveBeenCalled();
+  });
+
+  it("deletes the image file when PATCH changes type away from image", async () => {
+    mockDeleteImage.mockClear();
+
+    // Create an image-type item with an image_path
+    const db = getDb();
+    const now = new Date().toISOString();
+    const id = "test-image-item-patch";
+    db.prepare(
+      `INSERT INTO content_items (id, type, title, content, image_path, source, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      "image",
+      "Test Image",
+      "test content",
+      "2026-07/test.webp",
+      "web",
+      now,
+      now
+    );
+
+    const patchReq = await authedRequest(`http://localhost/api/items/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "note" }),
+    });
+    const patchRes = await PATCH(patchReq, {
+      params: Promise.resolve({ id }),
+    });
+    expect(patchRes.status).toBe(200);
+
+    // Verify deleteImage was called with the correct path
+    expect(mockDeleteImage).toHaveBeenCalledWith("2026-07/test.webp");
+  });
+
+  it("does not delete image file when PATCH keeps type as image", async () => {
+    mockDeleteImage.mockClear();
+
+    const db = getDb();
+    const now = new Date().toISOString();
+    const id = "test-image-item-patch-keep";
+    db.prepare(
+      `INSERT INTO content_items (id, type, title, content, image_path, source, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      "image",
+      "Test Image",
+      "test content",
+      "2026-07/keep.webp",
+      "web",
+      now,
+      now
+    );
+
+    const patchReq = await authedRequest(`http://localhost/api/items/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Updated Title" }),
+    });
+    const patchRes = await PATCH(patchReq, {
+      params: Promise.resolve({ id }),
+    });
+    expect(patchRes.status).toBe(200);
+
+    // Verify deleteImage was NOT called (type didn't change)
+    expect(mockDeleteImage).not.toHaveBeenCalled();
   });
 });
 

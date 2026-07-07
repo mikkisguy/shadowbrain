@@ -5,12 +5,21 @@ import {
   useEffect,
   useRef,
   useState,
+  type DragEvent,
   type KeyboardEvent,
 } from "react";
-import { Loader2, Maximize2, Minimize2, Plus, XIcon } from "lucide-react";
+import {
+  ImageIcon,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  Plus,
+  XIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query-config";
@@ -34,6 +43,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { BookmarkMetadata } from "@/lib/metadata-fetcher";
+import { BookmarkPreview } from "@/app/add/bookmark-preview";
+import { useDraftPersistence } from "@/lib/add-form/use-draft-persistence";
+import { draftToMetadata } from "@/lib/add-form/metadata-helpers";
+import { uploadImage } from "@/lib/add-form/upload-image";
 import { useAddDialog } from "./use-add-dialog";
 import {
   type Draft,
@@ -54,7 +67,6 @@ import { TypeSpecificFields } from "@/components/add-form/type-specific-fields";
 
 export function AddDialog() {
   const { open, setOpen } = useAddDialog();
-  const draftRef = useRef<Draft>(emptyDraft());
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -64,17 +76,13 @@ export function AddDialog() {
         <DialogPrimitive.Popup
           className={cn(
             "bg-popover text-popover-foreground border-border fixed z-50 flex flex-col overflow-hidden border p-4 outline-none",
-            // Mobile (< 768px): full screen
             "top-0 right-0 bottom-0 left-0 rounded-none",
-            // Desktop (≥ 768px): centered modal — overrides the
-            // mobile fullscreen positioning above.
             isExpanded
               ? "md:top-1/2 md:right-auto md:bottom-auto md:left-1/2 md:max-h-[90vh] md:w-[min(56rem,calc(100%-3rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl"
               : "md:top-1/2 md:right-auto md:bottom-auto md:left-1/2 md:max-h-[70vh] md:w-[min(36rem,calc(100%-3rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl"
           )}
         >
           <AddForm
-            draftRef={draftRef}
             onClose={() => setOpen(false)}
             isExpanded={isExpanded}
             onToggleExpand={() => setIsExpanded((v) => !v)}
@@ -98,122 +106,86 @@ export function AddDialog() {
 }
 
 // ---------------------------------------------------------------------------
-// Form body. Renders only while the dialog is open; state is initialised
-// from the draftRef on mount and synced back on every change so a close
-// without saving preserves the draft.
+// Form body
 // ---------------------------------------------------------------------------
 
 function AddForm({
-  draftRef,
   onClose,
   isExpanded,
   onToggleExpand,
 }: {
-  draftRef: React.MutableRefObject<Draft>;
   onClose: () => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const router = useRouter();
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
-
-  // Ref guard for mount status: if the component unmounts before
-  // the response lands (dialog was closed and reopened with fresh
-  // content), do not overwrite the new draft or close the dialog again.
+  const { clearDraft } = useDraftPersistence(draft, setDraft);
   const mountedRef = useRef(true);
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  // ---- Bookmark preview state ----
+  const [previewMetadata, setPreviewMetadata] =
+    useState<BookmarkMetadata | null>(null);
+
+  const handleMetadataFetched = useCallback(
+    (metadata: BookmarkMetadata | null) => {
+      setPreviewMetadata(metadata);
+    },
+    []
+  );
+
+  const handleTitlePrefill = useCallback((title: string) => {
+    setDraft((prev) => {
+      if (!prev.title.trim()) return { ...prev, title };
+      return prev;
+    });
+  }, []);
+
+  const handleContinueInPage = useCallback(() => {
+    onClose();
+    router.push("/add");
+  }, [onClose, router]);
+
+  // Clear image state when type changes. Must be declared before
+  // handleTypeChange which references it.
+  const clearSelectedFile = useCallback(() => {
+    setSelectedFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+  }, [previewUrl]);
+
+  const handleTypeChange = useCallback(
+    (v: string | null) => {
+      if (!v) return;
+      setDraft((prev) => ({ ...prev, type: v }));
+      if (v !== "bookmark") {
+        setPreviewMetadata(null);
+      }
+      if (v !== "image") {
+        clearSelectedFile();
+      }
+    },
+    [clearSelectedFile]
+  );
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- Bookmark preview state ----
-
-  const [previewMetadata, setPreviewMetadata] =
-    useState<BookmarkMetadata | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  /** Fire the preview fetch immediately (used on blur). */
-  const triggerPreviewFetch = useCallback(async (url: string) => {
-    if (!url) return;
-    setPreviewLoading(true);
-    setPreviewError(null);
-    setPreviewMetadata(null);
-    try {
-      const res = await fetch(
-        `/api/bookmarks/preview?url=${encodeURIComponent(url)}`
-      );
-      const data = await res.json();
-      if (data.ok) {
-        setPreviewMetadata(data.metadata);
-        // Pre-fill title from metadata when the user hasn't typed one.
-        setDraft((prev) => {
-          if (!prev.title.trim() && data.metadata.title) {
-            const next = { ...prev, title: data.metadata.title };
-            draftRef.current = next;
-            return next;
-          }
-          return prev;
-        });
-      } else {
-        setPreviewError(data.reason ?? "Could not preview this URL");
-      }
-    } catch {
-      setPreviewError("Network error");
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, []);
-
-  /** Debounced preview fetch — waits 500ms after the last URL change. */
-  useEffect(() => {
-    // Only fetch preview for bookmark type
-    if (draft.type !== "bookmark") return;
-
-    const url = draft.sourceUrl.trim();
-    if (!url) return;
-
-    // Basic URL sanity check — reject obviously invalid URLs without
-    // hitting the server.
-    try {
-      new URL(url);
-    } catch {
-      return;
-    }
-
-    // Cancel any pending debounce.
-    if (previewTimeoutRef.current) {
-      clearTimeout(previewTimeoutRef.current);
-    }
-
-    previewTimeoutRef.current = setTimeout(() => {
-      triggerPreviewFetch(url);
-    }, 500);
-
-    return () => {
-      if (previewTimeoutRef.current) {
-        clearTimeout(previewTimeoutRef.current);
-      }
-    };
-  }, [draft.sourceUrl, draft.type, triggerPreviewFetch]);
-
-  // Re-initialise from the persisted draft every time the form mounts
-  // (dialog opens), so a prior close-then-reopen picks up any unsaved
-  // content. The initial render starts with an empty draft; this effect
-  // overwrites it before the user sees any output because the dialog's
-  // open animation runs in the same tick.
-  useEffect(() => {
-    setDraft(draftRef.current);
-  }, [draftRef]);
-
-  // Autofocus the content textarea on mount. A requestAnimationFrame
-  // gives the dialog's open animation a frame to settle so the
-  // focus-visible ring renders at the right position.
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
       contentRef.current?.focus();
@@ -221,9 +193,89 @@ function AddForm({
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Mutation for creating a new item
+  // ---- File handlers ----
+
+  const handleFile = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file.");
+      return;
+    }
+    setSelectedFile(file);
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+  }, []);
+
+  const handleFileInput = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) handleFile(file);
+      e.target.value = "";
+    },
+    [handleFile]
+  );
+
+  const handleDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const file = e.dataTransfer.files?.[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
+
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setIsDragOver(false);
+  }, []);
+
+  // Clipboard paste handler for images
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item?.type.startsWith("image/")) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) handleFile(file);
+          return;
+        }
+      }
+    },
+    [handleFile]
+  );
+
+  // ---- canSubmit override for images ----
+  const canSubmitImage =
+    draft.type === "image"
+      ? selectedFile !== null || draft.imageUrl.trim().length > 0
+      : canSubmit(draft);
+
+  // ---- Mutation ----
   const mutation = useMutation({
     mutationFn: async (draftToSubmit: Draft) => {
+      if (draftToSubmit.type === "image") {
+        if (selectedFile) {
+          return uploadImage(selectedFile, {
+            title: draftToSubmit.title,
+            content: draftToSubmit.content,
+          });
+        }
+        if (draftToSubmit.imageUrl.trim()) {
+          return uploadImage(draftToSubmit.imageUrl.trim(), {
+            title: draftToSubmit.title,
+            content: draftToSubmit.content,
+          });
+        }
+        throw new Error("No image selected");
+      }
+
       const content = resolveContent(draftToSubmit);
       if (!content) {
         throw new Error("Content is required");
@@ -240,15 +292,8 @@ function AddForm({
         body.source_url = draftToSubmit.sourceUrl;
       }
 
-      // Build metadata for type-specific fields. Only keys that
-      // are present in the API's per-type metadata schemas are
-      // included; the superRefine in route.ts will validate them.
       const meta: Record<string, unknown> = {};
 
-      // For bookmarks, include the preview metadata if available.
-      // This preserves the metadata fetched during preview (which may
-      // have been more complete than what the API re-fetches, especially
-      // for JavaScript-heavy sites like YouTube).
       if (draftToSubmit.type === "bookmark" && previewMetadata) {
         if (previewMetadata.title) meta.title = previewMetadata.title;
         if (previewMetadata.description)
@@ -260,28 +305,11 @@ function AddForm({
         if (previewMetadata.url) meta.url = previewMetadata.url;
       }
 
-      if (draftToSubmit.type === "person") {
-        if (draftToSubmit.email.trim()) meta.email = draftToSubmit.email;
-        if (draftToSubmit.phoneNumber.trim())
-          meta.phone_number = draftToSubmit.phoneNumber;
-        if (draftToSubmit.role.trim()) meta.role = draftToSubmit.role;
+      const typeMeta = draftToMetadata(draftToSubmit);
+      if (typeMeta) {
+        Object.assign(meta, typeMeta);
       }
-      if (draftToSubmit.type === "project") {
-        if (draftToSubmit.status.trim()) meta.status = draftToSubmit.status;
-        if (draftToSubmit.repo.trim()) meta.repo = draftToSubmit.repo;
-        if (draftToSubmit.started) meta.started = draftToSubmit.started;
-        if (draftToSubmit.goalEndDate)
-          meta.goal_end_date = draftToSubmit.goalEndDate;
-      }
-      if (draftToSubmit.type === "event") {
-        if (draftToSubmit.startDate) meta.start_date = draftToSubmit.startDate;
-        if (draftToSubmit.endDate) meta.end_date = draftToSubmit.endDate;
-        if (draftToSubmit.duration.trim())
-          meta.duration = draftToSubmit.duration;
-      }
-      if (draftToSubmit.type === "dream") {
-        if (draftToSubmit.mood.trim()) meta.mood = draftToSubmit.mood;
-      }
+
       if (Object.keys(meta).length > 0) {
         body.metadata = meta;
       }
@@ -301,43 +329,29 @@ function AddForm({
       return res.json();
     },
     onSuccess: () => {
-      // Invalidate the browse query so the feed refetches and
-      // shows the newly-created item. Using `queryKeys.browse.all`
-      // invalidates all browse queries regardless of filters.
       queryClient.invalidateQueries({ queryKey: queryKeys.browse.all });
 
-      // Gate on mount status: if the component unmounted before
-      // the response landed (dialog was closed and reopened with
-      // fresh content), do not overwrite the new draft or close
-      // the dialog again.
       if (!mountedRef.current) return;
 
-      const fresh = emptyDraft();
-      draftRef.current = fresh;
-      setDraft(fresh);
+      clearDraft();
+      clearSelectedFile();
       toast.success("Saved.");
       onClose();
     },
   });
 
   function updateField<K extends keyof Draft>(field: K, value: Draft[K]) {
-    setDraft((prev) => {
-      const next = { ...prev, [field]: value };
-      draftRef.current = next;
-      return next;
-    });
-    // Clear error when user starts typing
+    setDraft((prev) => ({ ...prev, [field]: value }));
     if (mutation.error) {
       mutation.reset();
     }
   }
 
   const handleSubmit = useCallback(() => {
-    if (!canSubmit(draft) || mutation.isPending) return;
+    if (!canSubmitImage || mutation.isPending) return;
     mutation.mutate(draft);
-  }, [draft, mutation]);
+  }, [draft, mutation, canSubmitImage]);
 
-  // Ctrl+Enter / Cmd+Enter handler.
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -349,7 +363,7 @@ function AddForm({
   );
 
   const contentRequired = isContentRequired(draft.type);
-  const submitDisabled = mutation.isPending || !canSubmit(draft);
+  const submitDisabled = mutation.isPending || !canSubmitImage;
   const error = mutation.error ? mutation.error.message : null;
 
   return (
@@ -361,17 +375,7 @@ function AddForm({
         <div className="flex items-center gap-2">
           <Select
             value={draft.type}
-            onValueChange={(v) => {
-              if (v) {
-                updateField("type", v);
-                // Clear preview state when switching away from bookmark
-                if (v !== "bookmark") {
-                  setPreviewMetadata(null);
-                  setPreviewError(null);
-                  setPreviewLoading(false);
-                }
-              }
-            }}
+            onValueChange={handleTypeChange}
             items={TYPE_ITEMS}
           >
             <SelectTrigger
@@ -405,9 +409,10 @@ function AddForm({
         </div>
       </DialogHeader>
 
-      <div className="mb-4 flex min-h-0 flex-1 flex-col gap-3">
-        {/* Hero writing surface — the content textarea is the visual and
-          functional centre of the dialog. */}
+      <div
+        className="mb-4 flex min-h-0 flex-1 flex-col gap-3"
+        onPaste={draft.type === "image" ? handlePaste : undefined}
+      >
         <div className="bg-muted/30 ring-border/40 focus-within:bg-muted/40 focus-within:ring-border/60 flex min-h-0 flex-1 flex-col gap-2 rounded-xl p-4 ring-1 transition-colors">
           <Input
             data-testid="add-dialog-title"
@@ -418,21 +423,85 @@ function AddForm({
             onKeyDown={handleKeyDown}
           />
 
-          <Textarea
-            ref={contentRef}
-            data-testid="add-dialog-content"
-            className="placeholder:text-muted-foreground/50 min-h-[240px] flex-1 resize-none border-0 bg-transparent px-0 text-base leading-relaxed focus-visible:ring-0"
-            placeholder={CONTENT_PLACEHOLDER[draft.type] ?? "Type here\u2026"}
-            value={draft.content}
-            onChange={(e) => updateField("content", e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={5}
-            aria-required={contentRequired}
-          />
+          {draft.type === "image" ? (
+            <>
+              <div
+                ref={dropZoneRef}
+                data-testid="add-dialog-drop-zone"
+                className={cn(
+                  "flex flex-1 cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-6 transition-colors",
+                  isDragOver
+                    ? "border-border bg-muted/40"
+                    : "border-border/50 hover:border-border hover:bg-muted/20",
+                  previewUrl ? "pb-4" : "py-10"
+                )}
+                onClick={() => {
+                  const input = dropZoneRef.current?.querySelector(
+                    "input[type=file]"
+                  ) as HTMLInputElement | null;
+                  input?.click();
+                }}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+              >
+                {previewUrl ? (
+                  <img
+                    src={previewUrl}
+                    alt="Image preview"
+                    className="max-h-[200px] rounded-md object-contain"
+                  />
+                ) : (
+                  <>
+                    <ImageIcon className="text-muted-foreground/50 size-10" />
+                    <p className="text-muted-foreground text-sm">
+                      Drop an image here, paste from clipboard, or click to
+                      browse
+                    </p>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileInput}
+                  data-testid="add-dialog-file-input"
+                />
+              </div>
+              {previewUrl && (
+                <div className="flex items-center gap-2">
+                  <p className="text-muted-foreground truncate text-xs">
+                    {selectedFile?.name ?? "Image selected"}
+                  </p>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearSelectedFile();
+                    }}
+                    aria-label="Remove image"
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <Textarea
+              ref={contentRef}
+              data-testid="add-dialog-content"
+              className="placeholder:text-muted-foreground/50 min-h-[240px] flex-1 resize-none border-0 bg-transparent px-0 text-base leading-relaxed focus-visible:ring-0"
+              placeholder={CONTENT_PLACEHOLDER[draft.type] ?? "Type here\u2026"}
+              value={draft.content}
+              onChange={(e) => updateField("content", e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={5}
+              aria-required={contentRequired}
+            />
+          )}
         </div>
 
-        {/* Type-specific metadata — compact, secondary, below the hero
-          writing surface so it never competes for attention. */}
         {hasTypeSpecificFields(draft.type) && (
           <>
             <TypeSpecificFields
@@ -442,104 +511,19 @@ function AddForm({
               bookmarkUrlProps={{
                 onChange: (e) => {
                   updateField("sourceUrl", e.target.value);
-                  // Reset preview state immediately so stale data doesn't linger
                   setPreviewMetadata(null);
-                  setPreviewError(null);
-                  setPreviewLoading(false);
-                },
-                onBlur: () => {
-                  // Flush the debounce immediately on blur.
-                  const url = draft.sourceUrl.trim();
-                  if (!url) return;
-                  if (previewTimeoutRef.current) {
-                    clearTimeout(previewTimeoutRef.current);
-                    previewTimeoutRef.current = null;
-                  }
-                  triggerPreviewFetch(url);
                 },
               }}
+              imageUrlProps={{
+                disabled: selectedFile !== null,
+              }}
             />
-            {/* Bookmark preview card — stays in add-dialog */}
             {draft.type === "bookmark" && (
-              <>
-                {previewLoading && (
-                  <div className="bg-muted/30 text-muted-foreground col-span-2 flex items-center gap-2 rounded-lg border p-3 text-xs">
-                    <svg
-                      className="size-3.5 animate-spin"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                      />
-                    </svg>
-                    Loading preview…
-                  </div>
-                )}
-
-                {previewError && !previewLoading && (
-                  <div className="bg-muted/30 text-muted-foreground col-span-2 flex items-center gap-2 rounded-lg border p-3 text-xs">
-                    <svg
-                      className="size-3.5 shrink-0"
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    <span>Preview unavailable</span>
-                  </div>
-                )}
-
-                {previewMetadata && !previewLoading && (
-                  <div
-                    data-testid="add-dialog-bookmark-preview"
-                    className="bg-muted/30 col-span-2 flex items-start gap-3 rounded-lg border p-3"
-                  >
-                    {previewMetadata.favicon && (
-                      <img
-                        src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(previewMetadata.favicon)}`}
-                        alt=""
-                        className="mt-0.5 size-4 shrink-0 rounded"
-                      />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {previewMetadata.title || draft.title || "Untitled"}
-                      </p>
-                      {previewMetadata.description && (
-                        <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
-                          {previewMetadata.description}
-                        </p>
-                      )}
-                      {previewMetadata.site_name && (
-                        <p className="text-muted-foreground mt-1 text-[10px]">
-                          {previewMetadata.site_name}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </>
+              <BookmarkPreview
+                url={draft.sourceUrl}
+                onMetadataFetched={handleMetadataFetched}
+                onTitlePrefill={handleTitlePrefill}
+              />
             )}
           </>
         )}
@@ -560,6 +544,15 @@ function AddForm({
         <span className="text-muted-foreground mr-auto hidden text-xs md:inline">
           Ctrl+Enter to save
         </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={handleContinueInPage}
+          disabled={mutation.isPending}
+        >
+          Continue in page
+        </Button>
         <DialogClose
           render={<Button type="button" variant="outline" />}
           disabled={mutation.isPending}
@@ -575,7 +568,7 @@ function AddForm({
           {mutation.isPending && (
             <Loader2 aria-hidden className="size-3.5 animate-spin" />
           )}
-          Save
+          {draft.type === "image" ? "Upload" : "Save"}
         </Button>
       </DialogFooter>
     </>
@@ -583,8 +576,7 @@ function AddForm({
 }
 
 // ---------------------------------------------------------------------------
-// The "+" button that sits in the top nav. Exported so the header can
-// render it directly and re-use the same hook.
+// Add button
 // ---------------------------------------------------------------------------
 
 export function AddButton() {

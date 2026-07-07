@@ -103,6 +103,7 @@ function draftFromItem(item: ContentItem, tags: Tag[]): EditDraft {
     endDate: meta.endDate ?? "",
     duration: meta.duration ?? "",
     mood: meta.mood ?? "",
+    imageUrl: "",
   };
 }
 

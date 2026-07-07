@@ -16,6 +16,7 @@
 import type { KeyboardEvent } from "react";
 
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import type { Draft } from "@/lib/add-form/types";
 import { hasTypeSpecificFields } from "@/lib/add-form/types";
 
@@ -25,6 +26,8 @@ export interface TypeSpecificFieldsProps {
   handleKeyDown: (e: KeyboardEvent) => void;
   /** Extra props spread onto the bookmark URL input (e.g. onBlur, ref). */
   bookmarkUrlProps?: React.InputHTMLAttributes<HTMLInputElement>;
+  /** Extra props spread onto the image URL input (e.g. disabled when file selected). */
+  imageUrlProps?: React.InputHTMLAttributes<HTMLInputElement>;
 }
 
 export function TypeSpecificFields({
@@ -32,6 +35,7 @@ export function TypeSpecificFields({
   updateField,
   handleKeyDown,
   bookmarkUrlProps,
+  imageUrlProps,
 }: TypeSpecificFieldsProps) {
   if (!hasTypeSpecificFields(draft.type)) return null;
 
@@ -40,6 +44,31 @@ export function TypeSpecificFields({
       <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
         Details
       </p>
+
+      {draft.type === "image" && (
+        <div className="flex flex-col gap-2">
+          <Input
+            data-testid="add-dialog-image-url"
+            className="h-7 text-xs"
+            placeholder="Image URL"
+            value={draft.imageUrl}
+            onChange={(e) => updateField("imageUrl", e.target.value)}
+            onKeyDown={handleKeyDown}
+            type="url"
+            {...imageUrlProps}
+          />
+          <Textarea
+            data-testid="add-dialog-content"
+            className="placeholder:text-muted-foreground/50 min-h-[48px] resize-none border-0 bg-transparent px-0 text-xs leading-relaxed focus-visible:ring-0"
+            placeholder="Notes about this image (optional)…"
+            value={draft.content}
+            onChange={(e) => updateField("content", e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={2}
+          />
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-2">
         {draft.type === "bookmark" && (
           <Input

@@ -35,6 +35,17 @@ vi.mock("sonner", () => ({
 
 const fetchMock = vi.fn();
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -73,6 +84,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockResolvedValue(jsonResponse({ id: "new-item" }));
   vi.stubGlobal("fetch", fetchMock);
+  localStorage.clear();
 });
 
 afterEach(() => {
@@ -305,5 +317,147 @@ describe("AddDialog", () => {
     expect(
       screen.queryByTestId("add-dialog-bookmark-url")
     ).not.toBeInTheDocument();
+  });
+
+  it("shows drop zone when type is Image and hides content textarea", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByTestId("add-dialog-trigger"));
+
+    // Default type: content textarea visible, no drop zone
+    expect(screen.getByTestId("add-dialog-content")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-dialog-drop-zone")
+    ).not.toBeInTheDocument();
+
+    // Switch to "image"
+    const typeTrigger = screen.getByTestId("add-dialog-type");
+    await user.click(typeTrigger);
+    const imageOption = await screen.findByRole("option", {
+      name: "Image",
+    });
+    await user.click(imageOption);
+
+    // Drop zone now visible, content textarea is the one below it
+    expect(screen.getByTestId("add-dialog-drop-zone")).toBeInTheDocument();
+    // File input is hidden inside the drop zone
+    expect(screen.getByTestId("add-dialog-file-input")).toBeInTheDocument();
+
+    // Submit button label changes to "Upload"
+    expect(screen.getByTestId("add-dialog-submit")).toHaveTextContent("Upload");
+  });
+
+  it("shows URL input when type is Image", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByTestId("add-dialog-trigger"));
+
+    // Switch to "image"
+    const typeTrigger = screen.getByTestId("add-dialog-type");
+    await user.click(typeTrigger);
+    const imageOption = await screen.findByRole("option", {
+      name: "Image",
+    });
+    await user.click(imageOption);
+
+    // URL input is visible
+    const urlInput = screen.getByTestId("add-dialog-image-url");
+    expect(urlInput).toBeInTheDocument();
+    expect(urlInput).toHaveAttribute(
+      "placeholder",
+      expect.stringContaining("URL")
+    );
+  });
+
+  it("submits URL to /api/images when image URL is entered", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByTestId("add-dialog-trigger"));
+
+    // Switch to "image"
+    const typeTrigger = screen.getByTestId("add-dialog-type");
+    await user.click(typeTrigger);
+    const imageOption = await screen.findByRole("option", {
+      name: "Image",
+    });
+    await user.click(imageOption);
+
+    // Enter a URL
+    await user.type(
+      screen.getByTestId("add-dialog-image-url"),
+      "https://example.com/photo.png"
+    );
+
+    // Submit button should now be enabled
+    expect(screen.getByTestId("add-dialog-submit")).not.toBeDisabled();
+
+    // Submit
+    await user.click(screen.getByTestId("add-dialog-submit"));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/images",
+        expect.objectContaining({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    });
+
+    const imagesCall = fetchMock.mock.calls.find(
+      (call: unknown[]) => (call[0] as string) === "/api/images"
+    ) as [string, RequestInit] | undefined;
+    expect(imagesCall).toBeDefined();
+    const body = JSON.parse(imagesCall![1].body as string);
+    expect(body.url).toBe("https://example.com/photo.png");
+  });
+
+  it("hides drop zone when switching from image back to another type", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByTestId("add-dialog-trigger"));
+
+    // Switch to "image"
+    const typeTrigger = screen.getByTestId("add-dialog-type");
+    await user.click(typeTrigger);
+    const imageOption = await screen.findByRole("option", {
+      name: "Image",
+    });
+    await user.click(imageOption);
+
+    expect(screen.getByTestId("add-dialog-drop-zone")).toBeInTheDocument();
+
+    // Switch back to "note"
+    await user.click(typeTrigger);
+    const noteOption = await screen.findByRole("option", { name: "Note" });
+    await user.click(noteOption);
+
+    // Drop zone gone, content textarea back
+    expect(
+      screen.queryByTestId("add-dialog-drop-zone")
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("add-dialog-content")).toBeInTheDocument();
+  });
+
+  it("shows disabled submit button for image type without file or URL", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByTestId("add-dialog-trigger"));
+
+    // Switch to "image"
+    const typeTrigger = screen.getByTestId("add-dialog-type");
+    await user.click(typeTrigger);
+    const imageOption = await screen.findByRole("option", {
+      name: "Image",
+    });
+    await user.click(imageOption);
+
+    // No file, no URL — submit disabled
+    expect(screen.getByTestId("add-dialog-submit")).toBeDisabled();
   });
 });

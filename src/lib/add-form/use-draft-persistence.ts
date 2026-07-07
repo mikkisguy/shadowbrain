@@ -58,6 +58,7 @@ function isNonEmptyDraft(d: Draft): boolean {
     d.content.trim() ||
     d.title.trim() ||
     d.sourceUrl.trim() ||
+    d.imageUrl.trim() ||
     d.email.trim() ||
     d.phoneNumber.trim() ||
     d.role.trim() ||
@@ -121,6 +122,11 @@ export function useDraftPersistence(
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
+        // Flush pending save on unmount so a quick close doesn't lose
+        // the last keystrokes.
+        if (isNonEmptyDraft(draft)) {
+          writeStoredDraft(draft);
+        }
       }
     };
   }, [draft]);
