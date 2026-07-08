@@ -87,6 +87,7 @@ export default async function ItemDetailPage({
         <DetailLayout
           sidebar={
             <ItemSidebar
+              itemId={id}
               tags={tags}
               outbound={links.outbound}
               inbound={links.inbound}
