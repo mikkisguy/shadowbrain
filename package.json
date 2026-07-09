@@ -1,6 +1,6 @@
 {
   "name": "shadowbrain",
-  "version": "0.30.0",
+  "version": "0.31.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -65,8 +65,11 @@
     ]
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.5",
+    "@ai-sdk/provider": "^4.0.2",
     "@base-ui/react": "^1.6.0",
     "@tanstack/react-query": "^5.101.2",
+    "ai": "^7.0.16",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.11.1",
     "class-variance-authority": "^0.7.1",
