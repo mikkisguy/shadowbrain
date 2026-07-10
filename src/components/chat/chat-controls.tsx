@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -33,6 +34,15 @@ interface ChatControlsProps {
 }
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const providerLabels: Record<string, string> = {
+  "opencode-go": "OpenCode Go",
+  hermes: "Hermes",
+};
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -48,6 +58,11 @@ export function ChatControls({
   onSaveChat,
   savingChat,
 }: ChatControlsProps) {
+  const modelLabels = useMemo(
+    () => Object.fromEntries(models.map((m) => [m.id, formatModelName(m.id)])),
+    [models]
+  );
+
   return (
     <div className="border-border bg-background flex items-center gap-3 border-t px-4 py-2">
       {/* Target selector */}
@@ -56,6 +71,7 @@ export function ChatControls({
         <Select
           value={provider}
           onValueChange={(v) => v && onProviderChange(v)}
+          items={providerLabels}
         >
           <SelectTrigger className="h-7 w-32 text-xs">
             <SelectValue />
@@ -65,7 +81,11 @@ export function ChatControls({
             <SelectItem value="hermes">Hermes</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={model} onValueChange={(v) => v && onModelChange(v)}>
+        <Select
+          value={model}
+          onValueChange={(v) => v && onModelChange(v)}
+          items={modelLabels}
+        >
           <SelectTrigger className="h-7 w-40 text-xs">
             <SelectValue placeholder="Select model" />
           </SelectTrigger>

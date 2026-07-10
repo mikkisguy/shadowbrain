@@ -7,6 +7,7 @@ import { errorResponse, parseJson, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
 import { getModelForTarget } from "@/lib/chat/providers";
 import { deriveTitle } from "@/lib/chat/title";
+import { generateThreadTitle } from "@/lib/chat/title-generator";
 import type { MessageRow } from "@/lib/chat/types";
 
 // ---------------------------------------------------------------------------
@@ -166,6 +167,8 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       let fullContent = "";
+      let promptTokens: number | undefined;
+      let completionTokens: number | undefined;
 
       try {
         const result = streamText({
@@ -182,6 +185,15 @@ export async function POST(request: Request) {
           );
         }
 
+        // Await usage to get token counts
+        try {
+          const usage = await result.usage;
+          promptTokens = usage.inputTokens;
+          completionTokens = usage.outputTokens;
+        } catch {
+          // Usage may not be available from all providers
+        }
+
         // ------------------------------------------------------------------
         // 5. Persist assistant message (persisted chats only)
         // ------------------------------------------------------------------
@@ -190,14 +202,17 @@ export async function POST(request: Request) {
           const now = new Date().toISOString();
           db.prepare(
             `INSERT INTO chat_messages
-               (id, thread_id, role, content, target_provider, target_model, created_at)
-             VALUES (?, ?, 'assistant', ?, ?, ?, ?)`
+               (id, thread_id, role, content, target_provider, target_model,
+                prompt_tokens, completion_tokens, created_at)
+             VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?)`
           ).run(
             asstMsgId,
             threadId,
             fullContent,
             target.provider,
             target.model,
+            promptTokens ?? null,
+            completionTokens ?? null,
             now
           );
 
@@ -205,12 +220,44 @@ export async function POST(request: Request) {
             now,
             threadId
           );
+
+          // ------------------------------------------------------------------
+          // 6. AI-generated thread title after first exchange
+          // ------------------------------------------------------------------
+          const msgCount = (
+            db
+              .prepare(
+                `SELECT COUNT(*) as c FROM chat_messages WHERE thread_id = ?`
+              )
+              .get(threadId) as { c: number }
+          ).c;
+
+          if (msgCount === 2) {
+            // First exchange: attempt AI title generation.
+            log("info", "triggering AI thread title generation", {
+              event: "chat_thread.title_trigger",
+              threadId,
+              msgCount,
+            });
+            generateThreadTitle(db, threadId).catch((err: unknown) => {
+              log("warn", "AI thread title generation failed", {
+                event: "chat_thread.title_generation_error",
+                threadId,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            });
+          }
         }
 
-        // Send done event with threadId so the client can update state
+        // Send done event with threadId and metadata
         controller.enqueue(
           encoder.encode(
-            `data: ${JSON.stringify({ type: "done", threadId })}\n\n`
+            `data: ${JSON.stringify({
+              type: "done",
+              threadId,
+              promptTokens,
+              completionTokens,
+            })}\n\n`
           )
         );
         controller.close();
@@ -221,14 +268,17 @@ export async function POST(request: Request) {
           const now = new Date().toISOString();
           db.prepare(
             `INSERT INTO chat_messages
-               (id, thread_id, role, content, target_provider, target_model, created_at)
-             VALUES (?, ?, 'assistant', ?, ?, ?, ?)`
+               (id, thread_id, role, content, target_provider, target_model,
+                prompt_tokens, completion_tokens, created_at)
+             VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?)`
           ).run(
             asstMsgId,
             threadId,
             fullContent,
             target.provider,
             target.model,
+            promptTokens ?? null,
+            completionTokens ?? null,
             now
           );
         }

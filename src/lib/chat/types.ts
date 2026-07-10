@@ -26,5 +26,7 @@ export interface MessageRow {
   tool_call_id: string | null;
   target_provider: string | null;
   target_model: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
   created_at: string;
 }
