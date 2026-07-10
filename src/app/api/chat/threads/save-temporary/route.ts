@@ -17,6 +17,19 @@ import type { ThreadRow } from "@/lib/chat/types";
 const messageSchema = z.object({
   role: z.enum(["user", "assistant", "system", "tool"]),
   content: z.string(),
+  promptTokens: z.number().int().nullable().optional(),
+  completionTokens: z.number().int().nullable().optional(),
+  targetModel: z.string().optional(),
+  toolProgress: z
+    .array(
+      z.object({
+        id: z.string(),
+        tool: z.string(),
+        label: z.string(),
+        status: z.enum(["running", "completed"]),
+      })
+    )
+    .optional(),
 });
 
 const saveTemporarySchema = z.object({
@@ -68,8 +81,9 @@ export async function POST(request: Request) {
 
       const insertMsg = db.prepare(
         `INSERT INTO chat_messages
-           (id, thread_id, role, content, target_provider, target_model, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+           (id, thread_id, role, content, target_provider, target_model,
+            tool_calls, prompt_tokens, completion_tokens, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
 
       for (const msg of messages) {
@@ -79,7 +93,12 @@ export async function POST(request: Request) {
           msg.role,
           msg.content,
           target.provider,
-          target.model,
+          msg.targetModel ?? target.model,
+          msg.toolProgress && msg.toolProgress.length > 0
+            ? JSON.stringify(msg.toolProgress)
+            : null,
+          msg.promptTokens ?? null,
+          msg.completionTokens ?? null,
           now
         );
       }

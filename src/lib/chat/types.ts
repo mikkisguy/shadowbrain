@@ -5,6 +5,27 @@ export interface Target {
   model: string;
 }
 
+// ---------------------------------------------------------------------------
+// Hermes tool-progress and approval types
+// ---------------------------------------------------------------------------
+
+export interface ToolProgressItem {
+  id: string;
+  tool: string;
+  label: string;
+  status: "running" | "completed";
+}
+
+export type HermesApprovalDecision = "once" | "session" | "always" | "deny";
+
+export interface ApprovalState {
+  runId: string;
+  summary: string;
+  command?: string;
+  /** Available choices from Hermes (e.g. ["once", "session", "deny"]). */
+  choices: HermesApprovalDecision[];
+}
+
 export interface ThreadRow {
   id: string;
   title: string;

@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { ThreadList } from "@/components/chat/thread-list";
 import { MessageList } from "@/components/chat/message-list";
+import type {
+  ToolProgressItem,
+  ApprovalState,
+  HermesApprovalDecision,
+} from "@/lib/chat/types";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ChatControls } from "@/components/chat/chat-controls";
 import type { ThreadInfo } from "@/components/chat/thread-list";
@@ -11,6 +16,24 @@ import type { ChatMessage } from "@/components/chat/message-list";
 import { getModelContextWindow } from "@/lib/chat/model-metadata";
 
 const DEFAULT_PROVIDER = "opencode-go";
+
+function parseToolCalls(
+  raw: string | null | undefined
+): ToolProgressItem[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return undefined;
+    return parsed.map((item: Record<string, unknown>, i: number) => ({
+      id: String(item.id ?? `tool-${i}`),
+      tool: String(item.tool ?? "unknown"),
+      label: String(item.label ?? ""),
+      status: item.status === "completed" ? "completed" : "running",
+    })) as ToolProgressItem[];
+  } catch {
+    return undefined;
+  }
+}
 
 export default function ChatPage() {
   // ------------------------------------------------------------------
@@ -29,6 +52,10 @@ export default function ChatPage() {
   const [savingChat, setSavingChat] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [toolProgress, setToolProgress] = useState<ToolProgressItem[]>([]);
+  const [approvalState, setApprovalState] = useState<ApprovalState | undefined>(
+    undefined
+  );
 
   const abortRef = useRef<AbortController | null>(null);
   const streamingContentRef = useRef("");
@@ -50,8 +77,7 @@ export default function ChatPage() {
   }, []);
 
   // ------------------------------------------------------------------
-  // Derived: context window usage — use the largest prompt_tokens seen,
-  // since each turn's prompt already includes all prior history.
+  // Derived: context window usage
   // ------------------------------------------------------------------
   const totalTokens = useMemo(() => {
     let maxPrompt = 0;
@@ -144,7 +170,7 @@ export default function ChatPage() {
   }, [provider, modelRef, defaultModelRef]);
 
   // ------------------------------------------------------------------
-  // Select a thread — auto-selects last-used model + loads messages
+  // Select a thread
   // ------------------------------------------------------------------
   const handleSelectThread = useCallback(async (id: string) => {
     // Abort any in-flight stream
@@ -169,6 +195,7 @@ export default function ChatPage() {
         target_model?: string;
         prompt_tokens?: number | null;
         completion_tokens?: number | null;
+        tool_calls?: string | null;
         created_at: string;
       }>;
 
@@ -192,6 +219,7 @@ export default function ChatPage() {
           targetModel: m.target_model ?? undefined,
           promptTokens: m.prompt_tokens ?? null,
           completionTokens: m.completion_tokens ?? null,
+          toolProgress: parseToolCalls(m.tool_calls),
           createdAt: m.created_at,
         }))
       );
@@ -281,6 +309,32 @@ export default function ChatPage() {
   }, [messages, provider, model, fetchThreads]);
 
   // ------------------------------------------------------------------
+  // Resolve Hermes approval
+  // ------------------------------------------------------------------
+  const handleResolveApproval = useCallback(
+    async (decision: HermesApprovalDecision) => {
+      if (!approvalState?.runId) return;
+      const runId = approvalState.runId;
+      setApprovalState(undefined);
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: decision,
+            runId,
+          }),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+      } catch {
+        setStreamError("Failed to resolve approval");
+      }
+    },
+    [approvalState]
+  );
+
+  // ------------------------------------------------------------------
   // SSE stream reader helper
   // ------------------------------------------------------------------
   const readSseStream = useCallback(
@@ -290,6 +344,7 @@ export default function ChatPage() {
     ) => {
       const decoder = new TextDecoder();
       let buffer = "";
+      const localToolProgress: ToolProgressItem[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -311,11 +366,47 @@ export default function ChatPage() {
                 streamingContentRef.current + (event.content as string);
               streamingContentRef.current = newContent;
               setStreamingContent(newContent);
+            } else if (event.type === "tool-progress") {
+              const tool = String(event.tool ?? "unknown");
+              const existing = localToolProgress.find((t) => t.tool === tool);
+              if (existing) {
+                existing.status =
+                  event.status === "completed" ? "completed" : "running";
+                existing.label = String(event.label ?? existing.label);
+              } else {
+                localToolProgress.push({
+                  id: `${tool}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  tool,
+                  label: String(event.label ?? ""),
+                  status:
+                    event.status === "completed" ? "completed" : "running",
+                });
+              }
+              setToolProgress([...localToolProgress]);
+            } else if (event.type === "approval-requested") {
+              const choices: HermesApprovalDecision[] = Array.isArray(
+                event.choices
+              )
+                ? event.choices
+                : ["once", "session", "always", "deny"];
+              setApprovalState({
+                runId: String(event.runId ?? ""),
+                summary: String(event.summary ?? "Action requires approval"),
+                command: event.command ? String(event.command) : undefined,
+                choices,
+              });
             } else if (event.type === "done") {
-              const finalContent = streamingContentRef.current;
+              const finalContent =
+                streamingContentRef.current ||
+                (event.output as string | undefined) ||
+                "";
+              const capturedToolProgress =
+                localToolProgress.length > 0
+                  ? [...localToolProgress]
+                  : undefined;
+
               if (finalContent) {
                 if (isRegenerate) {
-                  // Replace the last assistant message
                   setMessages((msgs) => {
                     const lastAssistantIdx = msgs
                       .map((m) => m.role)
@@ -326,6 +417,7 @@ export default function ChatPage() {
                         role: "assistant",
                         content: finalContent,
                         targetModel: model,
+                        toolProgress: capturedToolProgress,
                         promptTokens: (event.promptTokens as number) ?? null,
                         completionTokens:
                           (event.completionTokens as number) ?? null,
@@ -339,6 +431,7 @@ export default function ChatPage() {
                         role: "assistant",
                         content: finalContent,
                         targetModel: model,
+                        toolProgress: capturedToolProgress,
                         promptTokens: (event.promptTokens as number) ?? null,
                         completionTokens:
                           (event.completionTokens as number) ?? null,
@@ -353,6 +446,7 @@ export default function ChatPage() {
                       role: "assistant",
                       content: finalContent,
                       targetModel: model,
+                      toolProgress: capturedToolProgress,
                       promptTokens: (event.promptTokens as number) ?? null,
                       completionTokens:
                         (event.completionTokens as number) ?? null,
@@ -365,6 +459,8 @@ export default function ChatPage() {
               setStreamingContent("");
               setStreaming(false);
               setRegenerating(false);
+              setToolProgress([]);
+              setApprovalState(undefined);
 
               if (
                 !isRegenerate &&
@@ -374,9 +470,6 @@ export default function ChatPage() {
               ) {
                 setActiveThreadId(event.threadId as string);
                 fetchThreads();
-                // Title generation runs async (can take 5-10s for reasoning
-                // models). Poll a few times to pick up the generated title.
-                // Clear any prior timers to avoid stacking on rapid sends.
                 for (const t of titlePollTimersRef.current) clearTimeout(t);
                 titlePollTimersRef.current = [];
                 for (const delay of [3_000, 7_000, 12_000, 20_000]) {
@@ -391,6 +484,8 @@ export default function ChatPage() {
               );
               setStreaming(false);
               setRegenerating(false);
+              setToolProgress([]);
+              setApprovalState(undefined);
             }
           } catch {
             // Skip unparseable lines
@@ -415,6 +510,8 @@ export default function ChatPage() {
       setStreaming(true);
       setStreamingContent("");
       setStreamError(null);
+      setToolProgress([]);
+      setApprovalState(undefined);
       streamingContentRef.current = "";
 
       const controller = new AbortController();
@@ -467,6 +564,8 @@ export default function ChatPage() {
     setStreaming(true);
     setStreamingContent("");
     setStreamError(null);
+    setToolProgress([]);
+    setApprovalState(undefined);
     streamingContentRef.current = "";
 
     const controller = new AbortController();
@@ -537,6 +636,9 @@ export default function ChatPage() {
           }
           regenerating={regenerating}
           streamError={streamError}
+          toolProgress={toolProgress.length > 0 ? toolProgress : undefined}
+          approvalState={approvalState}
+          onResolveApproval={handleResolveApproval}
         />
         <ChatControls
           provider={provider}
@@ -554,6 +656,7 @@ export default function ChatPage() {
           showSaveChat={showSaveChat}
           onSaveChat={handleSaveChat}
           savingChat={savingChat}
+          isHermesMode={provider === "hermes"}
         />
         <ChatInput onSend={handleSend} disabled={streaming} />
       </main>

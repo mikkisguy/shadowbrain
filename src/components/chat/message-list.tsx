@@ -8,8 +8,14 @@ import {
   formatRelativeTime,
 } from "@/lib/chat/model-metadata";
 
+import type {
+  ToolProgressItem,
+  ApprovalState,
+  HermesApprovalDecision,
+} from "@/lib/chat/types";
+
 // ---------------------------------------------------------------------------
-// Types
+// Types (UI-specific)
 // ---------------------------------------------------------------------------
 
 export interface ChatMessage {
@@ -20,6 +26,8 @@ export interface ChatMessage {
   promptTokens?: number | null;
   completionTokens?: number | null;
   createdAt?: string;
+  /** Hermes tool-progress events captured during this assistant turn. */
+  toolProgress?: ToolProgressItem[];
 }
 
 interface MessageListProps {
@@ -36,6 +44,12 @@ interface MessageListProps {
   regenerating?: boolean;
   /** Error message from the SSE stream (displayed as a dismissible banner). */
   streamError?: string | null;
+  /** Hermes: tool-progress events for the current turn. */
+  toolProgress?: ToolProgressItem[];
+  /** Hermes: pending approval that needs user decision. */
+  approvalState?: ApprovalState;
+  /** Hermes: callback when user resolves an approval. */
+  onResolveApproval?: (decision: HermesApprovalDecision) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +68,113 @@ function formatFullTimestamp(isoString: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+function ToolActivityBlock({ item }: { item: ToolProgressItem }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="border-border bg-card/30 my-1 rounded border text-xs">
+      <button
+        className="text-muted-foreground hover:text-foreground flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            item.status === "running"
+              ? "animate-pulse bg-amber-400"
+              : "bg-emerald-400"
+          )}
+        />
+        <span className="font-semibold">{item.tool}</span>
+        <span className="truncate opacity-70">{item.label}</span>
+        <span className="ml-auto shrink-0 opacity-50">
+          {expanded ? "▲" : "▼"}
+        </span>
+      </button>
+      {expanded && (
+        <div className="border-border text-muted-foreground border-t px-3 py-1.5 font-mono">
+          <span
+            className={cn(
+              "mr-1.5 inline-block rounded px-1 py-0.5 text-[10px] font-medium",
+              item.status === "running"
+                ? "bg-amber-500/20 text-amber-300"
+                : "bg-emerald-500/20 text-emerald-300"
+            )}
+          >
+            {item.status}
+          </span>
+          {item.label}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Labels for Hermes approval choices. */
+const CHOICE_LABELS: Record<HermesApprovalDecision, string> = {
+  once: "Approve once",
+  session: "Approve session",
+  always: "Approve always",
+  deny: "Deny",
+};
+
+function ApprovalPrompt({
+  state,
+  onResolve,
+}: {
+  state: ApprovalState;
+  onResolve: (decision: HermesApprovalDecision) => void;
+}) {
+  return (
+    <div className="my-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3">
+      <div className="mb-2 flex items-center gap-2">
+        <svg
+          className="h-4 w-4 shrink-0 text-amber-400"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+          />
+        </svg>
+        <span className="text-sm font-semibold text-amber-300">
+          Approval Required
+        </span>
+      </div>
+      <p className="text-muted-foreground mb-3 text-sm">{state.summary}</p>
+      {state.command && (
+        <pre className="bg-muted mb-3 overflow-x-auto rounded px-3 py-2 font-mono text-xs">
+          {state.command}
+        </pre>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {state.choices.map((choice) => (
+          <button
+            key={choice}
+            className={cn(
+              "rounded px-4 py-1.5 text-xs font-medium text-white transition-colors",
+              choice === "deny"
+                ? "bg-destructive hover:bg-destructive/80"
+                : "bg-emerald-600 hover:bg-emerald-700"
+            )}
+            onClick={() => onResolve(choice)}
+          >
+            {CHOICE_LABELS[choice]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -66,6 +187,9 @@ export function MessageList({
   onRegenerate,
   regenerating,
   streamError,
+  toolProgress,
+  approvalState,
+  onResolveApproval,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [hoveredTimestamp, setHoveredTimestamp] = useState<string | null>(null);
@@ -73,7 +197,7 @@ export function MessageList({
   // Auto-scroll to bottom when new content arrives
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingContent]);
+  }, [messages, streamingContent, toolProgress, approvalState]);
 
   if (messages.length === 0 && !streaming) {
     return (
@@ -146,8 +270,18 @@ export function MessageList({
                 )}
               >
                 {msg.role === "assistant" ? (
-                  <div className="prose-sm prose-invert max-w-none">
-                    <MarkdownContent content={msg.content} />
+                  <div>
+                    <div className="prose-sm prose-invert max-w-none">
+                      <MarkdownContent content={msg.content} />
+                    </div>
+                    {/* Tool activity for this turn */}
+                    {msg.toolProgress && msg.toolProgress.length > 0 && (
+                      <div className="border-border mt-2 space-y-1 border-t pt-2">
+                        {msg.toolProgress.map((item) => (
+                          <ToolActivityBlock key={item.id} item={item} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
@@ -222,22 +356,62 @@ export function MessageList({
                 <MarkdownContent content={streamingContent} />
               </div>
               <span className="bg-primary mt-1 inline-block h-4 w-1 animate-pulse" />
+
+              {/* Tool progress inside the streaming bubble */}
+              {toolProgress && toolProgress.length > 0 && (
+                <div className="border-border mt-2 space-y-1 border-t pt-2">
+                  {toolProgress.map((item) => (
+                    <ToolActivityBlock key={item.id} item={item} />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Loading indicator while waiting for first token */}
-        {streaming && !streamingContent && (
-          <div className="flex justify-start">
-            <div className="bg-muted rounded-lg px-4 py-3">
-              <div className="flex gap-1">
-                <span className="bg-muted-foreground/50 h-2 w-2 animate-bounce rounded-full [animation-delay:0ms]" />
-                <span className="bg-muted-foreground/50 h-2 w-2 animate-bounce rounded-full [animation-delay:150ms]" />
-                <span className="bg-muted-foreground/50 h-2 w-2 animate-bounce rounded-full [animation-delay:300ms]" />
-              </div>
-            </div>
+        {/* Hermes approval prompt (during streaming) */}
+        {streaming && approvalState && onResolveApproval && (
+          <div className="mx-auto max-w-[80%]">
+            <ApprovalPrompt
+              state={approvalState}
+              onResolve={onResolveApproval}
+            />
           </div>
         )}
+
+        {/* Loading indicator while waiting for first token (no tools yet) */}
+        {streaming &&
+          !streamingContent &&
+          !approvalState &&
+          !(toolProgress && toolProgress.length > 0) && (
+            <div className="flex justify-start">
+              <div className="bg-muted rounded-lg px-4 py-3">
+                <div className="flex gap-1">
+                  <span className="bg-muted-foreground/50 h-2 w-2 animate-bounce rounded-full [animation-delay:0ms]" />
+                  <span className="bg-muted-foreground/50 h-2 w-2 animate-bounce rounded-full [animation-delay:150ms]" />
+                  <span className="bg-muted-foreground/50 h-2 w-2 animate-bounce rounded-full [animation-delay:300ms]" />
+                </div>
+              </div>
+            </div>
+          )}
+
+        {/* Tool progress before text arrives (Hermes: tools run first) */}
+        {streaming &&
+          !streamingContent &&
+          !approvalState &&
+          toolProgress &&
+          toolProgress.length > 0 && (
+            <div className="flex justify-start">
+              <div className="bg-muted max-w-[80%] rounded-lg px-4 py-3">
+                <div className="space-y-1">
+                  {toolProgress.map((item) => (
+                    <ToolActivityBlock key={item.id} item={item} />
+                  ))}
+                </div>
+                <span className="bg-primary mt-2 inline-block h-4 w-1 animate-pulse" />
+              </div>
+            </div>
+          )}
 
         <div ref={bottomRef} />
       </div>
