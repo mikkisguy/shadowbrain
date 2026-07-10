@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { ThreadList } from "@/components/chat/thread-list";
 import { MessageList } from "@/components/chat/message-list";
 import { ChatInput } from "@/components/chat/chat-input";
@@ -8,6 +8,7 @@ import { ChatControls } from "@/components/chat/chat-controls";
 import type { ThreadInfo } from "@/components/chat/thread-list";
 import type { ModelOption } from "@/components/chat/chat-controls";
 import type { ChatMessage } from "@/components/chat/message-list";
+import { getModelContextWindow } from "@/lib/chat/model-metadata";
 
 const DEFAULT_PROVIDER = "opencode-go";
 
@@ -26,17 +27,47 @@ export default function ChatPage() {
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   const [savingChat, setSavingChat] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [streamError, setStreamError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const streamingContentRef = useRef("");
   const modelRef = useRef(model);
   const defaultModelRef = useRef(defaultModel);
+  const titlePollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Sync refs with state (post-render, no extra renders)
   useEffect(() => {
     modelRef.current = model;
     defaultModelRef.current = defaultModel;
   });
+
+  // Clear title-poll timers on unmount
+  useEffect(() => {
+    return () => {
+      for (const t of titlePollTimersRef.current) clearTimeout(t);
+    };
+  }, []);
+
+  // ------------------------------------------------------------------
+  // Derived: context window usage — use the largest prompt_tokens seen,
+  // since each turn's prompt already includes all prior history.
+  // ------------------------------------------------------------------
+  const totalTokens = useMemo(() => {
+    let maxPrompt = 0;
+    let lastCompletion = 0;
+    for (const msg of messages) {
+      if (msg.promptTokens != null && msg.promptTokens > maxPrompt) {
+        maxPrompt = msg.promptTokens;
+      }
+      if (msg.completionTokens != null) {
+        lastCompletion = msg.completionTokens;
+      }
+    }
+    return maxPrompt + lastCompletion;
+  }, [messages]);
+
+  const contextWindow = getModelContextWindow(model);
 
   // ------------------------------------------------------------------
   // Fetch threads
@@ -80,7 +111,15 @@ export default function ChatPage() {
   // ------------------------------------------------------------------
   // Update models when provider changes
   // ------------------------------------------------------------------
+  const providerEffectSkipRef = useRef(true);
+
   useEffect(() => {
+    // Skip the initial mount — model selection is handled by the [] effect above.
+    if (providerEffectSkipRef.current) {
+      providerEffectSkipRef.current = false;
+      return;
+    }
+
     const currentModel = modelRef.current;
     const currentDefaultModel = defaultModelRef.current;
     fetch("/api/chat/models")
@@ -105,7 +144,7 @@ export default function ChatPage() {
   }, [provider, modelRef, defaultModelRef]);
 
   // ------------------------------------------------------------------
-  // Select a thread
+  // Select a thread — auto-selects last-used model + loads messages
   // ------------------------------------------------------------------
   const handleSelectThread = useCallback(async (id: string) => {
     // Abort any in-flight stream
@@ -121,12 +160,39 @@ export default function ChatPage() {
       const res = await fetch(`/api/chat/threads/${id}`);
       if (!res.ok) return;
       const data = await res.json();
+      const thread = data.thread as ThreadInfo;
+      const rawMessages = data.messages as Array<{
+        id: string;
+        role: string;
+        content: string;
+        target_provider?: string;
+        target_model?: string;
+        prompt_tokens?: number | null;
+        completion_tokens?: number | null;
+        created_at: string;
+      }>;
+
       setActiveThreadId(id);
       setTemporary(false);
+
+      // Auto-select provider + model from thread
+      if (thread.target_provider) {
+        setProvider(thread.target_provider);
+      }
+      if (thread.target_model) {
+        setModel(thread.target_model);
+      }
+
+      // Map messages with metadata
       setMessages(
-        (data.messages ?? []).map((m: { role: string; content: string }) => ({
-          role: m.role,
+        rawMessages.map((m) => ({
+          id: m.id,
+          role: m.role as ChatMessage["role"],
           content: m.content,
+          targetModel: m.target_model ?? undefined,
+          promptTokens: m.prompt_tokens ?? null,
+          completionTokens: m.completion_tokens ?? null,
+          createdAt: m.created_at,
         }))
       );
     } catch {
@@ -215,15 +281,140 @@ export default function ChatPage() {
   }, [messages, provider, model, fetchThreads]);
 
   // ------------------------------------------------------------------
+  // SSE stream reader helper
+  // ------------------------------------------------------------------
+  const readSseStream = useCallback(
+    async (
+      reader: ReadableStreamDefaultReader<Uint8Array>,
+      isRegenerate: boolean
+    ) => {
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6);
+
+          try {
+            const event = JSON.parse(payload);
+
+            if (event.type === "text-delta") {
+              const newContent =
+                streamingContentRef.current + (event.content as string);
+              streamingContentRef.current = newContent;
+              setStreamingContent(newContent);
+            } else if (event.type === "done") {
+              const finalContent = streamingContentRef.current;
+              if (finalContent) {
+                if (isRegenerate) {
+                  // Replace the last assistant message
+                  setMessages((msgs) => {
+                    const lastAssistantIdx = msgs
+                      .map((m) => m.role)
+                      .lastIndexOf("assistant");
+                    if (lastAssistantIdx >= 0) {
+                      const updated = [...msgs];
+                      updated[lastAssistantIdx] = {
+                        role: "assistant",
+                        content: finalContent,
+                        targetModel: model,
+                        promptTokens: (event.promptTokens as number) ?? null,
+                        completionTokens:
+                          (event.completionTokens as number) ?? null,
+                        createdAt: new Date().toISOString(),
+                      };
+                      return updated;
+                    }
+                    return [
+                      ...msgs,
+                      {
+                        role: "assistant",
+                        content: finalContent,
+                        targetModel: model,
+                        promptTokens: (event.promptTokens as number) ?? null,
+                        completionTokens:
+                          (event.completionTokens as number) ?? null,
+                        createdAt: new Date().toISOString(),
+                      },
+                    ];
+                  });
+                } else {
+                  setMessages((msgs) => [
+                    ...msgs,
+                    {
+                      role: "assistant",
+                      content: finalContent,
+                      targetModel: model,
+                      promptTokens: (event.promptTokens as number) ?? null,
+                      completionTokens:
+                        (event.completionTokens as number) ?? null,
+                      createdAt: new Date().toISOString(),
+                    },
+                  ]);
+                }
+              }
+              streamingContentRef.current = "";
+              setStreamingContent("");
+              setStreaming(false);
+              setRegenerating(false);
+
+              if (
+                !isRegenerate &&
+                event.threadId &&
+                !activeThreadId &&
+                !temporary
+              ) {
+                setActiveThreadId(event.threadId as string);
+                fetchThreads();
+                // Title generation runs async (can take 5-10s for reasoning
+                // models). Poll a few times to pick up the generated title.
+                // Clear any prior timers to avoid stacking on rapid sends.
+                for (const t of titlePollTimersRef.current) clearTimeout(t);
+                titlePollTimersRef.current = [];
+                for (const delay of [3_000, 7_000, 12_000, 20_000]) {
+                  titlePollTimersRef.current.push(
+                    setTimeout(() => fetchThreads(), delay)
+                  );
+                }
+              }
+            } else if (event.type === "error") {
+              setStreamError(
+                (event.message as string) ?? "Stream error — try regenerating"
+              );
+              setStreaming(false);
+              setRegenerating(false);
+            }
+          } catch {
+            // Skip unparseable lines
+          }
+        }
+      }
+    },
+    [activeThreadId, temporary, fetchThreads, model]
+  );
+
+  // ------------------------------------------------------------------
   // Send message
   // ------------------------------------------------------------------
   const handleSend = useCallback(
     async (message: string) => {
-      // Add user message to local state
-      const userMsg: ChatMessage = { role: "user", content: message };
+      const userMsg: ChatMessage = {
+        role: "user",
+        content: message,
+        createdAt: new Date().toISOString(),
+      };
       setMessages((prev) => [...prev, userMsg]);
       setStreaming(true);
       setStreamingContent("");
+      setStreamError(null);
       streamingContentRef.current = "";
 
       const controller = new AbortController();
@@ -255,57 +446,7 @@ export default function ChatPage() {
           return;
         }
 
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          // Keep the last potentially-incomplete line in the buffer
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            const payload = line.slice(6);
-
-            try {
-              const event = JSON.parse(payload);
-
-              if (event.type === "text-delta") {
-                const newContent =
-                  streamingContentRef.current + (event.content as string);
-                streamingContentRef.current = newContent;
-                setStreamingContent(newContent);
-              } else if (event.type === "done") {
-                // Finalize the assistant message
-                const finalContent = streamingContentRef.current;
-                if (finalContent) {
-                  setMessages((msgs) => [
-                    ...msgs,
-                    { role: "assistant", content: finalContent },
-                  ]);
-                }
-                // Clear streaming state
-                streamingContentRef.current = "";
-                setStreamingContent("");
-                setStreaming(false);
-
-                // Update threadId if new thread was created
-                if (event.threadId && !activeThreadId && !temporary) {
-                  setActiveThreadId(event.threadId as string);
-                  fetchThreads();
-                }
-              } else if (event.type === "error") {
-                setStreaming(false);
-              }
-            } catch {
-              // Skip unparseable lines
-            }
-          }
-        }
+        await readSseStream(reader, false);
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
           setStreaming(false);
@@ -314,8 +455,57 @@ export default function ChatPage() {
         abortRef.current = null;
       }
     },
-    [activeThreadId, provider, model, temporary, fetchThreads]
+    [activeThreadId, provider, model, temporary, readSseStream]
   );
+
+  // ------------------------------------------------------------------
+  // Regenerate (retry last assistant response)
+  // ------------------------------------------------------------------
+  const handleRegenerate = useCallback(async () => {
+    if (!activeThreadId || streaming) return;
+    setRegenerating(true);
+    setStreaming(true);
+    setStreamingContent("");
+    setStreamError(null);
+    streamingContentRef.current = "";
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch("/api/chat/regenerate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: activeThreadId,
+          target: { provider, model },
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        setStreaming(false);
+        setRegenerating(false);
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setStreaming(false);
+        setRegenerating(false);
+        return;
+      }
+
+      await readSseStream(reader, true);
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setStreaming(false);
+        setRegenerating(false);
+      }
+    } finally {
+      abortRef.current = null;
+    }
+  }, [activeThreadId, streaming, readSseStream, provider, model]);
 
   // ------------------------------------------------------------------
   // Is there a temporary chat with messages to show "Save chat"?
@@ -340,6 +530,13 @@ export default function ChatPage() {
           messages={messages}
           streaming={streaming}
           streamingContent={streamingContent || undefined}
+          totalTokens={totalTokens}
+          contextWindow={contextWindow}
+          onRegenerate={
+            activeThreadId && !temporary ? handleRegenerate : undefined
+          }
+          regenerating={regenerating}
+          streamError={streamError}
         />
         <ChatControls
           provider={provider}
@@ -351,8 +548,6 @@ export default function ChatPage() {
           onTemporaryChange={(v: boolean) => {
             setTemporary(v);
             if (v && activeThreadId) {
-              // Switching to temporary mode with an active thread
-              // Just clear the threadId - messages are already loaded
               setActiveThreadId(null);
             }
           }}

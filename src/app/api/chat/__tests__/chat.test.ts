@@ -15,6 +15,10 @@ vi.mock("@/lib/chat/providers", () => ({
   listModels: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock("@/lib/chat/title-generator", () => ({
+  generateThreadTitle: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { streamText } from "ai";
 import { getModelForTarget } from "@/lib/chat/providers";
 
@@ -302,6 +306,89 @@ describe("/api/chat", () => {
       });
       const json = await getRes.json();
       expect(json.thread.title.length).toBeLessThanOrEqual(80);
+    });
+
+    it("tracks token usage from AI SDK and includes in done event", async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        textStream: createMockTextStream(["Hello"]),
+        usage: Promise.resolve({
+          inputTokens: 42,
+          outputTokens: 10,
+          totalTokens: 52,
+        }),
+      });
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "opencode-go", model: "deepseek" },
+          message: "token test",
+          temporary: false,
+        }),
+      });
+
+      const res = await POST(req);
+      const events = await readSseEvents(res);
+      const doneEvent = events.find((e) => e.type === "done");
+      expect(doneEvent).toBeTruthy();
+      expect(doneEvent?.promptTokens).toBe(42);
+      expect(doneEvent?.completionTokens).toBe(10);
+
+      // Verify persisted in DB
+      const threadId = doneEvent?.threadId as string;
+      const { GET } = await import("@/app/api/chat/threads/[id]/route");
+      const getReq = await authedRequest(
+        `http://localhost/api/chat/threads/${threadId}`
+      );
+      const getRes = await GET(getReq, {
+        params: Promise.resolve({ id: threadId }),
+      });
+      const json = await getRes.json();
+      const assistantMsg = json.messages.find(
+        (m: { role: string }) => m.role === "assistant"
+      );
+      expect(assistantMsg.prompt_tokens).toBe(42);
+      expect(assistantMsg.completion_tokens).toBe(10);
+    });
+
+    it("persists messages with token counts null when usage unavailable", async () => {
+      let rejectUsage: (err: Error) => void;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        textStream: createMockTextStream(["response"]),
+        // usage Promise that rejects when awaited (lazy — avoids unhandled rejection)
+        usage: new Promise((_, reject) => {
+          rejectUsage = reject;
+        }),
+      });
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "opencode-go", model: "deepseek" },
+          message: "no usage test",
+          temporary: false,
+        }),
+      });
+
+      const res = await POST(req);
+
+      // Reject usage after the stream completes. The route awaits result.usage
+      // after the textStream is exhausted; we need to reject so the done event
+      // is sent (with tokens omitted).
+      setTimeout(() => rejectUsage!(new Error("no usage")), 50);
+
+      const events = await readSseEvents(res);
+      const doneEvent = events.find((e) => e.type === "done");
+      expect(doneEvent).toBeTruthy();
+      // Still works — tokens are just null
+      expect(doneEvent?.promptTokens).toBeUndefined();
+      expect(doneEvent?.completionTokens).toBeUndefined();
     });
   });
 });

@@ -310,6 +310,12 @@ Test helper: `authedRequest(url, init)` in `src/db/test-utils.ts` signs a sessio
 
 - Use `Promise.all()` for parallel independent operations
 - Avoid N+1 queries — batch where possible
+- **Native HTTP for fire-and-forget background calls.** Next.js patches
+  global `fetch` to track in-flight requests and abort them when a route
+  handler returns. For background tasks that outlive the response (e.g.
+  AI title generation in `src/lib/chat/title-generator.ts`), use Node's
+  native `http`/`https` modules instead of `fetch` to avoid premature
+  cancellation. See the title generator for an example.
 
 ### SSRF Protection
 
@@ -323,14 +329,15 @@ Test helper: `authedRequest(url, init)` in `src/db/test-utils.ts` signs a sessio
   for the full policy.
 - **Carve-out — admin-configured provider endpoints.** Chat-provider
   connections in `src/lib/settings/provider-connection.ts` (Hermes,
-  OpenCode Go) intentionally do **not** use `validateFetchUrl`. The base
-  URLs are operator-only settings saved through the authenticated settings
-  route, and the defaults point at local services (e.g.
-  `http://localhost:8642/v1`) that the private-range guard would block by
-  design. These are trusted, admin-supplied destinations — not arbitrary
-  user input — so the SSRF guard does not apply. Any new fetch of a URL
-  that originates from an unauthenticated or non-admin source MUST still go
-  through `validateFetchUrl`.
+  OpenCode Go) and `src/lib/chat/title-generator.ts` intentionally do
+  **not** use `validateFetchUrl`. The base URLs are operator-only settings
+  saved through the authenticated settings route, and the defaults point
+  at local services (e.g. `http://localhost:8642/v1`) that the
+  private-range guard would block by design. These are trusted,
+  admin-supplied destinations — not arbitrary user input — so the SSRF
+  guard does not apply. Any new fetch of a URL that originates from an
+  unauthenticated or non-admin source MUST still go through
+  `validateFetchUrl`.
 
 ## Frontend Guidelines
 
