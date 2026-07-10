@@ -19,11 +19,27 @@ vi.mock("@/lib/chat/title-generator", () => ({
   generateThreadTitle: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/chat/hermes-runs", () => ({
+  createRun: vi.fn(),
+  streamEvents: vi.fn(),
+  resolveApproval: vi.fn(),
+}));
+
 import { streamText } from "ai";
 import { getModelForTarget } from "@/lib/chat/providers";
 
 const mockStreamText = vi.mocked(streamText);
 const mockGetModel = vi.mocked(getModelForTarget);
+
+import {
+  createRun,
+  streamEvents,
+  resolveApproval,
+} from "@/lib/chat/hermes-runs";
+
+const mockCreateRun = vi.mocked(createRun);
+const mockStreamEvents = vi.mocked(streamEvents);
+const mockResolveApproval = vi.mocked(resolveApproval);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -81,6 +97,9 @@ describe("/api/chat", () => {
     createTestDb().close();
     mockStreamText.mockReset();
     mockGetModel.mockReset();
+    mockCreateRun.mockReset();
+    mockStreamEvents.mockReset();
+    mockResolveApproval.mockReset();
     // Default: return a dummy model that doesn't throw
     mockGetModel.mockReturnValue(
       {} as unknown as ReturnType<typeof getModelForTarget>
@@ -389,6 +408,198 @@ describe("/api/chat", () => {
       // Still works — tokens are just null
       expect(doneEvent?.promptTokens).toBeUndefined();
       expect(doneEvent?.completionTokens).toBeUndefined();
+    });
+  });
+
+  describe("Hermes Runs API", () => {
+    it("Hermes target streams text via Runs API", async () => {
+      mockCreateRun.mockResolvedValue({ runId: "run_123" });
+      async function* hermesEvents() {
+        yield { type: "text-delta" as const, content: "Hello" };
+        yield { type: "text-delta" as const, content: " from Hermes" };
+        yield { type: "done" as const };
+      }
+      mockStreamEvents.mockImplementation(() => hermesEvents());
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "hermes", model: "hermes-agent" },
+          message: "Hello Hermes",
+          temporary: true,
+        }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+
+      const events = await readSseEvents(res);
+      expect(events).toHaveLength(3);
+      expect(events[0]).toEqual({ type: "text-delta", content: "Hello" });
+      expect(events[1]).toEqual({
+        type: "text-delta",
+        content: " from Hermes",
+      });
+      expect(events[2].type).toBe("done");
+      expect(events[2].threadId).toBeNull();
+    });
+
+    it("Hermes approval resolution succeeds", async () => {
+      mockResolveApproval.mockResolvedValue(undefined);
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "once",
+          runId: "run_123",
+        }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json).toEqual({ ok: true });
+    });
+
+    it("Hermes approval resolution returns error on failure", async () => {
+      mockResolveApproval.mockRejectedValue(new Error("Network failure"));
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "once",
+          runId: "run_123",
+        }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(500);
+      const json = await res.json();
+      expect(json.error.code).toBe("APPROVAL_FAILED");
+    });
+
+    it("Hermes creates thread from first message", async () => {
+      mockCreateRun.mockResolvedValue({ runId: "run_456" });
+      async function* hermesEvents() {
+        yield { type: "text-delta" as const, content: "Hello persisted" };
+        yield { type: "done" as const };
+      }
+      mockStreamEvents.mockImplementation(() => hermesEvents());
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "hermes", model: "hermes-agent" },
+          message: "Persist this",
+          temporary: false,
+        }),
+      });
+
+      const res = await POST(req);
+      const events = await readSseEvents(res);
+      const doneEvent = events.find((e) => e.type === "done");
+      expect(doneEvent?.threadId).toBeTruthy();
+
+      const threadId = doneEvent?.threadId as string;
+      const { GET } = await import("@/app/api/chat/threads/[id]/route");
+      const getReq = await authedRequest(
+        `http://localhost/api/chat/threads/${threadId}`
+      );
+      const getRes = await GET(getReq, {
+        params: Promise.resolve({ id: threadId }),
+      });
+      const json = await getRes.json();
+      expect(json.messages).toHaveLength(2);
+      expect(json.messages[0].role).toBe("user");
+      expect(json.messages[0].content).toBe("Persist this");
+      expect(json.messages[1].role).toBe("assistant");
+      expect(json.messages[1].content).toBe("Hello persisted");
+    });
+
+    it("Hermes persists tool-progress events as tool_calls JSON", async () => {
+      mockCreateRun.mockResolvedValue({ runId: "run_789" });
+      async function* hermesEvents() {
+        yield {
+          type: "tool-progress" as const,
+          tool: "read_file",
+          label: "Reading /etc/hosts",
+          status: "running" as const,
+        };
+        yield {
+          type: "tool-progress" as const,
+          tool: "read_file",
+          label: "completed in 0.12s",
+          status: "completed" as const,
+        };
+        yield {
+          type: "tool-progress" as const,
+          tool: "bash",
+          label: "Running ls -la",
+          status: "running" as const,
+        };
+        yield { type: "text-delta" as const, content: "Done reading" };
+        yield { type: "done" as const };
+      }
+      mockStreamEvents.mockImplementation(() => hermesEvents());
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "hermes", model: "hermes-agent" },
+          message: "Read files please",
+          temporary: false,
+        }),
+      });
+
+      const res = await POST(req);
+      const events = await readSseEvents(res);
+      const doneEvent = events.find((e) => e.type === "done");
+      expect(doneEvent?.threadId).toBeTruthy();
+
+      const threadId = doneEvent?.threadId as string;
+      const { GET } = await import("@/app/api/chat/threads/[id]/route");
+      const getReq = await authedRequest(
+        `http://localhost/api/chat/threads/${threadId}`
+      );
+      const getRes = await GET(getReq, {
+        params: Promise.resolve({ id: threadId }),
+      });
+      const json = await getRes.json();
+      const assistantMsg = json.messages.find(
+        (m: { role: string }) => m.role === "assistant"
+      );
+      expect(assistantMsg).toBeTruthy();
+      expect(assistantMsg.tool_calls).toBeTruthy();
+      const toolCalls = JSON.parse(assistantMsg.tool_calls);
+      expect(Array.isArray(toolCalls)).toBe(true);
+      expect(toolCalls).toHaveLength(2);
+      expect(toolCalls[0].tool).toBe("read_file");
+      expect(toolCalls[0].status).toBe("completed");
+      expect(toolCalls[1].tool).toBe("bash");
+      expect(toolCalls[1].status).toBe("running");
+    });
+
+    it("requires message when no action+runId provided", async () => {
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: null,
+        }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error.code).toBe("VALIDATION_ERROR");
     });
   });
 });
