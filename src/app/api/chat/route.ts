@@ -315,10 +315,13 @@ async function handleHermesRun(
             case "tool-progress": {
               const toolName = String(event.tool ?? "unknown");
               const existingIdx = toolCalls.findIndex(
-                (tc) => tc.tool === toolName
+                (tc) => tc.tool === toolName && tc.status === "running"
               );
               const item: ToolProgressItem = {
-                id: String(event.tool ?? "unknown"),
+                id:
+                  existingIdx >= 0
+                    ? toolCalls[existingIdx].id
+                    : `${toolName}-${toolCalls.length}`,
                 tool: toolName,
                 label: String(event.label ?? ""),
                 status: event.status === "completed" ? "completed" : "running",

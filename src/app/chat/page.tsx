@@ -24,12 +24,22 @@ function parseToolCalls(
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return undefined;
-    return parsed.map((item: Record<string, unknown>, i: number) => ({
-      id: String(item.id ?? `tool-${i}`),
-      tool: String(item.tool ?? "unknown"),
-      label: String(item.label ?? ""),
-      status: item.status === "completed" ? "completed" : "running",
-    })) as ToolProgressItem[];
+    // Ensure unique IDs — old data may have duplicate tool-name IDs
+    const seenIds = new Set<string>();
+    return parsed.map((item: Record<string, unknown>, i: number) => {
+      let id = String(item.id ?? `tool-${i}`);
+      // If this ID was already used, make it unique by appending index
+      if (seenIds.has(id)) {
+        id = `${id}-${i}`;
+      }
+      seenIds.add(id);
+      return {
+        id,
+        tool: String(item.tool ?? "unknown"),
+        label: String(item.label ?? ""),
+        status: item.status === "completed" ? "completed" : "running",
+      };
+    }) as ToolProgressItem[];
   } catch {
     return undefined;
   }
