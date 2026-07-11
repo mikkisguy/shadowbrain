@@ -495,14 +495,10 @@ async function handleOpenCodeGoStream(
       let completionTokens: number | undefined;
 
       try {
-        // Prepend RAG context as a system message when available
-        const messagesWithContext: ModelMessage[] = contextMessage
-          ? [contextMessage, ...modelMessages]
-          : modelMessages;
-
         const result = streamText({
           model,
-          messages: messagesWithContext,
+          messages: modelMessages,
+          ...(contextMessage ? { instructions: contextMessage.content } : {}),
         });
 
         for await (const chunk of result.textStream) {

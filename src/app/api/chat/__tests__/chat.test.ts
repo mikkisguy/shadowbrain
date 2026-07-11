@@ -612,7 +612,7 @@ describe("/api/chat", () => {
   });
 
   describe("RAG grounding", () => {
-    it("grounded=true injects retrieved context as system message for OpenCode Go", async () => {
+    it("grounded=true injects retrieved context via instructions for OpenCode Go", async () => {
       mockRetrieveContext.mockReturnValue(
         "## Retrieved context\n\n- **Test Item** (note): some content"
       );
@@ -638,15 +638,16 @@ describe("/api/chat", () => {
 
       const callArgs = mockStreamText.mock.calls[0]?.[0];
       expect(callArgs).toBeDefined();
+      expect((callArgs as { instructions?: string }).instructions).toBe(
+        "## Retrieved context\n\n- **Test Item** (note): some content"
+      );
+
       const messages = (callArgs as { messages: Array<unknown> }).messages;
-      expect(messages[0]).toEqual({
-        role: "system",
-        content: "## Retrieved context\n\n- **Test Item** (note): some content",
-      });
-      expect(messages[1]).toEqual({ role: "user", content: "What is RAG?" });
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toEqual({ role: "user", content: "What is RAG?" });
     });
 
-    it("grounded=false does not inject context", async () => {
+    it("grounded=false does not inject instructions or context", async () => {
       mockRetrieveContext.mockReturnValue(
         "## Retrieved context\n\n- **Another Item** (page): more content"
       );
@@ -674,6 +675,9 @@ describe("/api/chat", () => {
 
       const callArgs = mockStreamText.mock.calls[0]?.[0];
       expect(callArgs).toBeDefined();
+      const instructions = (callArgs as { instructions?: string }).instructions;
+      expect(instructions).toBeUndefined();
+
       const messages = (callArgs as { messages: Array<unknown> }).messages;
       const systemMessages = (messages as Array<{ role: string }>).filter(
         (m) => m.role === "system"
@@ -681,7 +685,7 @@ describe("/api/chat", () => {
       expect(systemMessages).toHaveLength(0);
     });
 
-    it("empty retrieval result does not inject system message", async () => {
+    it("empty retrieval result does not inject instructions", async () => {
       mockRetrieveContext.mockReturnValue(null);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (mockStreamText as any).mockReturnValue({
@@ -705,6 +709,9 @@ describe("/api/chat", () => {
 
       const callArgs = mockStreamText.mock.calls[0]?.[0];
       expect(callArgs).toBeDefined();
+      const instructions = (callArgs as { instructions?: string }).instructions;
+      expect(instructions).toBeUndefined();
+
       const messages = (callArgs as { messages: Array<unknown> }).messages;
       const systemMessages = (messages as Array<{ role: string }>).filter(
         (m) => m.role === "system"
