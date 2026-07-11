@@ -24,12 +24,22 @@ function parseToolCalls(
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return undefined;
-    return parsed.map((item: Record<string, unknown>, i: number) => ({
-      id: String(item.id ?? `tool-${i}`),
-      tool: String(item.tool ?? "unknown"),
-      label: String(item.label ?? ""),
-      status: item.status === "completed" ? "completed" : "running",
-    })) as ToolProgressItem[];
+    // Ensure unique IDs — old data may have duplicate tool-name IDs
+    const seenIds = new Set<string>();
+    return parsed.map((item: Record<string, unknown>, i: number) => {
+      let id = String(item.id ?? `tool-${i}`);
+      // If this ID was already used, make it unique by appending index
+      if (seenIds.has(id)) {
+        id = `${id}-${i}`;
+      }
+      seenIds.add(id);
+      return {
+        id,
+        tool: String(item.tool ?? "unknown"),
+        label: String(item.label ?? ""),
+        status: item.status === "completed" ? "completed" : "running",
+      };
+    }) as ToolProgressItem[];
   } catch {
     return undefined;
   }
@@ -56,6 +66,8 @@ export default function ChatPage() {
   const [approvalState, setApprovalState] = useState<ApprovalState | undefined>(
     undefined
   );
+  const [grounded, setGrounded] = useState(false);
+  const [includePrivateInAi, setIncludePrivateInAi] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const streamingContentRef = useRef("");
@@ -210,6 +222,10 @@ export default function ChatPage() {
         setModel(thread.target_model);
       }
 
+      // Load RAG settings from thread
+      setGrounded(thread.grounded === 1);
+      setIncludePrivateInAi(thread.include_private_in_ai === 1);
+
       // Map messages with metadata
       setMessages(
         rawMessages.map((m) => ({
@@ -241,6 +257,8 @@ export default function ChatPage() {
     setStreaming(false);
     setStreamingContent("");
     streamingContentRef.current = "";
+    setGrounded(false);
+    setIncludePrivateInAi(false);
   }, []);
 
   // ------------------------------------------------------------------
@@ -524,7 +542,8 @@ export default function ChatPage() {
           body: JSON.stringify({
             threadId: activeThreadId,
             target: { provider, model },
-            grounded: false,
+            grounded,
+            includePrivateInAi,
             allowModelSave: false,
             message,
             temporary,
@@ -552,7 +571,15 @@ export default function ChatPage() {
         abortRef.current = null;
       }
     },
-    [activeThreadId, provider, model, temporary, readSseStream]
+    [
+      activeThreadId,
+      provider,
+      model,
+      temporary,
+      readSseStream,
+      grounded,
+      includePrivateInAi,
+    ]
   );
 
   // ------------------------------------------------------------------
@@ -657,6 +684,10 @@ export default function ChatPage() {
           onSaveChat={handleSaveChat}
           savingChat={savingChat}
           isHermesMode={provider === "hermes"}
+          grounded={grounded}
+          onGroundedChange={setGrounded}
+          includePrivateInAi={includePrivateInAi}
+          onIncludePrivateInAiChange={setIncludePrivateInAi}
         />
         <ChatInput onSend={handleSend} disabled={streaming} />
       </main>

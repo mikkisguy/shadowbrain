@@ -13,6 +13,7 @@ import {
   streamEvents,
   resolveApproval,
 } from "@/lib/chat/hermes-runs";
+import { retrieveContext } from "@/lib/chat/retrieval";
 import type { MessageRow, Target } from "@/lib/chat/types";
 import type { ToolProgressItem } from "@/lib/chat/types";
 
@@ -29,7 +30,8 @@ const chatRequestSchema = z
         model: z.string().min(1),
       })
       .optional(),
-    grounded: z.boolean().optional().default(false),
+    grounded: z.boolean().optional(),
+    includePrivateInAi: z.boolean().optional(),
     allowModelSave: z.boolean().optional().default(false),
     message: z.string().optional(),
     temporary: z.boolean().optional().default(false),
@@ -100,7 +102,13 @@ export async function POST(request: Request) {
 
   // At this point the refine ensures both message and target exist
   const target = parsed.data.target!;
-  const { threadId: incomingThreadId, message, temporary } = parsed.data;
+  const {
+    threadId: incomingThreadId,
+    message,
+    temporary,
+    grounded: reqGrounded,
+    includePrivateInAi: reqIncludePrivate,
+  } = parsed.data;
 
   // ------------------------------------------------------------------
   // 1. Resolve thread (create if new persisted chat)
@@ -110,15 +118,17 @@ export async function POST(request: Request) {
   if (!temporary && !threadId) {
     threadId = crypto.randomUUID();
     const now = new Date().toISOString();
+    const newGrounded = reqGrounded === true ? 1 : 0;
     db.prepare(
       `INSERT INTO chat_threads
-         (id, title, target_provider, target_model, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
+         (id, title, target_provider, target_model, grounded, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(
       threadId,
       deriveTitle(message),
       target.provider,
       target.model,
+      newGrounded,
       now,
       now
     );
@@ -137,6 +147,30 @@ export async function POST(request: Request) {
       return errorResponse("NOT_FOUND", "Thread not found", 404);
     }
   }
+
+  // ------------------------------------------------------------------
+  // 1b. Resolve thread settings for RAG grounding
+  // ------------------------------------------------------------------
+  let threadGrounded = 0;
+  let threadIncludePrivate = 0;
+
+  if (!temporary && threadId) {
+    const threadRow = db
+      .prepare(
+        "SELECT grounded, include_private_in_ai FROM chat_threads WHERE id = ?"
+      )
+      .get(threadId) as
+      { grounded: number; include_private_in_ai: number } | undefined;
+    threadGrounded = threadRow?.grounded ?? 0;
+    threadIncludePrivate = threadRow?.include_private_in_ai ?? 0;
+  }
+
+  // Request-level overrides take precedence; otherwise use thread setting.
+  // Note: per-send overrides are ephemeral (affect only this message).
+  // To change the thread's default, use PATCH /api/chat/threads/[id] (future).
+  const effectiveGrounded = reqGrounded ?? threadGrounded === 1;
+  const effectiveIncludePrivate =
+    reqIncludePrivate ?? threadIncludePrivate === 1;
 
   // ------------------------------------------------------------------
   // 2. Persist user message (persisted chats only)
@@ -183,6 +217,19 @@ export async function POST(request: Request) {
     : (historyMessages as ModelMessage[]);
 
   // ------------------------------------------------------------------
+  // 3b. RAG grounding — retrieve context if grounded
+  // ------------------------------------------------------------------
+  let contextMessage: { role: "system"; content: string } | null = null;
+  if (effectiveGrounded && message) {
+    const contextBlock = retrieveContext(db, message, {
+      includePrivate: effectiveIncludePrivate,
+    });
+    if (contextBlock) {
+      contextMessage = { role: "system" as const, content: contextBlock };
+    }
+  }
+
+  // ------------------------------------------------------------------
   // 4. Branch on target provider
   // ------------------------------------------------------------------
 
@@ -194,7 +241,8 @@ export async function POST(request: Request) {
       historyMessages,
       threadId,
       target,
-      temporary
+      temporary,
+      contextMessage
     );
   }
 
@@ -205,7 +253,8 @@ export async function POST(request: Request) {
     modelMessages,
     threadId,
     target,
-    temporary
+    temporary,
+    contextMessage
   );
 }
 
@@ -220,20 +269,19 @@ async function handleHermesRun(
   historyMessages: { role: string; content: string }[],
   threadId: string | null,
   target: Target,
-  temporary: boolean
+  temporary: boolean,
+  contextMessage: { role: "system"; content: string } | null
 ): Promise<Response> {
   let runId: string;
 
   try {
-    const run = await createRun(
-      message,
-      // Pass the history up to (but not including) the user message we just
-      // persisted, since Hermes's createRun already receives the current
-      // input. For temporary chats the history is empty.
-      temporary ? [] : historyMessages.slice(0, -1),
-      threadId,
-      db
-    );
+    // Build the history for Hermes, prepending RAG context if available
+    const hermesHistory = temporary ? [] : historyMessages.slice(0, -1);
+    if (contextMessage) {
+      hermesHistory.unshift(contextMessage);
+    }
+
+    const run = await createRun(message, hermesHistory, threadId, db);
     runId = run.runId;
   } catch (err) {
     logServerError(err, {
@@ -267,10 +315,13 @@ async function handleHermesRun(
             case "tool-progress": {
               const toolName = String(event.tool ?? "unknown");
               const existingIdx = toolCalls.findIndex(
-                (tc) => tc.tool === toolName
+                (tc) => tc.tool === toolName && tc.status === "running"
               );
               const item: ToolProgressItem = {
-                id: String(event.tool ?? "unknown"),
+                id:
+                  existingIdx >= 0
+                    ? toolCalls[existingIdx].id
+                    : `${toolName}-${toolCalls.length}`,
                 tool: toolName,
                 label: String(event.label ?? ""),
                 status: event.status === "completed" ? "completed" : "running",
@@ -416,7 +467,8 @@ async function handleOpenCodeGoStream(
   modelMessages: ModelMessage[],
   threadId: string | null,
   target: Target,
-  temporary: boolean
+  temporary: boolean,
+  contextMessage: { role: "system"; content: string } | null
 ): Promise<Response> {
   let model: ReturnType<typeof getModelForTarget>;
   try {
@@ -446,6 +498,7 @@ async function handleOpenCodeGoStream(
         const result = streamText({
           model,
           messages: modelMessages,
+          ...(contextMessage ? { instructions: contextMessage.content } : {}),
         });
 
         for await (const chunk of result.textStream) {

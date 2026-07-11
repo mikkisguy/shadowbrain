@@ -50,6 +50,11 @@ const envSchema = z.object({
   // spec §5. Default: X-Forwarded-For.
   TRUSTED_PROXY_HEADER: z.string().default("X-Forwarded-For"),
 
+  // Chat RAG
+  // Number of content items to retrieve for RAG grounding context.
+  // Default: 8. See docs/superpowers/specs/2026-06-19-chat-interface-design.md.
+  CHAT_RAG_TOP_K: z.coerce.number().int().min(1).max(50).default(8),
+
   // Image capture
   WEBP_QUALITY: z.coerce.number().int().min(1).max(100).default(95),
   MAX_UPLOAD_SIZE_MB: z.coerce.number().positive().default(10),

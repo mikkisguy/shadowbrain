@@ -25,6 +25,10 @@ vi.mock("@/lib/chat/hermes-runs", () => ({
   resolveApproval: vi.fn(),
 }));
 
+vi.mock("@/lib/chat/retrieval", () => ({
+  retrieveContext: vi.fn(),
+}));
+
 import { streamText } from "ai";
 import { getModelForTarget } from "@/lib/chat/providers";
 
@@ -40,6 +44,9 @@ import {
 const mockCreateRun = vi.mocked(createRun);
 const mockStreamEvents = vi.mocked(streamEvents);
 const mockResolveApproval = vi.mocked(resolveApproval);
+
+import { retrieveContext } from "@/lib/chat/retrieval";
+const mockRetrieveContext = vi.mocked(retrieveContext);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -100,6 +107,7 @@ describe("/api/chat", () => {
     mockCreateRun.mockReset();
     mockStreamEvents.mockReset();
     mockResolveApproval.mockReset();
+    mockRetrieveContext.mockReset();
     // Default: return a dummy model that doesn't throw
     mockGetModel.mockReturnValue(
       {} as unknown as ReturnType<typeof getModelForTarget>
@@ -600,6 +608,250 @@ describe("/api/chat", () => {
       expect(res.status).toBe(400);
       const json = await res.json();
       expect(json.error.code).toBe("VALIDATION_ERROR");
+    });
+  });
+
+  describe("RAG grounding", () => {
+    it("grounded=true injects retrieved context via instructions for OpenCode Go", async () => {
+      mockRetrieveContext.mockReturnValue(
+        "## Retrieved context\n\n- **Test Item** (note): some content"
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        textStream: createMockTextStream(["response"]),
+      });
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "opencode-go", model: "deepseek" },
+          message: "What is RAG?",
+          grounded: true,
+          temporary: false,
+        }),
+      });
+
+      const res = await POST(req);
+      await readSseEvents(res);
+
+      const callArgs = mockStreamText.mock.calls[0]?.[0];
+      expect(callArgs).toBeDefined();
+      expect((callArgs as { instructions?: string }).instructions).toBe(
+        "## Retrieved context\n\n- **Test Item** (note): some content"
+      );
+
+      const messages = (callArgs as { messages: Array<unknown> }).messages;
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toEqual({ role: "user", content: "What is RAG?" });
+    });
+
+    it("grounded=false does not inject instructions or context", async () => {
+      mockRetrieveContext.mockReturnValue(
+        "## Retrieved context\n\n- **Another Item** (page): more content"
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        textStream: createMockTextStream(["response"]),
+      });
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "opencode-go", model: "deepseek" },
+          message: "No grounding please",
+          grounded: false,
+          temporary: false,
+        }),
+      });
+
+      const res = await POST(req);
+      await readSseEvents(res);
+
+      expect(mockRetrieveContext).not.toHaveBeenCalled();
+
+      const callArgs = mockStreamText.mock.calls[0]?.[0];
+      expect(callArgs).toBeDefined();
+      const instructions = (callArgs as { instructions?: string }).instructions;
+      expect(instructions).toBeUndefined();
+
+      const messages = (callArgs as { messages: Array<unknown> }).messages;
+      const systemMessages = (messages as Array<{ role: string }>).filter(
+        (m) => m.role === "system"
+      );
+      expect(systemMessages).toHaveLength(0);
+    });
+
+    it("empty retrieval result does not inject instructions", async () => {
+      mockRetrieveContext.mockReturnValue(null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        textStream: createMockTextStream(["response"]),
+      });
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "opencode-go", model: "deepseek" },
+          message: "Empty context test",
+          grounded: true,
+          temporary: false,
+        }),
+      });
+
+      const res = await POST(req);
+      await readSseEvents(res);
+
+      const callArgs = mockStreamText.mock.calls[0]?.[0];
+      expect(callArgs).toBeDefined();
+      const instructions = (callArgs as { instructions?: string }).instructions;
+      expect(instructions).toBeUndefined();
+
+      const messages = (callArgs as { messages: Array<unknown> }).messages;
+      const systemMessages = (messages as Array<{ role: string }>).filter(
+        (m) => m.role === "system"
+      );
+      expect(systemMessages).toHaveLength(0);
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toEqual({
+        role: "user",
+        content: "Empty context test",
+      });
+    });
+
+    it("per-thread include_private_in_ai is passed to retrieval", async () => {
+      // First, create a thread
+      mockRetrieveContext.mockReturnValue(null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        textStream: createMockTextStream(["first response"]),
+      });
+
+      const req1 = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "opencode-go", model: "deepseek" },
+          message: "First message",
+          grounded: true,
+          temporary: false,
+        }),
+      });
+
+      const res1 = await POST(req1);
+      const events1 = await readSseEvents(res1);
+      const threadId = events1.find((e) => e.type === "done")
+        ?.threadId as string;
+      expect(threadId).toBeTruthy();
+
+      // Update the thread's include_private_in_ai in the DB directly
+      const { getDb } = await import("@/db/index");
+      const db = getDb();
+      db.prepare(
+        "UPDATE chat_threads SET include_private_in_ai = 1 WHERE id = ?"
+      ).run(threadId);
+
+      // Second message: grounded already set on thread
+      mockRetrieveContext.mockReturnValue(
+        "## Retrieved context\n\n- **Private Item** (page): sensitive content"
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        textStream: createMockTextStream(["second response"]),
+      });
+
+      const req2 = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId,
+          target: { provider: "opencode-go", model: "deepseek" },
+          message: "Show me private info",
+          grounded: true,
+          temporary: false,
+        }),
+      });
+
+      const res2 = await POST(req2);
+      await readSseEvents(res2);
+
+      expect(mockRetrieveContext).toHaveBeenCalledWith(
+        expect.anything(),
+        "Show me private info",
+        { includePrivate: true }
+      );
+    });
+
+    it("per-send includePrivateInAi overrides thread setting", async () => {
+      // First, create a thread (default include_private_in_ai = 0)
+      mockRetrieveContext.mockReturnValue(null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        textStream: createMockTextStream(["first response"]),
+      });
+
+      const req1 = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "opencode-go", model: "deepseek" },
+          message: "Create thread",
+          grounded: true,
+          temporary: false,
+        }),
+      });
+
+      const res1 = await POST(req1);
+      const events1 = await readSseEvents(res1);
+      const threadId = events1.find((e) => e.type === "done")
+        ?.threadId as string;
+      expect(threadId).toBeTruthy();
+
+      // Verify thread has include_private_in_ai = 0
+      const { getDb } = await import("@/db/index");
+      const db = getDb();
+      const row = db
+        .prepare("SELECT include_private_in_ai FROM chat_threads WHERE id = ?")
+        .get(threadId) as { include_private_in_ai: number };
+      expect(row.include_private_in_ai).toBe(0);
+
+      // Second message with override
+      mockRetrieveContext.mockReturnValue(
+        "## Retrieved context\n\n- **Override Item** (page): override content"
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        textStream: createMockTextStream(["override response"]),
+      });
+
+      const req2 = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId,
+          target: { provider: "opencode-go", model: "deepseek" },
+          message: "Override private setting",
+          grounded: true,
+          includePrivateInAi: true,
+          temporary: false,
+        }),
+      });
+
+      const res2 = await POST(req2);
+      await readSseEvents(res2);
+
+      expect(mockRetrieveContext).toHaveBeenCalledWith(
+        expect.anything(),
+        "Override private setting",
+        { includePrivate: true }
+      );
     });
   });
 });
