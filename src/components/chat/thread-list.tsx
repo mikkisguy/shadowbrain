@@ -14,6 +14,8 @@ export interface ThreadInfo {
   title: string;
   target_provider: string;
   target_model: string;
+  grounded?: number;
+  include_private_in_ai?: number;
   updated_at: string;
 }
 

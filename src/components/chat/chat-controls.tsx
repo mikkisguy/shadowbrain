@@ -33,6 +33,10 @@ interface ChatControlsProps {
   savingChat: boolean;
   /** Show an "Admin mode (Hermes)" indicator when the Hermes toolset is live. */
   isHermesMode?: boolean;
+  grounded: boolean;
+  onGroundedChange: (grounded: boolean) => void;
+  includePrivateInAi: boolean;
+  onIncludePrivateInAiChange: (includePrivate: boolean) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,6 +64,10 @@ export function ChatControls({
   onSaveChat,
   savingChat,
   isHermesMode,
+  grounded,
+  onGroundedChange,
+  includePrivateInAi,
+  onIncludePrivateInAiChange,
 }: ChatControlsProps) {
   const modelLabels = useMemo(
     () => Object.fromEntries(models.map((m) => [m.id, formatModelName(m.id)])),
@@ -131,6 +139,28 @@ export function ChatControls({
           className="accent-primary h-3.5 w-3.5 rounded"
         />
         Temporary
+      </label>
+
+      {/* Grounded (RAG) toggle */}
+      <label className="text-muted-foreground flex cursor-pointer items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={grounded}
+          onChange={(e) => onGroundedChange(e.target.checked)}
+          className="accent-primary h-3.5 w-3.5 rounded"
+        />
+        Grounded
+      </label>
+
+      {/* Include private in AI toggle */}
+      <label className="text-muted-foreground flex cursor-pointer items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={includePrivateInAi}
+          onChange={(e) => onIncludePrivateInAiChange(e.target.checked)}
+          className="accent-primary h-3.5 w-3.5 rounded"
+        />
+        Include private
       </label>
 
       {/* Save chat button (temporary chats) */}
