@@ -10,6 +10,7 @@ import { POST as REGENERATE } from "@/app/api/chat/regenerate/route";
 vi.mock("ai", () => ({
   streamText: vi.fn(),
   generateText: vi.fn().mockResolvedValue({ text: "" }),
+  tool: vi.fn(() => ({})),
 }));
 
 vi.mock("@/lib/chat/providers", () => ({

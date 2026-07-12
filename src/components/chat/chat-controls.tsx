@@ -37,6 +37,8 @@ interface ChatControlsProps {
   onGroundedChange: (grounded: boolean) => void;
   includePrivateInAi: boolean;
   onIncludePrivateInAiChange: (includePrivate: boolean) => void;
+  allowModelSave: boolean;
+  onAllowModelSaveChange: (allow: boolean) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,6 +70,8 @@ export function ChatControls({
   onGroundedChange,
   includePrivateInAi,
   onIncludePrivateInAiChange,
+  allowModelSave,
+  onAllowModelSaveChange,
 }: ChatControlsProps) {
   const modelLabels = useMemo(
     () => Object.fromEntries(models.map((m) => [m.id, formatModelName(m.id)])),
@@ -161,6 +165,17 @@ export function ChatControls({
           className="accent-primary h-3.5 w-3.5 rounded"
         />
         Include private
+      </label>
+
+      {/* Allow model save toggle */}
+      <label className="text-muted-foreground flex cursor-pointer items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={allowModelSave}
+          onChange={(e) => onAllowModelSaveChange(e.target.checked)}
+          className="accent-primary h-3.5 w-3.5 rounded"
+        />
+        Allow model save
       </label>
 
       {/* Save chat button (temporary chats) */}

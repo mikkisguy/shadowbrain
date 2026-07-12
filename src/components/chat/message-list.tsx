@@ -50,6 +50,15 @@ interface MessageListProps {
   approvalState?: ApprovalState;
   /** Hermes: callback when user resolves an approval. */
   onResolveApproval?: (decision: HermesApprovalDecision) => void;
+  /** Callback when user saves a message to ShadowBrain. */
+  onSaveContent?: (
+    content: string,
+    title: string | null,
+    type: string,
+    messageIndex: number
+  ) => Promise<void>;
+  /** Map of message index → saved item info (itemId, title). */
+  savedItems?: Record<number, { itemId: string; title: string }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,9 +199,14 @@ export function MessageList({
   toolProgress,
   approvalState,
   onResolveApproval,
+  onSaveContent,
+  savedItems,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [hoveredTimestamp, setHoveredTimestamp] = useState<string | null>(null);
+  const [savePickerIndex, setSavePickerIndex] = useState<number | null>(null);
+  const [savePickerType, setSavePickerType] = useState("note");
+  const [savePickerTitle, setSavePickerTitle] = useState("");
 
   // Auto-scroll to bottom when new content arrives
   useEffect(() => {
@@ -343,7 +357,108 @@ export function MessageList({
                     {regenerating ? "Regenerating..." : "Regenerate"}
                   </button>
                 )}
+
+                {/* Save to ShadowBrain button */}
+                {onSaveContent && (
+                  <button
+                    className="text-muted-foreground hover:text-foreground rounded underline-offset-2 hover:underline"
+                    onClick={() => {
+                      if (savePickerIndex === i) {
+                        setSavePickerIndex(null);
+                      } else {
+                        setSavePickerIndex(i);
+                        setSavePickerType("note");
+                        setSavePickerTitle("");
+                      }
+                    }}
+                    title="Save to ShadowBrain"
+                  >
+                    Save
+                  </button>
+                )}
               </div>
+
+              {/* Inline confirmation: "Saved as note" */}
+              {savedItems?.[i] && (
+                <div className="mt-1 flex items-center gap-1.5 text-xs text-emerald-400">
+                  <svg
+                    className="h-3 w-3"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m4.5 12.75 6 6 9-13.5"
+                    />
+                  </svg>
+                  <span>
+                    Saved as{" "}
+                    <a
+                      href={`/item/${savedItems[i].itemId}`}
+                      className="underline hover:text-emerald-300"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {savedItems[i].title}
+                    </a>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      #{savedItems[i].itemId.slice(0, 8)}
+                    </span>
+                  </span>
+                </div>
+              )}
+
+              {/* Type picker for Save to ShadowBrain (only if not already saved) */}
+              {onSaveContent && !savedItems?.[i] && savePickerIndex === i && (
+                <div className="border-border bg-card/50 mt-2 w-full max-w-[280px] rounded border px-3 py-2">
+                  <div className="mb-2 flex items-center gap-2">
+                    <select
+                      className="bg-background text-foreground border-border h-7 rounded border px-2 text-xs"
+                      value={savePickerType}
+                      onChange={(e) => setSavePickerType(e.target.value)}
+                    >
+                      <option value="note">Note</option>
+                      <option value="journal">Journal</option>
+                      <option value="bookmark">Bookmark</option>
+                      <option value="question">Question</option>
+                      <option value="raw_text">Raw text</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Title (optional)"
+                      className="bg-background text-foreground border-border h-7 flex-1 rounded border px-2 text-xs"
+                      value={savePickerTitle}
+                      onChange={(e) => setSavePickerTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 rounded px-3 py-1 text-xs"
+                      onClick={async () => {
+                        await onSaveContent(
+                          msg.content,
+                          savePickerTitle || null,
+                          savePickerType,
+                          i
+                        );
+                        setSavePickerIndex(null);
+                      }}
+                    >
+                      Save
+                    </button>
+                    <button
+                      className="text-muted-foreground hover:text-foreground rounded px-2 py-1 text-xs"
+                      onClick={() => setSavePickerIndex(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

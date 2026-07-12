@@ -10,7 +10,10 @@ import type { ThreadRow, MessageRow } from "@/lib/chat/types";
 // ---------------------------------------------------------------------------
 
 const renameSchema = z.object({
-  title: z.string().min(1),
+  title: z.string().min(1).optional(),
+  allow_model_save: z.union([z.literal(0), z.literal(1)]).optional(),
+  grounded: z.union([z.literal(0), z.literal(1)]).optional(),
+  include_private_in_ai: z.union([z.literal(0), z.literal(1)]).optional(),
 });
 
 export async function PATCH(
@@ -37,6 +40,14 @@ export async function PATCH(
       });
     }
 
+    if (Object.keys(parsed.data).length === 0) {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "At least one field must be provided",
+        400
+      );
+    }
+
     const db = getDb();
     const thread = db
       .prepare("SELECT * FROM chat_threads WHERE id = ?")
@@ -46,14 +57,49 @@ export async function PATCH(
       return errorResponse("NOT_FOUND", "Thread not found", 404);
     }
 
-    db.prepare(
-      `UPDATE chat_threads SET title = ?, updated_at = ? WHERE id = ?`
-    ).run(parsed.data.title, new Date().toISOString(), id);
+    const setClauses: string[] = [];
+    const updateParams: (string | number)[] = [];
 
-    log("info", "chat thread renamed", {
-      event: "chat_thread.rename",
-      id,
-    });
+    if (parsed.data.title !== undefined) {
+      setClauses.push("title = ?");
+      updateParams.push(parsed.data.title);
+    }
+    if (parsed.data.allow_model_save !== undefined) {
+      setClauses.push("allow_model_save = ?");
+      updateParams.push(parsed.data.allow_model_save);
+    }
+    if (parsed.data.grounded !== undefined) {
+      setClauses.push("grounded = ?");
+      updateParams.push(parsed.data.grounded);
+    }
+    if (parsed.data.include_private_in_ai !== undefined) {
+      setClauses.push("include_private_in_ai = ?");
+      updateParams.push(parsed.data.include_private_in_ai);
+    }
+
+    const now = new Date().toISOString();
+    setClauses.push("updated_at = ?");
+    updateParams.push(now);
+    updateParams.push(id);
+
+    db.prepare(
+      `UPDATE chat_threads SET ${setClauses.join(", ")} WHERE id = ?`
+    ).run(...updateParams);
+
+    const eventLabel =
+      parsed.data.title !== undefined
+        ? "chat_thread.rename"
+        : "chat_thread.update_settings";
+    log(
+      "info",
+      eventLabel === "chat_thread.rename"
+        ? "chat thread renamed"
+        : "chat thread settings updated",
+      {
+        event: eventLabel,
+        id,
+      }
+    );
 
     const updated = db
       .prepare("SELECT * FROM chat_threads WHERE id = ?")

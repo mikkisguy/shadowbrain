@@ -68,17 +68,26 @@ export default function ChatPage() {
   );
   const [grounded, setGrounded] = useState(false);
   const [includePrivateInAi, setIncludePrivateInAi] = useState(false);
+  const [allowModelSave, setAllowModelSave] = useState(false);
+  const [savedItems, setSavedItems] = useState<
+    Record<number, { itemId: string; title: string }>
+  >({});
 
   const abortRef = useRef<AbortController | null>(null);
   const streamingContentRef = useRef("");
   const modelRef = useRef(model);
   const defaultModelRef = useRef(defaultModel);
   const titlePollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const messagesRef = useRef(messages);
+  const pendingSavedRef = useRef<{ itemId: string; title: string } | null>(
+    null
+  );
 
   // Sync refs with state (post-render, no extra renders)
   useEffect(() => {
     modelRef.current = model;
     defaultModelRef.current = defaultModel;
+    messagesRef.current = messages;
   });
 
   // Clear title-poll timers on unmount
@@ -225,6 +234,7 @@ export default function ChatPage() {
       // Load RAG settings from thread
       setGrounded(thread.grounded === 1);
       setIncludePrivateInAi(thread.include_private_in_ai === 1);
+      setAllowModelSave(thread.allow_model_save === 1);
 
       // Map messages with metadata
       setMessages(
@@ -259,6 +269,7 @@ export default function ChatPage() {
     streamingContentRef.current = "";
     setGrounded(false);
     setIncludePrivateInAi(false);
+    setAllowModelSave(false);
   }, []);
 
   // ------------------------------------------------------------------
@@ -413,6 +424,11 @@ export default function ChatPage() {
                 command: event.command ? String(event.command) : undefined,
                 choices,
               });
+            } else if (event.type === "saved") {
+              pendingSavedRef.current = {
+                itemId: String(event.itemId ?? ""),
+                title: String(event.title ?? ""),
+              };
             } else if (event.type === "done") {
               const finalContent =
                 streamingContentRef.current ||
@@ -422,6 +438,19 @@ export default function ChatPage() {
                 localToolProgress.length > 0
                   ? [...localToolProgress]
                   : undefined;
+
+              // Determine the message index for any pending saved item
+              let savedMsgIndex: number | null = null;
+              if (pendingSavedRef.current) {
+                if (isRegenerate) {
+                  savedMsgIndex = messagesRef.current
+                    .map((m) => m.role)
+                    .lastIndexOf("assistant");
+                  if (savedMsgIndex < 0) savedMsgIndex = null;
+                } else {
+                  savedMsgIndex = messagesRef.current.length;
+                }
+              }
 
               if (finalContent) {
                 if (isRegenerate) {
@@ -473,6 +502,19 @@ export default function ChatPage() {
                   ]);
                 }
               }
+
+              // Assign saved item info to the computed message index
+              if (pendingSavedRef.current && savedMsgIndex !== null) {
+                setSavedItems((prev) => ({
+                  ...prev,
+                  [savedMsgIndex!]: {
+                    itemId: pendingSavedRef.current!.itemId,
+                    title: pendingSavedRef.current!.title,
+                  },
+                }));
+                pendingSavedRef.current = null;
+              }
+
               streamingContentRef.current = "";
               setStreamingContent("");
               setStreaming(false);
@@ -544,7 +586,7 @@ export default function ChatPage() {
             target: { provider, model },
             grounded,
             includePrivateInAi,
-            allowModelSave: false,
+            allowModelSave,
             message,
             temporary,
           }),
@@ -576,6 +618,7 @@ export default function ChatPage() {
       provider,
       model,
       temporary,
+      allowModelSave,
       readSseStream,
       grounded,
       includePrivateInAi,
@@ -634,6 +677,43 @@ export default function ChatPage() {
   }, [activeThreadId, streaming, readSseStream, provider, model]);
 
   // ------------------------------------------------------------------
+  // Save message content to ShadowBrain (explicit "Save" button)
+  // ------------------------------------------------------------------
+  const handleSaveContent = useCallback(
+    async (
+      content: string,
+      title: string | null,
+      type: string,
+      messageIndex: number
+    ) => {
+      try {
+        const res = await fetch("/api/items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type,
+            content,
+            title,
+            source: "chat",
+          }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setSavedItems((prev) => ({
+          ...prev,
+          [messageIndex]: {
+            itemId: data.id as string,
+            title: (data.title as string) ?? content.slice(0, 80),
+          },
+        }));
+      } catch {
+        // silent
+      }
+    },
+    []
+  );
+
+  // ------------------------------------------------------------------
   // Is there a temporary chat with messages to show "Save chat"?
   // ------------------------------------------------------------------
   const showSaveChat = temporary && messages.length > 0 && !activeThreadId;
@@ -666,6 +746,8 @@ export default function ChatPage() {
           toolProgress={toolProgress.length > 0 ? toolProgress : undefined}
           approvalState={approvalState}
           onResolveApproval={handleResolveApproval}
+          onSaveContent={handleSaveContent}
+          savedItems={savedItems}
         />
         <ChatControls
           provider={provider}
@@ -688,6 +770,8 @@ export default function ChatPage() {
           onGroundedChange={setGrounded}
           includePrivateInAi={includePrivateInAi}
           onIncludePrivateInAiChange={setIncludePrivateInAi}
+          allowModelSave={allowModelSave}
+          onAllowModelSaveChange={setAllowModelSave}
         />
         <ChatInput onSend={handleSend} disabled={streaming} />
       </main>

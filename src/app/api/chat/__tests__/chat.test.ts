@@ -8,6 +8,7 @@ import { POST } from "@/app/api/chat/route";
 
 vi.mock("ai", () => ({
   streamText: vi.fn(),
+  tool: vi.fn(() => ({})),
 }));
 
 vi.mock("@/lib/chat/providers", () => ({
@@ -90,6 +91,17 @@ function createMockTextStream(chunks: string[]) {
   return (async function* () {
     for (const chunk of chunks) {
       yield chunk;
+    }
+  })();
+}
+
+/** Create a mock async iterable for fullStream. */
+function createMockFullStream(
+  parts: Array<{ type: string; [key: string]: unknown }>
+) {
+  return (async function* () {
+    for (const part of parts) {
+      yield part;
     }
   })();
 }
@@ -852,6 +864,148 @@ describe("/api/chat", () => {
         "Override private setting",
         { includePrivate: true }
       );
+    });
+  });
+
+  describe("model save (allow_model_save)", () => {
+    it("does not register save_to_shadowbrain tool when allowModelSave is false", async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        textStream: createMockTextStream(["response"]),
+      });
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "opencode-go", model: "deepseek-v4-pro" },
+          message: "Save this to my notes",
+          allowModelSave: false,
+        }),
+      });
+      const res = await POST(req);
+
+      await readSseEvents(res);
+
+      expect(mockStreamText).toHaveBeenCalledTimes(1);
+      const callArgs = mockStreamText.mock.calls[0][0];
+      // tools should not be passed when allowModelSave is false
+      expect((callArgs as { tools?: unknown }).tools).toBeUndefined();
+    });
+
+    it("registers save_to_shadowbrain tool and emits saved event when allowModelSave is true", async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        fullStream: createMockFullStream([
+          { type: "text-delta", text: "Let me save that for you." },
+          {
+            type: "tool-result" as const,
+            toolCallId: "call-1",
+            toolName: "save_to_shadowbrain",
+            args: {
+              type: "note",
+              content: "test content",
+              title: "Test Note",
+            },
+            output: {
+              itemId: "item-123",
+              title: "Test Note",
+              type: "note",
+            },
+          },
+          { type: "text-delta", text: " Done!" },
+        ]),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 20 }),
+        textStream: (async function* () {
+          yield "Let me save that for you.";
+          yield " Done!";
+        })(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "opencode-go", model: "deepseek-v4-pro" },
+          message: "Save this to my notes",
+          allowModelSave: true,
+        }),
+      });
+      const res = await POST(req);
+
+      const events = await readSseEvents(res);
+
+      // A saved event should be present
+      const savedEvents = events.filter((e) => e.type === "saved");
+      expect(savedEvents.length).toBe(1);
+      expect(savedEvents[0].itemId).toBe("item-123");
+      expect(savedEvents[0].title).toBe("Test Note");
+    });
+
+    it("does not register save_to_shadowbrain tool for Hermes targets", async () => {
+      mockCreateRun.mockResolvedValue({ runId: "run-1" });
+      mockStreamEvents.mockReturnValue(
+        (async function* () {
+          yield { type: "text-delta" as const, content: "Hello" };
+          yield { type: "done" as const };
+        })()
+      );
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "hermes", model: "hermes-agent" },
+          message: "Hello",
+          allowModelSave: true,
+        }),
+      });
+      const res = await POST(req);
+
+      const events = await readSseEvents(res);
+      // Should stream normally without error
+      expect(events.some((e) => e.type === "text-delta")).toBe(true);
+      // Should NOT have a saved event (Hermes doesn't support the tool)
+      expect(events.some((e) => e.type === "saved")).toBe(false);
+    });
+
+    it("persists allow_model_save on auto-created thread", async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        fullStream: createMockFullStream([
+          { type: "text-delta", text: "Hello" },
+        ]),
+        usage: Promise.resolve({ inputTokens: 5, outputTokens: 5 }),
+        textStream: (async function* () {
+          yield "Hello";
+        })(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "opencode-go", model: "deepseek-v4-pro" },
+          message: "Hello from persistence test",
+          allowModelSave: true,
+        }),
+      });
+      const res = await POST(req);
+
+      await readSseEvents(res);
+
+      // Check that the created thread has allow_model_save = 1.
+      // deriveTitle uses the message text directly (truncated to 80 chars).
+      const { getDb } = await import("@/db/index");
+      const db = getDb();
+      const thread = db
+        .prepare("SELECT allow_model_save FROM chat_threads WHERE title = ?")
+        .get("Hello from persistence test") as
+        { allow_model_save: number } | undefined;
+      expect(thread).toBeTruthy();
+      expect(thread!.allow_model_save).toBe(1);
     });
   });
 });

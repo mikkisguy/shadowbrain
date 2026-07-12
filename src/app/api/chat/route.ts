@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { ModelMessage } from "ai";
-import { streamText } from "ai";
-import { getDb } from "@/db/index";
+import { streamText, tool } from "ai";
+import { getDb, contentItems, contentTags } from "@/db/index";
+import { tags } from "@/db/repositories/tags";
 import { requireAuthenticated } from "@/lib/auth/guard";
 import { errorResponse, parseJson, logServerError } from "@/lib/api";
 import { log } from "@/lib/logger";
@@ -108,6 +109,7 @@ export async function POST(request: Request) {
     temporary,
     grounded: reqGrounded,
     includePrivateInAi: reqIncludePrivate,
+    allowModelSave,
   } = parsed.data;
 
   // ------------------------------------------------------------------
@@ -121,14 +123,16 @@ export async function POST(request: Request) {
     const newGrounded = reqGrounded === true ? 1 : 0;
     db.prepare(
       `INSERT INTO chat_threads
-         (id, title, target_provider, target_model, grounded, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+         (id, title, target_provider, target_model, grounded,
+          allow_model_save, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       threadId,
       deriveTitle(message),
       target.provider,
       target.model,
       newGrounded,
+      allowModelSave ? 1 : 0,
       now,
       now
     );
@@ -254,7 +258,8 @@ export async function POST(request: Request) {
     threadId,
     target,
     temporary,
-    contextMessage
+    contextMessage,
+    allowModelSave
   );
 }
 
@@ -468,7 +473,8 @@ async function handleOpenCodeGoStream(
   threadId: string | null,
   target: Target,
   temporary: boolean,
-  contextMessage: { role: "system"; content: string } | null
+  contextMessage: { role: "system"; content: string } | null,
+  allowModelSave: boolean
 ): Promise<Response> {
   let model: ReturnType<typeof getModelForTarget>;
   try {
@@ -495,17 +501,122 @@ async function handleOpenCodeGoStream(
       let completionTokens: number | undefined;
 
       try {
+        const saveTool = tool({
+          description:
+            "Save content into ShadowBrain's knowledge base. Creates a new content item that will be searchable.",
+          inputSchema: z.object({
+            type: z
+              .string()
+              .describe(
+                "The content type: 'note', 'journal', 'bookmark', 'question', 'raw_text', or 'image'"
+              ),
+            content: z
+              .string()
+              .min(1)
+              .describe("The full text content to save"),
+            title: z
+              .string()
+              .optional()
+              .describe("Optional title for the item"),
+            tags: z
+              .array(z.string())
+              .optional()
+              .describe("Optional list of tag names"),
+          }),
+          execute: async ({ type, content, title, tags: tagNames }) => {
+            const now = new Date().toISOString();
+            const id = crypto.randomUUID();
+
+            contentItems.create(db, {
+              id,
+              type,
+              title: title ?? null,
+              content,
+              source: "chat",
+              created_at: now,
+              updated_at: now,
+            });
+
+            if (tagNames && tagNames.length > 0) {
+              for (const tagName of tagNames) {
+                const normalized = tagName.trim();
+                if (!normalized) continue;
+                let existing = tags.findByName(db, normalized);
+                if (!existing) {
+                  const tagId = crypto.randomUUID();
+                  tags.create(db, {
+                    id: tagId,
+                    name: normalized,
+                    created_at: now,
+                  });
+                  existing = {
+                    id: tagId,
+                    name: normalized,
+                    color: null,
+                    created_at: now,
+                  };
+                }
+                contentTags.addTag(db, id, existing.id, now);
+              }
+            }
+
+            return {
+              itemId: id,
+              title: title ?? content.slice(0, 80),
+              type,
+            };
+          },
+        });
+
         const result = streamText({
           model,
           messages: modelMessages,
           ...(contextMessage ? { instructions: contextMessage.content } : {}),
+          ...(allowModelSave
+            ? {
+                tools: { save_to_shadowbrain: saveTool },
+                maxSteps: 2,
+              }
+            : {}),
         });
 
-        for await (const chunk of result.textStream) {
-          fullContent += chunk;
-          controller.enqueue(
-            encoder.encode(sseFrame({ type: "text-delta", content: chunk }))
-          );
+        if (allowModelSave) {
+          // Iterate fullStream to detect tool results
+          for await (const part of result.fullStream) {
+            if (part.type === "text-delta") {
+              fullContent += part.text;
+              controller.enqueue(
+                encoder.encode(
+                  sseFrame({ type: "text-delta", content: part.text })
+                )
+              );
+            } else if (part.type === "tool-result") {
+              if (part.toolName === "save_to_shadowbrain") {
+                const output = part.output as
+                  { itemId: string; title: string; type: string } | undefined;
+                if (output) {
+                  controller.enqueue(
+                    encoder.encode(
+                      sseFrame({
+                        type: "saved",
+                        itemId: output.itemId,
+                        title: output.title,
+                        item_type: output.type,
+                      })
+                    )
+                  );
+                }
+              }
+            }
+          }
+        } else {
+          // Original textStream iteration (no tools)
+          for await (const chunk of result.textStream) {
+            fullContent += chunk;
+            controller.enqueue(
+              encoder.encode(sseFrame({ type: "text-delta", content: chunk }))
+            );
+          }
         }
 
         // Await usage to get token counts
