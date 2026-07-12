@@ -156,6 +156,22 @@ export async function proxy(request: NextRequest) {
     return applySecurityHeaders(response, nonce, !isProd);
   }
 
+  // 3b. Bearer token on API route — defer auth to the route handler's guard.
+  // CSRF is skipped because Bearer tokens aren't auto-sent by browsers
+  // (no CSRF vulnerability). The guard verifies the token, checks scope,
+  // and returns 403 for denied routes.
+  const isApiRoute = pathname.startsWith("/api/");
+  const hasBearerToken =
+    request.headers.get("authorization")?.startsWith("Bearer ") ?? false;
+  if (isApiRoute && hasBearerToken) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-nonce", nonce);
+    const response = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
+    return applySecurityHeaders(response, nonce, !isProd);
+  }
+
   // From this point on, we are on a protected route.
 
   // 4. CSRF — state-changing methods need a matching Origin/Referer.

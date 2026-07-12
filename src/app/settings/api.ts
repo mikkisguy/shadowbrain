@@ -149,3 +149,58 @@ export async function fetchSystemInfo(
 export function exportUrl(format: "markdown" | "json"): string {
   return `/api/export?format=${format}`;
 }
+
+export interface ApiTokenInfo {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+  last_used_ip: string | null;
+  is_revoked: number;
+}
+
+export interface CreatedApiToken {
+  id: string;
+  name: string;
+  token: string;
+  created_at: string;
+}
+
+export async function fetchApiTokens(
+  signal?: AbortSignal
+): Promise<ApiTokenInfo[]> {
+  const response = await fetch("/api/admin/api-tokens", {
+    method: "GET",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) await throwForResponse(response);
+  return (await response.json()) as ApiTokenInfo[];
+}
+
+export async function createApiToken(name: string): Promise<CreatedApiToken> {
+  const response = await fetch("/api/admin/api-tokens", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) await throwForResponse(response);
+  return (await response.json()) as CreatedApiToken;
+}
+
+export async function revokeApiToken(id: string): Promise<void> {
+  const response = await fetch(
+    `/api/admin/api-tokens/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    }
+  );
+  if (!response.ok) await throwForResponse(response);
+}

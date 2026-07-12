@@ -381,6 +381,21 @@ describe("proxy — security response headers", () => {
     assertSecurityHeaders(res, TEST_IS_PROD);
   });
 
+  it("applies the full policy to a Bearer-token bypass response", async () => {
+    // The Bearer bypass is a separate code path (step 3b in the proxy)
+    // that skips CSRF and session auth but still applies the full
+    // security-headers policy.
+    const req = new FakeNextRequest({
+      url: "http://localhost/api/items",
+      headers: {
+        Authorization: "Bearer test-token-sec",
+      },
+    });
+    const res = await proxy(req as never);
+    expect(res.status).toBe(200);
+    assertSecurityHeaders(res, TEST_IS_PROD);
+  });
+
   it("does NOT include 'unsafe-eval' when NODE_ENV is production", async () => {
     // The dev-only relaxation is the single thing standing
     // between strict CSP and a working `pnpm dev`. We pin the
@@ -844,5 +859,77 @@ describe("proxy — CORS posture", () => {
     const res = await proxy(req as never);
     expect(res.status).toBe(200);
     assertNoCorsHeaders(res);
+  });
+});
+
+/**
+ * Bearer token bypass — Issue #175.
+ *
+ * The proxy skips CSRF and session auth for API routes that carry
+ * an `Authorization: Bearer <token>` header. The token is verified
+ * by the route handler's guard, not by the proxy. Non-API routes
+ * are not affected — they still require session auth.
+ */
+describe("proxy — Bearer token bypass", () => {
+  beforeEach(() => {
+    __resetAllRateLimiters();
+  });
+
+  it("passes through GET /api/items with Authorization: Bearer token", async () => {
+    const req = new FakeNextRequest({
+      url: "http://localhost/api/items",
+      headers: {
+        Authorization: "Bearer test-token-123",
+      },
+    });
+    const res = await proxy(req as never);
+    // The Bearer bypass returns NextResponse.next() → 200.
+    expect(res.status).toBe(200);
+  });
+
+  it("skips CSRF check for POST /api/items with Bearer token and no Origin/Referer", async () => {
+    // Without Bearer, a POST without Origin/Referer returns 403.
+    // With Bearer, the CSRF check is skipped entirely.
+    const req = new FakeNextRequest({
+      url: "http://localhost/api/items",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-token-456",
+      },
+    });
+    const res = await proxy(req as never);
+    expect(res.status).toBe(200);
+  });
+
+  it("passes through GET /api/settings with Bearer token (scope deferred to guard)", async () => {
+    // The proxy does not check scope — it delegates to the route
+    // handler's guard. The guard returns 403 for out-of-scope
+    // routes, not the proxy.
+    const req = new FakeNextRequest({
+      url: "http://localhost/api/settings",
+      headers: {
+        Authorization: "Bearer test-token-789",
+      },
+    });
+    const res = await proxy(req as never);
+    expect(res.status).toBe(200);
+  });
+
+  it("does not bypass session auth for non-API routes with Bearer token", async () => {
+    // A non-API route (/items/123) with a Bearer token but no
+    // session cookie must still be blocked. The Bearer bypass only
+    // applies to /api/* paths.
+    const req = new FakeNextRequest({
+      url: "http://localhost/items/123",
+      headers: {
+        Accept: "text/html",
+        Authorization: "Bearer test-token-abc",
+      },
+    });
+    const res = await proxy(req as never);
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("/login");
   });
 });

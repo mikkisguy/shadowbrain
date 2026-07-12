@@ -79,4 +79,14 @@ export const queryKeys = {
     all: ["search"] as const,
     results: (query: string) => ["search", "results", query] as const,
   },
+
+  /**
+   * API token queries.
+   * - `all`: invalidates all API token queries
+   * - `list`: the full list of admin API tokens
+   */
+  apiTokens: {
+    all: ["api-tokens"] as const,
+    list: ["api-tokens", "list"] as const,
+  },
 } as const;
