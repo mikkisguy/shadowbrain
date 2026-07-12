@@ -32,6 +32,9 @@ export { contentTags } from "./repositories/content-tags";
 
 export { settings } from "./repositories/settings";
 
+export type { ApiTokenRow } from "./repositories/api-tokens";
+export { apiTokens } from "./repositories/api-tokens";
+
 export type { JournalPeriod } from "./repositories/journal-periods";
 export { journalPeriods } from "./repositories/journal-periods";
 

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { CelestialHeader } from "@/components/visual/celestial-motif";
 import { AiFeaturesSection } from "./ai-features-section";
 import { saveSettings } from "./api";
+import { ApiTokensSection } from "./api-tokens-section";
 import { ChatProvidersSection } from "./chat-providers-section";
 import { buildSettingsPatch, isSettingsDirty } from "./dirty";
 import { ExportSection } from "./export-section";
@@ -81,6 +82,11 @@ const SECTIONS: SectionDef[] = [
         <SystemInfoSection />
       </div>
     ),
+  },
+  {
+    id: "api-tokens",
+    label: "API Tokens",
+    render: () => <ApiTokensSection />,
   },
 ];
 

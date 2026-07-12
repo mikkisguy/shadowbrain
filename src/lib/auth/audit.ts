@@ -8,6 +8,9 @@
  *   - `auth.login.success`
  *   - `auth.login.failure`
  *   - `auth.logout`
+ *   - `auth.token.used`
+ *   - `auth.token.created`
+ *   - `auth.token.revoked`
  *
  * `success` is `0` for failures and `1` otherwise; the `metadata`
  * column carries a JSON blob of contextual details (e.g. the
@@ -19,7 +22,12 @@
 import { getDb, auditLogs } from "@/db/index";
 
 export type AuthEventAction =
-  "auth.login.success" | "auth.login.failure" | "auth.logout";
+  | "auth.login.success"
+  | "auth.login.failure"
+  | "auth.logout"
+  | "auth.token.used"
+  | "auth.token.created"
+  | "auth.token.revoked";
 
 export interface LogAuthEventInput {
   action: AuthEventAction;
@@ -31,6 +39,12 @@ export interface LogAuthEventInput {
   success: boolean;
   ip?: string | null;
   userAgent?: string | null;
+  /** Override the entity type (defaults to "auth_session"). Use
+   *  "api_token" for token-related events. */
+  entityType?: string;
+  /** Override the entity ID. Use the token ID for token-related
+   *  events so the audit log links directly to the token row. */
+  entityId?: string | null;
   /** Free-form JSON-serialisable context. Must not contain
    *  secrets (passwords, hashes, session cookies). */
   metadata?: Record<string, unknown>;
@@ -47,8 +61,8 @@ export function logAuthEvent(input: LogAuthEventInput): void {
       actor_id: input.username ?? null,
       actor_type: "user",
       action: input.action,
-      entity_type: "auth_session",
-      entity_id: null,
+      entity_type: input.entityType ?? "auth_session",
+      entity_id: input.entityId ?? null,
       success: input.success ? 1 : 0,
       ip: input.ip ?? null,
       user_agent: input.userAgent ?? null,
