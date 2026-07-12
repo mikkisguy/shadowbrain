@@ -8,7 +8,6 @@ import type { PublicSettings } from "@/lib/settings/public";
 export type SettingsDraft = {
   openrouter_api_key: string;
   ai_model: string;
-  ai_model_journal: string;
   ai_model_tagging: string;
   ai_model_titling: string;
   ai_model_linking: string;
@@ -56,17 +55,12 @@ export type SecretField =
   "openrouter_api_key" | "hermes_api_key" | "opencode_go_api_key";
 
 export type ModelField =
-  | "ai_model"
-  | "ai_model_journal"
-  | "ai_model_tagging"
-  | "ai_model_titling"
-  | "ai_model_linking";
+  "ai_model" | "ai_model_tagging" | "ai_model_titling" | "ai_model_linking";
 
 export function snapshotToDraft(snapshot: SettingsSnapshot): SettingsDraft {
   return {
     openrouter_api_key: "",
     ai_model: snapshot.ai_model,
-    ai_model_journal: snapshot.ai_model_journal,
     ai_model_tagging: snapshot.ai_model_tagging,
     ai_model_titling: snapshot.ai_model_titling,
     ai_model_linking: snapshot.ai_model_linking,
@@ -86,7 +80,6 @@ export function publicSettingsToSnapshot(
     openrouter_api_key: "",
     openrouter_api_key_is_set: Boolean(data.openrouter_api_key_is_set),
     ai_model: String(data.ai_model ?? ""),
-    ai_model_journal: String(data.ai_model_journal ?? ""),
     ai_model_tagging: String(data.ai_model_tagging ?? ""),
     ai_model_titling: String(data.ai_model_titling ?? ""),
     ai_model_linking: String(data.ai_model_linking ?? ""),

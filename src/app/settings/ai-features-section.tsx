@@ -100,8 +100,8 @@ export function AiFeaturesSection({
           AI Features
         </h2>
         <p className="text-muted-foreground font-sans text-sm">
-          Powers the AI Processor (nightly compilation, auto-tagging,
-          auto-titling, auto-link suggestions).
+          Powers the AI Processor (auto-tagging, auto-titling, auto-link
+          suggestions).
         </p>
       </header>
 
@@ -126,14 +126,6 @@ export function AiFeaturesSection({
         value={draft.ai_model}
         onChange={(value) => onChange({ ai_model: value })}
         onBrowse={() => openBrowse("ai_model")}
-      />
-
-      <ModelFieldRow
-        id="ai-model-journal"
-        label="Journal compilation model"
-        value={draft.ai_model_journal}
-        onChange={(value) => onChange({ ai_model_journal: value })}
-        onBrowse={() => openBrowse("ai_model_journal")}
       />
 
       <ModelFieldRow

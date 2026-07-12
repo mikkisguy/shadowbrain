@@ -1,16 +1,13 @@
 # AI Processing
 
-ShadowBrain's AI layer has two responsibilities: **semantic search**
-(find thoughts by meaning) and **nightly compilation** (turn raw captures
-into structured journal entries). This document covers the embedding
-pipeline, the vector storage layer, and the planned nightly job
-architecture.
+ShadowBrain's AI layer is responsible for **semantic search**
+(find thoughts by meaning). Nightly journal compilation has been
+extracted to an external solution. This document covers the embedding
+pipeline and the vector storage layer.
 
 > **Status:** The vector storage and search layer is implemented. The
-> embedding generation pipeline and nightly AI compilation job are
-> planned (see [phases.md](phases.md)). This document describes both the
-> implemented storage layer and the designed architecture so
-> contributors know what exists and what is coming.
+> embedding generation pipeline is planned (see [phases.md](phases.md)).
+> Nightly journal compilation has been moved to an external solution.
 
 ---
 
@@ -32,11 +29,6 @@ architecture.
 │  │ (full-text)     │  Both index the same row         │
 │  └─────────────────┘                                 │
 │                                                       │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │  Nightly AI job (planned)                        │ │
-│  │  Raw captures → journal entry + title + tags     │ │
-│  │  via OpenRouter (configurable model)             │ │
-│  └─────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -50,7 +42,7 @@ AI processing is configured via environment variables (synced into the
 | Variable             | Default                         | Purpose                           |
 | -------------------- | ------------------------------- | --------------------------------- |
 | `OPENROUTER_API_KEY` | _(empty)_                       | API key for OpenRouter LLM calls  |
-| `AI_MODEL`           | `mistralai/mistral-7b-instruct` | Model for nightly compilation     |
+| `AI_MODEL`           | `mistralai/mistral-7b-instruct` | Default model for AI tasks        |
 | `EMBEDDING_MODEL`    | `all-MiniLM-L6-v2`              | Local sentence-transformers model |
 
 Get an OpenRouter API key at <https://openrouter.ai/keys>. See
@@ -159,10 +151,11 @@ search.
 
 ---
 
-## Nightly AI compilation (planned)
+## Nightly AI compilation (external)
 
-> **Not yet implemented.** The architecture below is the designed plan
-> from [architecture.md](architecture.md) and [phases.md](phases.md).
+> **Moved to an external solution.** Nightly journal compilation is no
+> longer part of ShadowBrain's codebase. The sections below have been
+> retained as historical reference.
 
 The nightly job processes the day's raw captures and produces:
 
@@ -174,11 +167,11 @@ The nightly job processes the day's raw captures and produces:
 4. **Link suggestions** _(optional)_ — detects relationships between
    items (contradictions, builds-upon, inspired-by).
 
-### Planned architecture
+### Historical architecture
 
 - **Trigger:** cron job or systemd timer (the architecture diagram shows
   a `shadowbrain-cron` container alongside the app).
-- **Model:** configurable via `AI_MODEL` (default Mistral 7B via
+- **Model:** was configurable via `AI_MODEL` (default Mistral 7B via
   OpenRouter).
 - **Grounding:** all prompts are grounded in the user's own data — the
   AI only sees content the user created.

@@ -98,13 +98,13 @@ Building ShadowBrain from scratch, in testable chunks.
 
 ## Phase 4 — AI Features
 
-**Goal:** Nightly compilation, semantic search, Hermes integration deepens.
+**Goal:** Semantic search, auto-tagging, auto-titling, Hermes integration deepens.
 
 ### Tasks
 
 | #   | Task                                                                    | Deliverable                                       |
 | --- | ----------------------------------------------------------------------- | ------------------------------------------------- |
-| 4.1 | Nightly compilation: raw entries → journal entry (from journal-shadows) | 4 AM cron compiles yesterday's raw entries        |
+| 4.1 | Nightly compilation: raw entries → journal entry (from journal-shadows) | Handled by external solution                      |
 | 4.2 | Auto-title generation (LLM)                                             | Journal entries and notes get suggested titles    |
 | 4.3 | Nightly Discord posting: summary + link + new daily thread              | Compiled entries posted to #journal automatically |
 | 4.4 | Vector embedding: batch-embed all existing content                      | `content_vectors` populated                       |

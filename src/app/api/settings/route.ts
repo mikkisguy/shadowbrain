@@ -20,7 +20,6 @@ const patchSchema = z
   .object({
     openrouter_api_key: secretPatchValue.optional(),
     ai_model: z.string().optional(),
-    ai_model_journal: z.string().optional(),
     ai_model_tagging: z.string().optional(),
     ai_model_titling: z.string().optional(),
     ai_model_linking: z.string().optional(),

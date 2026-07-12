@@ -13,7 +13,6 @@ function makeSnapshot(
     openrouter_api_key: "",
     openrouter_api_key_is_set: false,
     ai_model: "mistralai/mistral-7b-instruct",
-    ai_model_journal: "",
     ai_model_tagging: "",
     ai_model_titling: "",
     ai_model_linking: "",
@@ -34,7 +33,6 @@ function makeDraft(overrides: Partial<SettingsDraft> = {}): SettingsDraft {
   return {
     openrouter_api_key: "",
     ai_model: "mistralai/mistral-7b-instruct",
-    ai_model_journal: "",
     ai_model_tagging: "",
     ai_model_titling: "",
     ai_model_linking: "",

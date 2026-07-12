@@ -5,7 +5,6 @@ import type { SettingsDraft, SettingsSnapshot } from "./types";
 const DRAFT_KEYS: Array<keyof SettingsDraft> = [
   "openrouter_api_key",
   "ai_model",
-  "ai_model_journal",
   "ai_model_tagging",
   "ai_model_titling",
   "ai_model_linking",

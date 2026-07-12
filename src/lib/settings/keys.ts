@@ -33,11 +33,6 @@ export const SETTINGS_KEY_DEFS: Record<string, SettingsKeyDef> = {
     schema: nonEmptyString,
     defaultValue: "mistralai/mistral-7b-instruct",
   },
-  ai_model_journal: {
-    secret: false,
-    schema: optionalModelString,
-    defaultValue: "",
-  },
   ai_model_tagging: {
     secret: false,
     schema: optionalModelString,
