@@ -179,8 +179,9 @@ export async function POST(request: Request) {
   // ------------------------------------------------------------------
   // 2. Persist user message (persisted chats only)
   // ------------------------------------------------------------------
+  let userMsgId: string | undefined;
   if (!temporary && threadId) {
-    const userMsgId = crypto.randomUUID();
+    userMsgId = crypto.randomUUID();
     const now = new Date().toISOString();
     db.prepare(
       `INSERT INTO chat_messages
@@ -246,7 +247,8 @@ export async function POST(request: Request) {
       threadId,
       target,
       temporary,
-      contextMessage
+      contextMessage,
+      userMsgId
     );
   }
 
@@ -259,7 +261,8 @@ export async function POST(request: Request) {
     target,
     temporary,
     contextMessage,
-    allowModelSave
+    allowModelSave,
+    userMsgId
   );
 }
 
@@ -275,7 +278,8 @@ async function handleHermesRun(
   threadId: string | null,
   target: Target,
   temporary: boolean,
-  contextMessage: { role: "system"; content: string } | null
+  contextMessage: { role: "system"; content: string } | null,
+  userMsgId: string | undefined
 ): Promise<Response> {
   let runId: string;
 
@@ -351,8 +355,9 @@ async function handleHermesRun(
               }
 
               // Persist assistant message
+              let asstMsgId: string | undefined;
               if (!temporary && threadId) {
-                const asstMsgId = crypto.randomUUID();
+                asstMsgId = crypto.randomUUID();
                 const now = new Date().toISOString();
                 db.prepare(
                   `INSERT INTO chat_messages
@@ -403,6 +408,8 @@ async function handleHermesRun(
                   sseFrame({
                     type: "done",
                     threadId,
+                    userMessageId: userMsgId ?? null,
+                    assistantMessageId: asstMsgId ?? null,
                     promptTokens: null,
                     completionTokens: null,
                     output: event.output,
@@ -474,7 +481,8 @@ async function handleOpenCodeGoStream(
   target: Target,
   temporary: boolean,
   contextMessage: { role: "system"; content: string } | null,
-  allowModelSave: boolean
+  allowModelSave: boolean,
+  userMsgId: string | undefined
 ): Promise<Response> {
   let model: ReturnType<typeof getModelForTarget>;
   try {
@@ -629,8 +637,9 @@ async function handleOpenCodeGoStream(
         }
 
         // Persist assistant message
+        let asstMsgId: string | undefined;
         if (!temporary && threadId) {
-          const asstMsgId = crypto.randomUUID();
+          asstMsgId = crypto.randomUUID();
           const now = new Date().toISOString();
           db.prepare(
             `INSERT INTO chat_messages
@@ -683,6 +692,8 @@ async function handleOpenCodeGoStream(
             sseFrame({
               type: "done",
               threadId,
+              userMessageId: userMsgId ?? null,
+              assistantMessageId: asstMsgId ?? null,
               promptTokens,
               completionTokens,
             })

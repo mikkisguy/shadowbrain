@@ -183,6 +183,7 @@ export async function POST(request: Request) {
             `data: ${JSON.stringify({
               type: "done",
               threadId,
+              assistantMessageId: asstMsgId,
               promptTokens,
               completionTokens,
             })}\n\n`

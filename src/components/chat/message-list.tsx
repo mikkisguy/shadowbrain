@@ -59,6 +59,8 @@ interface MessageListProps {
   ) => Promise<void>;
   /** Map of message index → saved item info (itemId, title). */
   savedItems?: Record<number, { itemId: string; title: string }>;
+  /** Callback when user creates a branch from a message. */
+  onBranch?: (messageIndex: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +203,7 @@ export function MessageList({
   onResolveApproval,
   onSaveContent,
   savedItems,
+  onBranch,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [hoveredTimestamp, setHoveredTimestamp] = useState<string | null>(null);
@@ -355,6 +358,17 @@ export function MessageList({
                     disabled={regenerating}
                   >
                     {regenerating ? "Regenerating..." : "Regenerate"}
+                  </button>
+                )}
+
+                {/* Branch from here button (assistant messages only) */}
+                {onBranch && msg.id && msg.role === "assistant" && (
+                  <button
+                    className="text-muted-foreground hover:text-foreground rounded underline-offset-2 hover:underline"
+                    onClick={() => onBranch(i)}
+                    title="Branch from here"
+                  >
+                    Branch
                   </button>
                 )}
 
