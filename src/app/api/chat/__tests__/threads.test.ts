@@ -7,6 +7,7 @@ import {
   DELETE,
 } from "@/app/api/chat/threads/[id]/route";
 import { POST as POST_SAVE_TEMPORARY } from "@/app/api/chat/threads/save-temporary/route";
+import { POST as POST_BRANCH } from "@/app/api/chat/threads/[id]/branch/route";
 
 describe("/api/chat/threads", () => {
   beforeEach(() => {
@@ -240,6 +241,193 @@ describe("/api/chat/threads", () => {
       expect(res.status).toBe(201);
       const json = await res.json();
       expect(json.thread.title).toBe("What is the meaning of life?");
+    });
+  });
+
+  describe("POST /api/chat/threads/[id]/branch", () => {
+    let originalThreadId: string;
+    let originalMessages: Array<{ id: string; role: string; content: string }>;
+
+    beforeEach(async () => {
+      // Create a thread with messages via save-temporary
+      const req = await authedRequest(
+        "http://localhost/api/chat/threads/save-temporary",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            target: { provider: "opencode-go", model: "deepseek" },
+            title: "Original thread",
+            messages: [
+              { role: "user", content: "First message" },
+              { role: "assistant", content: "First reply" },
+              { role: "user", content: "Second message" },
+            ],
+          }),
+        }
+      );
+      const res = await POST_SAVE_TEMPORARY(req);
+      const json = await res.json();
+      originalThreadId = json.thread.id;
+
+      // Fetch messages to get their IDs
+      const getReq = await authedRequest(
+        `http://localhost/api/chat/threads/${originalThreadId}`
+      );
+      const getRes = await GET_BY_ID(getReq, {
+        params: Promise.resolve({ id: originalThreadId }),
+      });
+      const getJson = await getRes.json();
+      originalMessages = getJson.messages as Array<{
+        id: string;
+        role: string;
+        content: string;
+      }>;
+    });
+
+    it("creates branched thread with messages up to specified message", async () => {
+      // Branch from the first assistant reply (index 1)
+      const fromMessageId = originalMessages[1].id;
+
+      const req = await authedRequest(
+        `http://localhost/api/chat/threads/${originalThreadId}/branch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromMessageId }),
+        }
+      );
+      const res = await POST_BRANCH(req, {
+        params: Promise.resolve({ id: originalThreadId }),
+      });
+
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      expect(json.thread.id).toBeTruthy();
+      expect(json.thread.id).not.toBe(originalThreadId);
+      expect(json.thread.title).toBe("Branch: Original thread");
+
+      // Verify messages were copied
+      const branchGetReq = await authedRequest(
+        `http://localhost/api/chat/threads/${json.thread.id}`
+      );
+      const branchGetRes = await GET_BY_ID(branchGetReq, {
+        params: Promise.resolve({ id: json.thread.id }),
+      });
+      const branchJson = await branchGetRes.json();
+      expect(branchJson.messages).toHaveLength(2);
+      expect(branchJson.messages[0].content).toBe("First message");
+      expect(branchJson.messages[1].content).toBe("First reply");
+    });
+
+    it("inherits target from original thread", async () => {
+      const fromMessageId = originalMessages[0].id;
+
+      const req = await authedRequest(
+        `http://localhost/api/chat/threads/${originalThreadId}/branch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromMessageId }),
+        }
+      );
+      const res = await POST_BRANCH(req, {
+        params: Promise.resolve({ id: originalThreadId }),
+      });
+
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      expect(json.thread.target_provider).toBe("opencode-go");
+      expect(json.thread.target_model).toBe("deepseek");
+    });
+
+    it("branched messages are independent copies", async () => {
+      const fromMessageId = originalMessages[0].id;
+
+      const req = await authedRequest(
+        `http://localhost/api/chat/threads/${originalThreadId}/branch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromMessageId }),
+        }
+      );
+      const res = await POST_BRANCH(req, {
+        params: Promise.resolve({ id: originalThreadId }),
+      });
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      const branchId = json.thread.id;
+
+      // Delete original thread (cascade deletes its messages too)
+      const delReq = await authedRequest(
+        `http://localhost/api/chat/threads/${originalThreadId}`,
+        { method: "DELETE" }
+      );
+      const delRes = await DELETE(delReq, {
+        params: Promise.resolve({ id: originalThreadId }),
+      });
+      expect(delRes.status).toBe(200);
+
+      // Branched thread should still have its messages
+      const branchGetReq = await authedRequest(
+        `http://localhost/api/chat/threads/${branchId}`
+      );
+      const branchGetRes = await GET_BY_ID(branchGetReq, {
+        params: Promise.resolve({ id: branchId }),
+      });
+      expect(branchGetRes.status).toBe(200);
+      const branchJson = await branchGetRes.json();
+      expect(branchJson.messages).toHaveLength(1);
+      expect(branchJson.messages[0].content).toBe("First message");
+    });
+
+    it("returns 404 for non-existent message", async () => {
+      const req = await authedRequest(
+        `http://localhost/api/chat/threads/${originalThreadId}/branch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromMessageId: "nonexistent-id" }),
+        }
+      );
+      const res = await POST_BRANCH(req, {
+        params: Promise.resolve({ id: originalThreadId }),
+      });
+
+      expect(res.status).toBe(404);
+    });
+
+    it("returns 404 for non-existent thread", async () => {
+      const req = await authedRequest(
+        "http://localhost/api/chat/threads/nonexistent/branch",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromMessageId: "any-message-id" }),
+        }
+      );
+      const res = await POST_BRANCH(req, {
+        params: Promise.resolve({ id: "nonexistent" }),
+      });
+
+      expect(res.status).toBe(404);
+    });
+
+    it("returns 400 when fromMessageId is missing", async () => {
+      const req = await authedRequest(
+        `http://localhost/api/chat/threads/${originalThreadId}/branch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }
+      );
+      const res = await POST_BRANCH(req, {
+        params: Promise.resolve({ id: originalThreadId }),
+      });
+
+      expect(res.status).toBe(400);
     });
   });
 });

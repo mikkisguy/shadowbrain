@@ -198,6 +198,15 @@ describe("/api/chat", () => {
       expect(json.messages[0].content).toBe("First message!");
       expect(json.messages[1].role).toBe("assistant");
       expect(json.messages[1].content).toBe("response");
+
+      const assistantMsg = json.messages.find(
+        (m: { role: string }) => m.role === "assistant"
+      );
+      const userMsg = json.messages.find(
+        (m: { role: string }) => m.role === "user"
+      );
+      expect(doneEvent?.assistantMessageId).toBe(assistantMsg?.id);
+      expect(doneEvent?.userMessageId).toBe(userMsg?.id);
     });
 
     it("persists messages for an existing thread", async () => {

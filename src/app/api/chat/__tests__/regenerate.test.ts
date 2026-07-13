@@ -157,6 +157,11 @@ describe("/api/chat/regenerate", () => {
     expect(json2.messages[0].content).toBe("Hello");
     expect(json2.messages[1].role).toBe("assistant");
     expect(json2.messages[1].content).toBe("regenerated response");
+
+    const assistantMsg = json2.messages.find(
+      (m: { role: string }) => m.role === "assistant"
+    );
+    expect(regenDone?.assistantMessageId).toBe(assistantMsg?.id);
   });
 
   it("returns 404 for unknown thread", async () => {

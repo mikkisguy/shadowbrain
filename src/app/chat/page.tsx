@@ -222,6 +222,7 @@ export default function ChatPage() {
 
       setActiveThreadId(id);
       setTemporary(false);
+      setSavedItems({});
 
       // Auto-select provider + model from thread
       if (thread.target_provider) {
@@ -270,6 +271,7 @@ export default function ChatPage() {
     setGrounded(false);
     setIncludePrivateInAi(false);
     setAllowModelSave(false);
+    setSavedItems({});
   }, []);
 
   // ------------------------------------------------------------------
@@ -327,15 +329,14 @@ export default function ChatPage() {
       });
       if (!res.ok) return;
       const data = await res.json();
-      setActiveThreadId(data.thread.id);
-      setTemporary(false);
+      await handleSelectThread(data.thread.id);
       fetchThreads();
     } catch {
       // silent
     } finally {
       setSavingChat(false);
     }
-  }, [messages, provider, model, fetchThreads]);
+  }, [messages, provider, model, fetchThreads, handleSelectThread]);
 
   // ------------------------------------------------------------------
   // Resolve Hermes approval
@@ -454,6 +455,10 @@ export default function ChatPage() {
 
               if (finalContent) {
                 if (isRegenerate) {
+                  const assistantId =
+                    typeof event.assistantMessageId === "string"
+                      ? event.assistantMessageId
+                      : undefined;
                   setMessages((msgs) => {
                     const lastAssistantIdx = msgs
                       .map((m) => m.role)
@@ -461,6 +466,8 @@ export default function ChatPage() {
                     if (lastAssistantIdx >= 0) {
                       const updated = [...msgs];
                       updated[lastAssistantIdx] = {
+                        ...updated[lastAssistantIdx],
+                        id: assistantId ?? updated[lastAssistantIdx].id,
                         role: "assistant",
                         content: finalContent,
                         targetModel: model,
@@ -475,6 +482,7 @@ export default function ChatPage() {
                     return [
                       ...msgs,
                       {
+                        id: assistantId,
                         role: "assistant",
                         content: finalContent,
                         targetModel: model,
@@ -487,19 +495,40 @@ export default function ChatPage() {
                     ];
                   });
                 } else {
-                  setMessages((msgs) => [
-                    ...msgs,
-                    {
-                      role: "assistant",
-                      content: finalContent,
-                      targetModel: model,
-                      toolProgress: capturedToolProgress,
-                      promptTokens: (event.promptTokens as number) ?? null,
-                      completionTokens:
-                        (event.completionTokens as number) ?? null,
-                      createdAt: new Date().toISOString(),
-                    },
-                  ]);
+                  const userId =
+                    typeof event.userMessageId === "string"
+                      ? event.userMessageId
+                      : undefined;
+                  const assistantId =
+                    typeof event.assistantMessageId === "string"
+                      ? event.assistantMessageId
+                      : undefined;
+                  setMessages((msgs) => {
+                    const updated = [...msgs];
+                    const lastUserIdx = updated
+                      .map((m) => m.role)
+                      .lastIndexOf("user");
+                    if (lastUserIdx >= 0 && userId) {
+                      updated[lastUserIdx] = {
+                        ...updated[lastUserIdx],
+                        id: userId,
+                      };
+                    }
+                    return [
+                      ...updated,
+                      {
+                        id: assistantId,
+                        role: "assistant",
+                        content: finalContent,
+                        targetModel: model,
+                        toolProgress: capturedToolProgress,
+                        promptTokens: (event.promptTokens as number) ?? null,
+                        completionTokens:
+                          (event.completionTokens as number) ?? null,
+                        createdAt: new Date().toISOString(),
+                      },
+                    ];
+                  });
                 }
               }
 
@@ -714,6 +743,32 @@ export default function ChatPage() {
   );
 
   // ------------------------------------------------------------------
+  // Branch a thread from a specific message
+  // ------------------------------------------------------------------
+  const handleBranch = useCallback(
+    async (messageIndex: number) => {
+      const msg = messagesRef.current[messageIndex];
+      if (!activeThreadId || !msg?.id) return;
+
+      try {
+        const res = await fetch(`/api/chat/threads/${activeThreadId}/branch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromMessageId: msg.id }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const newThread = data.thread as ThreadInfo;
+        await fetchThreads();
+        await handleSelectThread(newThread.id);
+      } catch {
+        // silent
+      }
+    },
+    [activeThreadId, fetchThreads, handleSelectThread]
+  );
+
+  // ------------------------------------------------------------------
   // Is there a temporary chat with messages to show "Save chat"?
   // ------------------------------------------------------------------
   const showSaveChat = temporary && messages.length > 0 && !activeThreadId;
@@ -748,6 +803,7 @@ export default function ChatPage() {
           onResolveApproval={handleResolveApproval}
           onSaveContent={handleSaveContent}
           savedItems={savedItems}
+          onBranch={activeThreadId ? handleBranch : undefined}
         />
         <ChatControls
           provider={provider}
