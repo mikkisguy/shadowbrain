@@ -1,4 +1,4 @@
-FROM node:24-slim@sha256:c2d5ade763cacfb03fe9cb8e8af5d1be5041ff331921fa26a9b231ca3a4f780a AS base
+FROM node:24-slim@sha256:39a4259b6f744868a8228742ad45aa3026f97302e5eec2fa4a38b30ca0a66e12 AS base
 
 # Install dependencies only when needed
 FROM base AS deps
