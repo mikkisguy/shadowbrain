@@ -7,6 +7,11 @@ import {
   formatTokenCount,
   formatRelativeTime,
 } from "@/lib/chat/model-metadata";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import type {
   ToolProgressItem,
@@ -35,10 +40,6 @@ interface MessageListProps {
   streaming: boolean;
   /** The current streaming token content (still accumulating). */
   streamingContent?: string;
-  /** Total tokens used across all messages (for context window indicator). */
-  totalTokens?: number;
-  /** The model's context window size. */
-  contextWindow?: number;
   /** Whether regenerate is available on the last assistant message. */
   onRegenerate?: () => void;
   regenerating?: boolean;
@@ -193,8 +194,6 @@ export function MessageList({
   messages,
   streaming,
   streamingContent,
-  totalTokens,
-  contextWindow,
   onRegenerate,
   regenerating,
   streamError,
@@ -214,7 +213,7 @@ export function MessageList({
   // Auto-scroll to bottom when new content arrives
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingContent, toolProgress, approvalState]);
+  }, [messages, streamingContent]);
 
   if (messages.length === 0 && !streaming) {
     return (
@@ -224,39 +223,8 @@ export function MessageList({
     );
   }
 
-  // Context window indicator
-  const contextUsed =
-    totalTokens && contextWindow
-      ? Math.min(100, Math.round((totalTokens / contextWindow) * 100))
-      : null;
-
   return (
     <div className="flex-1 overflow-y-auto px-4 py-6">
-      {/* Context window indicator */}
-      {contextUsed !== null && (
-        <div className="border-border bg-card/50 mx-auto mb-4 max-w-3xl rounded-lg border px-4 py-2">
-          <div className="text-muted-foreground mb-1 flex items-center justify-between text-xs">
-            <span>Context window</span>
-            <span>
-              {contextUsed}% of {formatTokenCount(contextWindow ?? 0)} used
-            </span>
-          </div>
-          <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all duration-300",
-                contextUsed > 80
-                  ? "bg-destructive"
-                  : contextUsed > 50
-                    ? "bg-amber-500"
-                    : "bg-primary"
-              )}
-              style={{ width: `${contextUsed}%` }}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Stream error banner */}
       {streamError && (
         <div className="border-destructive/50 bg-destructive/10 text-destructive mx-auto mb-4 max-w-3xl rounded-lg border px-4 py-2 text-sm">
@@ -280,10 +248,10 @@ export function MessageList({
             >
               <div
                 className={cn(
-                  "max-w-[80%] rounded-lg px-4 py-3",
+                  "rounded-lg",
                   msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+                    ? "bg-card text-foreground border-border border-l-primary/50 max-w-[80%] border border-l-2 px-4 py-3"
+                    : "w-full pb-3"
                 )}
               >
                 {msg.role === "assistant" ? (
@@ -293,7 +261,7 @@ export function MessageList({
                     </div>
                     {/* Tool activity for this turn */}
                     {msg.toolProgress && msg.toolProgress.length > 0 && (
-                      <div className="border-border mt-2 space-y-1 border-t pt-2">
+                      <div className="border-border mt-3 space-y-1 border-t pt-3">
                         {msg.toolProgress.map((item) => (
                           <ToolActivityBlock key={item.id} item={item} />
                         ))}
@@ -301,95 +269,163 @@ export function MessageList({
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
                 )}
               </div>
 
               {/* Metadata row */}
               <div
                 className={cn(
-                  "text-muted-foreground mt-1 flex items-center gap-3 text-xs",
-                  msg.role === "user" ? "flex-row-reverse" : "flex-row"
+                  "text-muted-foreground/60 mt-1 flex items-center gap-2 text-xs",
+                  msg.role === "user" ? "flex-row" : "flex-row-reverse"
                 )}
               >
-                {/* Model name for assistant messages */}
-                {msg.role === "assistant" && msg.targetModel && (
-                  <span className="italic">via {msg.targetModel}</span>
-                )}
+                {/* Text metadata with dot separators */}
+                <span className="flex items-center">
+                  {/* Model name for assistant messages */}
+                  {msg.role === "assistant" && msg.targetModel && (
+                    <>
+                      <span>{msg.targetModel}</span>
+                      {(msg.promptTokens != null ||
+                        msg.completionTokens != null ||
+                        msg.createdAt) && (
+                        <span className="text-muted-foreground/40 mx-1">·</span>
+                      )}
+                    </>
+                  )}
 
-                {/* Token count */}
-                {msg.promptTokens != null || msg.completionTokens != null ? (
-                  <span>
-                    {msg.promptTokens != null
-                      ? `in: ${formatTokenCount(msg.promptTokens)}`
-                      : ""}
-                    {msg.promptTokens != null && msg.completionTokens != null
-                      ? " / "
-                      : ""}
-                    {msg.completionTokens != null
-                      ? `out: ${formatTokenCount(msg.completionTokens)}`
-                      : ""}
-                  </span>
-                ) : null}
-
-                {/* Timestamp with hover tooltip */}
-                {msg.createdAt && (
-                  <span
-                    className="relative cursor-default"
-                    onMouseEnter={() =>
-                      setHoveredTimestamp(msg.createdAt ?? null)
-                    }
-                    onMouseLeave={() => setHoveredTimestamp(null)}
-                  >
-                    {formatRelativeTime(msg.createdAt)}
-                    {hoveredTimestamp === msg.createdAt && (
-                      <span className="bg-popover text-popover-foreground border-border absolute bottom-full left-1/2 -translate-x-1/2 rounded border px-2 py-1 text-xs whitespace-nowrap shadow-sm">
-                        {formatFullTimestamp(msg.createdAt!)}
+                  {/* Token count */}
+                  {msg.promptTokens != null || msg.completionTokens != null ? (
+                    <>
+                      <span>
+                        {msg.promptTokens != null
+                          ? `in: ${formatTokenCount(msg.promptTokens)}`
+                          : ""}
+                        {msg.promptTokens != null &&
+                        msg.completionTokens != null
+                          ? " / "
+                          : ""}
+                        {msg.completionTokens != null
+                          ? `out: ${formatTokenCount(msg.completionTokens)}`
+                          : ""}
                       </span>
-                    )}
-                  </span>
-                )}
+                      {msg.createdAt && (
+                        <span className="text-muted-foreground/40 mx-1">·</span>
+                      )}
+                    </>
+                  ) : null}
 
-                {/* Regenerate button (only on last assistant, not streaming) */}
-                {isLastAssistant && onRegenerate && (
-                  <button
-                    className="text-muted-foreground hover:text-foreground rounded underline-offset-2 hover:underline disabled:opacity-50"
-                    onClick={onRegenerate}
-                    disabled={regenerating}
-                  >
-                    {regenerating ? "Regenerating..." : "Regenerate"}
-                  </button>
-                )}
-
-                {/* Branch from here button (assistant messages only) */}
-                {onBranch && msg.id && msg.role === "assistant" && (
-                  <button
-                    className="text-muted-foreground hover:text-foreground rounded underline-offset-2 hover:underline"
-                    onClick={() => onBranch(i)}
-                    title="Branch from here"
-                  >
-                    Branch
-                  </button>
-                )}
-
-                {/* Save to ShadowBrain button */}
-                {onSaveContent && (
-                  <button
-                    className="text-muted-foreground hover:text-foreground rounded underline-offset-2 hover:underline"
-                    onClick={() => {
-                      if (savePickerIndex === i) {
-                        setSavePickerIndex(null);
-                      } else {
-                        setSavePickerIndex(i);
-                        setSavePickerType("note");
-                        setSavePickerTitle("");
+                  {/* Timestamp with hover tooltip */}
+                  {msg.createdAt && (
+                    <span
+                      className="relative cursor-default"
+                      onMouseEnter={() =>
+                        setHoveredTimestamp(msg.createdAt ?? null)
                       }
-                    }}
-                    title="Save to ShadowBrain"
-                  >
-                    Save
-                  </button>
-                )}
+                      onMouseLeave={() => setHoveredTimestamp(null)}
+                    >
+                      {formatRelativeTime(msg.createdAt)}
+                      {hoveredTimestamp === msg.createdAt && (
+                        <span className="bg-popover text-popover-foreground border-border absolute bottom-full left-1/2 -translate-x-1/2 rounded border px-2 py-1 text-xs whitespace-nowrap shadow-sm">
+                          {formatFullTimestamp(msg.createdAt!)}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </span>
+
+                {/* Action icon buttons */}
+                <div className="flex items-center gap-1">
+                  {/* Regenerate button (only on last assistant, not streaming) */}
+                  {isLastAssistant && onRegenerate && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        aria-label="Regenerate response"
+                        className="text-muted-foreground hover:text-foreground inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors disabled:opacity-50"
+                        onClick={onRegenerate}
+                        disabled={regenerating}
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className={cn(regenerating && "animate-spin")}
+                        >
+                          <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                          <path d="M21 3v5h-5" />
+                        </svg>
+                      </TooltipTrigger>
+                      <TooltipContent>Regenerate response</TooltipContent>
+                    </Tooltip>
+                  )}
+
+                  {/* Branch from here button (assistant messages only) */}
+                  {onBranch && msg.id && msg.role === "assistant" && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        aria-label="Branch from here"
+                        className="text-muted-foreground hover:text-foreground inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
+                        onClick={() => onBranch(i)}
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <line x1="6" y1="3" x2="6" y2="15" />
+                          <circle cx="6" cy="3" r="3" />
+                          <circle cx="6" cy="21" r="3" />
+                          <path d="M18 9a9 9 0 0 0-9-9" />
+                          <circle cx="18" cy="9" r="3" />
+                        </svg>
+                      </TooltipTrigger>
+                      <TooltipContent>Branch from here</TooltipContent>
+                    </Tooltip>
+                  )}
+
+                  {/* Save to ShadowBrain button */}
+                  {onSaveContent && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        aria-label="Save to ShadowBrain"
+                        className="text-muted-foreground hover:text-foreground inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
+                        onClick={() => {
+                          if (savePickerIndex === i) {
+                            setSavePickerIndex(null);
+                          } else {
+                            setSavePickerIndex(i);
+                            setSavePickerType("note");
+                            setSavePickerTitle("");
+                          }
+                        }}
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                        </svg>
+                      </TooltipTrigger>
+                      <TooltipContent>Save to ShadowBrain</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
               </div>
 
               {/* Inline confirmation: "Saved as note" */}
@@ -428,30 +464,34 @@ export function MessageList({
 
               {/* Type picker for Save to ShadowBrain (only if not already saved) */}
               {onSaveContent && !savedItems?.[i] && savePickerIndex === i && (
-                <div className="border-border bg-card/50 mt-2 w-full max-w-[280px] rounded border px-3 py-2">
-                  <div className="mb-2 flex items-center gap-2">
+                <div className="border-border bg-card mt-4 w-full max-w-[400px] rounded-lg border p-4 shadow-lg">
+                  <div className="mb-3 flex items-center gap-3">
                     <select
-                      className="bg-background text-foreground border-border h-7 rounded border px-2 text-xs"
+                      className="bg-background text-foreground border-border h-8 shrink-0 rounded border px-2.5 text-xs"
                       value={savePickerType}
                       onChange={(e) => setSavePickerType(e.target.value)}
                     >
                       <option value="note">Note</option>
-                      <option value="journal">Journal</option>
-                      <option value="bookmark">Bookmark</option>
                       <option value="question">Question</option>
                       <option value="raw_text">Raw text</option>
                     </select>
                     <input
                       type="text"
                       placeholder="Title (optional)"
-                      className="bg-background text-foreground border-border h-7 flex-1 rounded border px-2 text-xs"
+                      className="bg-background text-foreground border-border placeholder:text-muted-foreground/60 h-8 min-w-0 flex-1 rounded border px-2.5 text-xs"
                       value={savePickerTitle}
                       onChange={(e) => setSavePickerTitle(e.target.value)}
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex items-center justify-end gap-2">
                     <button
-                      className="bg-primary text-primary-foreground hover:bg-primary/90 rounded px-3 py-1 text-xs"
+                      className="text-muted-foreground hover:text-foreground border-border hover:bg-accent rounded border px-3 py-1.5 text-xs font-medium transition-colors"
+                      onClick={() => setSavePickerIndex(null)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 rounded px-4 py-1.5 text-xs font-medium"
                       onClick={async () => {
                         await onSaveContent(
                           msg.content,
@@ -464,12 +504,6 @@ export function MessageList({
                     >
                       Save
                     </button>
-                    <button
-                      className="text-muted-foreground hover:text-foreground rounded px-2 py-1 text-xs"
-                      onClick={() => setSavePickerIndex(null)}
-                    >
-                      Cancel
-                    </button>
                   </div>
                 </div>
               )}
@@ -480,7 +514,7 @@ export function MessageList({
         {/* Streaming message */}
         {streaming && streamingContent && (
           <div className="flex justify-start">
-            <div className="bg-muted max-w-[80%] rounded-lg px-4 py-3">
+            <div className="w-full rounded-lg px-4 py-3">
               <div className="prose-sm prose-invert max-w-none">
                 <MarkdownContent content={streamingContent} />
               </div>
@@ -514,7 +548,7 @@ export function MessageList({
           !approvalState &&
           !(toolProgress && toolProgress.length > 0) && (
             <div className="flex justify-start">
-              <div className="bg-muted rounded-lg px-4 py-3">
+              <div className="rounded-lg px-4 py-3">
                 <div className="flex gap-1">
                   <span className="bg-muted-foreground/50 h-2 w-2 animate-bounce rounded-full [animation-delay:0ms]" />
                   <span className="bg-muted-foreground/50 h-2 w-2 animate-bounce rounded-full [animation-delay:150ms]" />
@@ -531,7 +565,7 @@ export function MessageList({
           toolProgress &&
           toolProgress.length > 0 && (
             <div className="flex justify-start">
-              <div className="bg-muted max-w-[80%] rounded-lg px-4 py-3">
+              <div className="w-full rounded-lg px-4 py-3">
                 <div className="space-y-1">
                   {toolProgress.map((item) => (
                     <ToolActivityBlock key={item.id} item={item} />

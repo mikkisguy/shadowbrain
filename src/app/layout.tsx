@@ -5,7 +5,7 @@ import { Toaster } from "sonner";
 
 import { SkipToContent } from "@/components/layout/skip-to-content";
 import { TopNav } from "@/components/layout/top-nav";
-import { Footer } from "@/components/layout/footer";
+
 import { BackupReminderBanner } from "@/components/backup/backup-reminder-banner";
 import { CommandPaletteRoot } from "@/components/command-palette/command-palette-root";
 import { AddDialogRoot } from "@/components/add-dialog";
@@ -65,7 +65,7 @@ getEnv();
  *
  *  The proxy is the source of truth for gating — this
  *  server-component check is just a hint to render auth-aware
- *  chrome (top nav, footer, user menu). The proxy still
+ *  chrome (top nav, user menu). The proxy still
  *  enforces the real boundary on every request.
  *
  *  In e2e mode, always return true so the TopNav (with AddButton)
@@ -113,17 +113,14 @@ export default async function RootLayout({
               <TooltipProvider delay={300}>
                 <SkipToContent />
                 {/*
-                  Hide the top nav AND the footer on unauthenticated pages
-                  (currently just /login). An unauthenticated visitor does
-                  not need the navigation chrome — the login page is a
-                  focused authentication surface, and the brand mark +
-                  form inside the page is enough to communicate "you are
-                  in the right place". Showing the nav would also advertise
+                  Hide the top nav on unauthenticated pages (currently just
+                  /login). An unauthenticated visitor does not need the
+                  navigation chrome — the login page is a focused
+                  authentication surface, and the brand mark + form inside
+                  the page is enough to communicate "you are in the right
+                  place". Showing the nav would also advertise
                   authenticated-only actions (the command palette) to an
-                  unauthenticated visitor. The footer is hidden for the
-                  same reason: the mono-font build marker is internal
-                  chrome, and a sign-in screen should not carry internal
-                  product framing.
+                  unauthenticated visitor.
                 */}
                 {isAuthenticated ? <TopNav /> : null}
                 {backupStatus ? (
@@ -132,7 +129,6 @@ export default async function RootLayout({
                   </div>
                 ) : null}
                 <div className="flex flex-1 flex-col">{children}</div>
-                {isAuthenticated ? <Footer /> : null}
               </TooltipProvider>
             </CommandPaletteRoot>
           </AddDialogRoot>

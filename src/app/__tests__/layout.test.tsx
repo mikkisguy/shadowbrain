@@ -3,16 +3,13 @@
  * `src/app/layout.tsx`.
  *
  * The layout is the only place that decides whether to render the
- * top nav and the global footer — the proxy is the source of truth
+ * top nav — the proxy is the source of truth
  * for whether the visitor is *allowed* to see the page, but the
  * layout is the source of truth for whether the chrome is
  * *visible*. This test pins that contract:
  *
- *   - Authenticated → both <TopNav /> and <Footer /> are rendered
- *     (the footer is the mono-font build marker; it is internal
- *     chrome that should not be shown to an unauthenticated
- *     visitor on the sign-in page).
- *   - Unauthenticated → neither is rendered.
+ *   - Authenticated → <TopNav /> is rendered
+ *   - Unauthenticated → <TopNav /> is not rendered.
  *
  * `next/headers` (cookies) and `next/font/google` are mocked so
  * the layout can be rendered with `renderToStaticMarkup` without
@@ -101,7 +98,7 @@ describe("RootLayout auth-aware chrome", () => {
     cookieStore.value = undefined;
   });
 
-  it("renders the top nav and the footer for an authenticated visitor", async () => {
+  it("renders the top nav for an authenticated visitor", async () => {
     cookieStore.value = await signSessionValue({
       username: "admin",
       secret: SECRET,
@@ -110,14 +107,10 @@ describe("RootLayout auth-aware chrome", () => {
     const html = await renderLayout();
     expect(html).toMatch(/data-testid="top-nav"/);
     expect(html).toMatch(/data-testid="backup-reminder-banner"/);
-    expect(html).toMatch(/data-testid="app-footer"/);
   });
 
-  it("hides both the top nav and the footer for an unauthenticated visitor", async () => {
+  it("hides the top nav for an unauthenticated visitor", async () => {
     const html = await renderLayout();
     expect(html).not.toMatch(/data-testid="top-nav"/);
-    // The footer is the mono-font build marker — it is internal
-    // chrome and must not appear on the sign-in screen.
-    expect(html).not.toMatch(/data-testid="app-footer"/);
   });
 });

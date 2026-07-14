@@ -60,11 +60,11 @@ export function ThreadList({
   );
 
   return (
-    <aside className="border-border bg-card/50 flex h-full w-64 shrink-0 flex-col border-r">
+    <aside className="border-border bg-card/50 flex min-h-0 w-64 shrink-0 flex-col border-r">
       {/* Top controls */}
       <div className="border-border border-b p-3">
         <Button
-          variant="default"
+          variant="secondary"
           size="sm"
           className="w-full"
           onClick={onNewChat}
