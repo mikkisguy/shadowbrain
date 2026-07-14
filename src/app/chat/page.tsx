@@ -9,9 +9,8 @@ import type {
   HermesApprovalDecision,
 } from "@/lib/chat/types";
 import { ChatInput } from "@/components/chat/chat-input";
-import { ChatControls } from "@/components/chat/chat-controls";
 import type { ThreadInfo } from "@/components/chat/thread-list";
-import type { ModelOption } from "@/components/chat/chat-controls";
+import type { ModelOption } from "@/lib/chat/providers";
 import type { ChatMessage } from "@/components/chat/message-list";
 import { getModelContextWindow } from "@/lib/chat/model-metadata";
 
@@ -57,8 +56,7 @@ export default function ChatPage() {
   const [temporary, setTemporary] = useState(false);
   const [provider, setProvider] = useState(DEFAULT_PROVIDER);
   const [model, setModel] = useState("");
-  const [models, setModels] = useState<ModelOption[]>([]);
-  const [defaultModel, setDefaultModel] = useState("");
+  const [allModels, setAllModels] = useState<Record<string, ModelOption[]>>({});
   const [savingChat, setSavingChat] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -76,17 +74,44 @@ export default function ChatPage() {
   const abortRef = useRef<AbortController | null>(null);
   const streamingContentRef = useRef("");
   const modelRef = useRef(model);
-  const defaultModelRef = useRef(defaultModel);
   const titlePollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const messagesRef = useRef(messages);
   const pendingSavedRef = useRef<{ itemId: string; title: string } | null>(
     null
   );
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerHeight, setContainerHeight] = useState<number | undefined>(
+    undefined
+  );
+
+  // Constrain the chat page to the available viewport height so internal
+  // overflow-y-auto containers scroll independently.
+  // Watch container resizes directly, plus window.resize and
+  // visualViewport events for mobile dynamic toolbars.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const update = () => {
+      const rect = container.getBoundingClientRect();
+      setContainerHeight(window.innerHeight - rect.top);
+    };
+    update();
+
+    const observer = new ResizeObserver(update);
+    observer.observe(container);
+    window.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, []);
 
   // Sync refs with state (post-render, no extra renders)
   useEffect(() => {
     modelRef.current = model;
-    defaultModelRef.current = defaultModel;
     messagesRef.current = messages;
   });
 
@@ -142,53 +167,31 @@ export default function ChatPage() {
     fetch("/api/chat/models")
       .then((res) => res.json())
       .then((data) => {
-        const allModels: Record<string, ModelOption[]> = data.models ?? {};
-        const goModels = allModels["opencode-go"] ?? [];
-        setModels(goModels);
-        if (data.defaultOpenCodeGoModel) {
-          setDefaultModel(data.defaultOpenCodeGoModel);
-          setModel(data.defaultOpenCodeGoModel);
-        } else if (goModels.length > 0) {
-          setModel(goModels[0].id);
-        }
+        const remote: Record<string, ModelOption[]> = data.models ?? {};
+        setAllModels(remote);
+        // Pick an initial model: prefer the configured default, then
+        // first OpenCode Go model, then Hermes, then empty.
+        const goModels = remote["opencode-go"] ?? [];
+        const hermesModels = remote["hermes"] ?? [];
+        const preferred =
+          data.defaultOpenCodeGoModel &&
+          goModels.find(
+            (m: ModelOption) => m.id === data.defaultOpenCodeGoModel
+          )
+            ? data.defaultOpenCodeGoModel
+            : (goModels[0]?.id ?? hermesModels[0]?.id ?? "");
+        setModel(preferred);
       })
       .catch(() => {});
   }, []);
 
   // ------------------------------------------------------------------
-  // Update models when provider changes
+  // Model selection (unified provider + model picker)
   // ------------------------------------------------------------------
-  const providerEffectSkipRef = useRef(true);
-
-  useEffect(() => {
-    // Skip the initial mount — model selection is handled by the [] effect above.
-    if (providerEffectSkipRef.current) {
-      providerEffectSkipRef.current = false;
-      return;
-    }
-
-    const currentModel = modelRef.current;
-    const currentDefaultModel = defaultModelRef.current;
-    fetch("/api/chat/models")
-      .then((res) => res.json())
-      .then((data) => {
-        const allModels: Record<string, ModelOption[]> = data.models ?? {};
-        const providerModels = allModels[provider] ?? [];
-        setModels(providerModels);
-        // Auto-select first model if current not in list
-        if (
-          providerModels.length > 0 &&
-          !providerModels.some((m) => m.id === currentModel)
-        ) {
-          const preferred =
-            provider === "opencode-go" && currentDefaultModel
-              ? providerModels.find((m) => m.id === currentDefaultModel)
-              : null;
-          setModel(preferred?.id ?? providerModels[0].id);
-        }
-      })
-      .catch(() => {});
-  }, [provider, modelRef, defaultModelRef]);
+  const handleModelSelect = useCallback((p: string, m: string) => {
+    setProvider(p);
+    setModel(m);
+  }, []);
 
   // ------------------------------------------------------------------
   // Select a thread
@@ -777,7 +780,13 @@ export default function ChatPage() {
   // Render
   // ------------------------------------------------------------------
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div
+      ref={containerRef}
+      className="flex flex-1 overflow-hidden"
+      style={{
+        maxHeight: containerHeight ? `${containerHeight}px` : undefined,
+      }}
+    >
       <ThreadList
         threads={threads}
         activeThreadId={activeThreadId}
@@ -791,8 +800,6 @@ export default function ChatPage() {
           messages={messages}
           streaming={streaming}
           streamingContent={streamingContent || undefined}
-          totalTokens={totalTokens}
-          contextWindow={contextWindow}
           onRegenerate={
             activeThreadId && !temporary ? handleRegenerate : undefined
           }
@@ -805,12 +812,13 @@ export default function ChatPage() {
           savedItems={savedItems}
           onBranch={activeThreadId ? handleBranch : undefined}
         />
-        <ChatControls
+        <ChatInput
+          onSend={handleSend}
+          disabled={streaming}
           provider={provider}
-          onProviderChange={setProvider}
           model={model}
-          onModelChange={setModel}
-          models={models}
+          allModels={allModels}
+          onModelSelect={handleModelSelect}
           temporary={temporary}
           onTemporaryChange={(v: boolean) => {
             setTemporary(v);
@@ -823,13 +831,20 @@ export default function ChatPage() {
           savingChat={savingChat}
           isHermesMode={provider === "hermes"}
           grounded={grounded}
-          onGroundedChange={setGrounded}
+          onGroundedChange={(v: boolean) => {
+            setGrounded(v);
+            if (!v) {
+              setIncludePrivateInAi(false);
+              setAllowModelSave(false);
+            }
+          }}
           includePrivateInAi={includePrivateInAi}
           onIncludePrivateInAiChange={setIncludePrivateInAi}
           allowModelSave={allowModelSave}
           onAllowModelSaveChange={setAllowModelSave}
+          totalTokens={totalTokens}
+          contextWindow={contextWindow}
         />
-        <ChatInput onSend={handleSend} disabled={streaming} />
       </main>
     </div>
   );

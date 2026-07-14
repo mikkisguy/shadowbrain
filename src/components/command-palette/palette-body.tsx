@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import { CornerDownLeft, Search as SearchIcon } from "lucide-react";
+import { APP_VERSION } from "@/lib/version";
 import { Command as CommandPrimitive } from "cmdk";
 import { useQuery } from "@tanstack/react-query";
 
@@ -213,7 +214,7 @@ function PaletteBody() {
         </span>
         <span className="inline-flex items-center gap-1">
           <CornerDownLeft aria-hidden="true" className="size-3" />
-          ShadowBrain palette
+          ShadowBrain v{APP_VERSION}
         </span>
       </div>
     </CommandPrimitive>
