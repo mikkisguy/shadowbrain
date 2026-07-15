@@ -62,6 +62,14 @@ interface MessageListProps {
   savedItems?: Record<number, { itemId: string; title: string }>;
   /** Callback when user creates a branch from a message. */
   onBranch?: (messageIndex: number) => void;
+  /** Callback when user edits a message (messageIndex in messages array, new content). */
+  onEditMessage?: (
+    messageIndex: number,
+    messageId: string,
+    newContent: string
+  ) => void;
+  /** When true, editing is disabled (messages aren't persisted to DB). */
+  temporary?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,12 +211,17 @@ export function MessageList({
   onSaveContent,
   savedItems,
   onBranch,
+  onEditMessage,
+  temporary,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [hoveredTimestamp, setHoveredTimestamp] = useState<string | null>(null);
   const [savePickerIndex, setSavePickerIndex] = useState<number | null>(null);
   const [savePickerType, setSavePickerType] = useState("note");
   const [savePickerTitle, setSavePickerTitle] = useState("");
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-scroll to bottom when new content arrives
   useEffect(() => {
@@ -249,9 +262,11 @@ export function MessageList({
               <div
                 className={cn(
                   "rounded-lg",
-                  msg.role === "user"
-                    ? "bg-card text-foreground border-border border-l-primary/50 max-w-[80%] border border-l-2 px-4 py-3"
-                    : "w-full pb-3"
+                  editingIndex === i
+                    ? "w-full" // edit mode: full width, no bubble chrome
+                    : msg.role === "user"
+                      ? "bg-card text-foreground border-border border-l-primary/50 max-w-[80%] border border-l-2 px-4 py-3"
+                      : "w-full pb-3"
                 )}
               >
                 {msg.role === "assistant" ? (
@@ -267,6 +282,67 @@ export function MessageList({
                         ))}
                       </div>
                     )}
+                  </div>
+                ) : editingIndex === i ? (
+                  /* Inline edit — spans full width, no inner bubble constraints */
+                  <div className="w-full">
+                    <textarea
+                      ref={editTextareaRef}
+                      value={editValue}
+                      onChange={(e) => {
+                        setEditValue(e.target.value);
+                        const el = e.target;
+                        el.style.height = "auto";
+                        el.style.height = `${Math.min(el.scrollHeight, 400)}px`;
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          const trimmed = editValue.trim();
+                          if (trimmed && onEditMessage && msg.id) {
+                            onEditMessage(i, msg.id, trimmed);
+                            setEditingIndex(null);
+                            setEditValue("");
+                          }
+                        } else if (e.key === "Escape") {
+                          setEditingIndex(null);
+                          setEditValue("");
+                        }
+                      }}
+                      className="border-input bg-background text-foreground focus:ring-ring/50 min-h-[80px] w-full resize-none rounded-lg border px-5 py-4 text-sm leading-relaxed focus:ring-2 focus:outline-none"
+                      autoFocus
+                    />
+                    <div className="mt-3 flex items-center justify-between gap-4">
+                      <span className="text-muted-foreground/70 text-xs">
+                        Enter to submit &middot; Shift + Enter to add a line
+                        &middot; Esc to cancel
+                      </span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          className="border-border hover:bg-accent rounded-md border px-4 py-1.5 text-xs transition-colors"
+                          onClick={() => {
+                            setEditingIndex(null);
+                            setEditValue("");
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
+                          disabled={!editValue.trim()}
+                          onClick={() => {
+                            const trimmed = editValue.trim();
+                            if (trimmed && onEditMessage && msg.id) {
+                              onEditMessage(i, msg.id, trimmed);
+                              setEditingIndex(null);
+                              setEditValue("");
+                            }
+                          }}
+                        >
+                          Save &amp; Submit
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <p className="whitespace-pre-wrap">{msg.content}</p>
@@ -336,6 +412,42 @@ export function MessageList({
 
                 {/* Action icon buttons */}
                 <div className="flex items-center gap-1">
+                  {/* Edit button (user messages only) */}
+                  {onEditMessage &&
+                    !temporary &&
+                    msg.role === "user" &&
+                    msg.id && (
+                      <Tooltip>
+                        <TooltipTrigger
+                          aria-label="Edit message"
+                          className="text-muted-foreground hover:text-foreground inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
+                          onClick={() => {
+                            setEditingIndex(i);
+                            setEditValue(msg.content);
+                            // Focus the textarea after state update
+                            setTimeout(() => {
+                              editTextareaRef.current?.focus();
+                            }, 0);
+                          }}
+                        >
+                          <svg
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                            <path d="m15 5 4 4" />
+                          </svg>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit message</TooltipContent>
+                      </Tooltip>
+                    )}
+
                   {/* Regenerate button (only on last assistant, not streaming) */}
                   {isLastAssistant && onRegenerate && (
                     <Tooltip>

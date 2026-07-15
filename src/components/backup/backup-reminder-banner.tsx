@@ -70,11 +70,9 @@ export function BackupReminderBanner({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Link href="/backup">
-            <Button variant="ghost" size="sm">
-              Open backup guide
-            </Button>
-          </Link>
+          <Button render={<Link href="/backup" />} variant="ghost" size="sm">
+            Open backup guide
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -117,15 +115,14 @@ export function BackupReminderBanner({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Link href="/backup">
-            <Button
-              variant="link"
-              size="sm"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              Backup guide
-            </Button>
-          </Link>
+          <Button
+            render={<Link href="/backup" />}
+            variant="link"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            Backup guide
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -175,11 +172,9 @@ export function BackupReminderBanner({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Link href="/backup">
-            <Button variant="ghost" size="sm">
-              Backup guide
-            </Button>
-          </Link>
+          <Button render={<Link href="/backup" />} variant="ghost" size="sm">
+            Backup guide
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -214,7 +209,7 @@ export function BackupReminderBanner({
         }}
       >
         <DialogContent
-          className="max-h-[90vh] max-w-lg overflow-y-auto"
+          className="max-h-[90vh] max-w-lg overflow-y-auto sm:min-w-[20rem]"
           showCloseButton={false}
         >
           <DialogHeader>
@@ -223,7 +218,7 @@ export function BackupReminderBanner({
               Back up your data
             </DialogTitle>
           </DialogHeader>
-          <DialogDescription className="text-sm">
+          <DialogDescription className="text-sm break-words">
             <span className="mb-3 block">
               It has been <strong>{formatBackupAge(daysSince)}</strong> since
               your last backup.
@@ -241,7 +236,7 @@ export function BackupReminderBanner({
               </span>
             )}
           </DialogDescription>
-          <DialogFooter className="flex-col gap-3">
+          <DialogFooter className="flex-col gap-3 sm:flex-col">
             <Button
               variant="inverted"
               mono
@@ -263,11 +258,14 @@ export function BackupReminderBanner({
                 Snooze 1 day
               </Button>
             )}
-            <Link href="/backup">
-              <Button variant="ghost" size="default" className="w-full">
-                Open the backup guide
-              </Button>
-            </Link>
+            <Button
+              render={<Link href="/backup" />}
+              variant="ghost"
+              size="default"
+              className="w-full"
+            >
+              Open the backup guide
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
