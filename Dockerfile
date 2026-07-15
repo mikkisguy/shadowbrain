@@ -2,7 +2,7 @@ FROM node:24-slim@sha256:c2d5ade763cacfb03fe9cb8e8af5d1be5041ff331921fa26a9b231c
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apt-get update && apt-get install -y python3 make g++ curl gettext-base && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y python3 make g++ curl gettext-base libsqlite3-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
