@@ -20,6 +20,8 @@ import type { ModelOption } from "@/lib/chat/providers";
 interface ChatInputProps {
   onSend: (message: string) => void;
   disabled: boolean;
+  /** Callback when the user clicks the stop button (visible during streaming). */
+  onStop?: () => void;
   provider: string;
   model: string;
   allModels: Record<string, ModelOption[]>;
@@ -218,6 +220,7 @@ function AllowModelSaveIcon({ active }: { active?: boolean }) {
 export function ChatInput({
   onSend,
   disabled,
+  onStop,
   provider,
   model,
   allModels,
@@ -414,34 +417,55 @@ export function ChatInput({
               />
             </div>
 
-            {/* Send button — always at the right end */}
-            <button
-              type="button"
-              className={cn(
-                "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
-                value.trim()
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "bg-muted text-muted-foreground"
-              )}
-              onClick={handleSend}
-              disabled={disabled || !value.trim()}
-              title="Send message"
-              aria-label="Send message"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+            {/* Stop button (visible during streaming) */}
+            {onStop && disabled ? (
+              <button
+                type="button"
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors"
+                onClick={onStop}
+                title="Stop generating"
+                aria-label="Stop generating"
               >
-                <line x1="22" y1="2" x2="11" y2="13" />
-                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
-            </button>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  stroke="none"
+                >
+                  <rect x="4" y="4" width="16" height="16" rx="2" />
+                </svg>
+              </button>
+            ) : (
+              /* Send button — always at the right end */
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                  value.trim()
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "bg-muted text-muted-foreground"
+                )}
+                onClick={handleSend}
+                disabled={disabled || !value.trim()}
+                title="Send message"
+                aria-label="Send message"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       </div>

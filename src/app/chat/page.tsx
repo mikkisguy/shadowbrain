@@ -72,6 +72,8 @@ export default function ChatPage() {
   >({});
 
   const abortRef = useRef<AbortController | null>(null);
+  const stopRequestedRef = useRef(false);
+  const currentStreamIdRef = useRef(0);
   const streamingContentRef = useRef("");
   const modelRef = useRef(model);
   const titlePollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -434,6 +436,12 @@ export default function ChatPage() {
                 title: String(event.title ?? ""),
               };
             } else if (event.type === "done") {
+              // If the user clicked stop, skip the done handler — the
+              // finally block will persist the partial content.
+              if (stopRequestedRef.current) {
+                break;
+              }
+
               const finalContent =
                 streamingContentRef.current ||
                 (event.output as string | undefined) ||
@@ -588,6 +596,32 @@ export default function ChatPage() {
     [activeThreadId, temporary, fetchThreads, model]
   );
 
+  const persistPartialAssistantContent = useCallback(
+    (partialContent: string) => {
+      if (!partialContent) return;
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: partialContent,
+          targetModel: modelRef.current,
+          createdAt: new Date().toISOString(),
+        } as ChatMessage,
+      ]);
+      if (!temporary && activeThreadId) {
+        fetch("/api/chat/messages/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            threadId: activeThreadId,
+            content: partialContent,
+          }),
+        }).catch(() => {});
+      }
+    },
+    [temporary, activeThreadId]
+  );
+
   // ------------------------------------------------------------------
   // Send message
   // ------------------------------------------------------------------
@@ -609,6 +643,7 @@ export default function ChatPage() {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      const streamId = ++currentStreamIdRef.current;
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -642,7 +677,16 @@ export default function ChatPage() {
           setStreaming(false);
         }
       } finally {
+        if (streamId !== currentStreamIdRef.current) return;
+
+        if (stopRequestedRef.current) {
+          persistPartialAssistantContent(streamingContentRef.current);
+          stopRequestedRef.current = false;
+        }
         abortRef.current = null;
+        setStreaming(false);
+        setStreamingContent("");
+        streamingContentRef.current = "";
       }
     },
     [
@@ -654,6 +698,7 @@ export default function ChatPage() {
       readSseStream,
       grounded,
       includePrivateInAi,
+      persistPartialAssistantContent,
     ]
   );
 
@@ -673,6 +718,7 @@ export default function ChatPage() {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    const streamId = ++currentStreamIdRef.current;
     try {
       const res = await fetch("/api/chat/regenerate", {
         method: "POST",
@@ -704,9 +750,26 @@ export default function ChatPage() {
         setRegenerating(false);
       }
     } finally {
+      if (streamId !== currentStreamIdRef.current) return;
+
+      if (stopRequestedRef.current) {
+        persistPartialAssistantContent(streamingContentRef.current);
+        stopRequestedRef.current = false;
+      }
       abortRef.current = null;
+      setStreaming(false);
+      setRegenerating(false);
+      setStreamingContent("");
+      streamingContentRef.current = "";
     }
-  }, [activeThreadId, streaming, readSseStream, provider, model]);
+  }, [
+    activeThreadId,
+    streaming,
+    readSseStream,
+    provider,
+    model,
+    persistPartialAssistantContent,
+  ]);
 
   // ------------------------------------------------------------------
   // Save message content to ShadowBrain (explicit "Save" button)
@@ -772,6 +835,97 @@ export default function ChatPage() {
   );
 
   // ------------------------------------------------------------------
+  // Stop assistant stream
+  // ------------------------------------------------------------------
+  const handleStop = useCallback(() => {
+    stopRequestedRef.current = true;
+    if (abortRef.current) {
+      abortRef.current.abort();
+      // Don't null abortRef here — the finally block in handleSend
+      // will do it. The catch block uses stopRequestedRef to know
+      // this was an intentional stop and should commit the partial.
+    }
+  }, []);
+
+  // ------------------------------------------------------------------
+  // Edit user message (truncate + regenerate)
+  // ------------------------------------------------------------------
+  const handleEditMessage = useCallback(
+    async (messageIndex: number, messageId: string, newContent: string) => {
+      // 0. Abort any in-flight stream (don't null abortRef — the
+      //    existing stream's finally block handles cleanup).
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+
+      // 1. Truncate local messages to this index
+      setMessages((msgs) => {
+        const truncated = msgs.slice(0, messageIndex + 1);
+        truncated[messageIndex] = {
+          ...truncated[messageIndex],
+          content: newContent,
+        };
+        return truncated;
+      });
+
+      // 2. Start streaming
+      setStreaming(true);
+      setStreamingContent("");
+      setStreamError(null);
+      setToolProgress([]);
+      setApprovalState(undefined);
+      streamingContentRef.current = "";
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      const streamId = ++currentStreamIdRef.current;
+      try {
+        const res = await fetch(`/api/chat/messages/${messageId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: newContent,
+            target: { provider, model },
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          setStreaming(false);
+          return;
+        }
+
+        const reader = res.body?.getReader();
+        if (!reader) {
+          setStreaming(false);
+          return;
+        }
+
+        // Re-use readSseStream — set isRegenerate=false so the "done"
+        // handler appends a new assistant message (we already truncated).
+        await readSseStream(reader, false);
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          setStreaming(false);
+        }
+      } finally {
+        if (streamId !== currentStreamIdRef.current) return;
+
+        if (stopRequestedRef.current) {
+          persistPartialAssistantContent(streamingContentRef.current);
+          stopRequestedRef.current = false;
+        }
+        abortRef.current = null;
+        setStreaming(false);
+        setStreamingContent("");
+        streamingContentRef.current = "";
+      }
+    },
+    [provider, model, readSseStream, persistPartialAssistantContent]
+  );
+
+  // ------------------------------------------------------------------
   // Is there a temporary chat with messages to show "Save chat"?
   // ------------------------------------------------------------------
   const showSaveChat = temporary && messages.length > 0 && !activeThreadId;
@@ -811,10 +965,13 @@ export default function ChatPage() {
           onSaveContent={handleSaveContent}
           savedItems={savedItems}
           onBranch={activeThreadId ? handleBranch : undefined}
+          onEditMessage={handleEditMessage}
+          temporary={temporary}
         />
         <ChatInput
           onSend={handleSend}
           disabled={streaming}
+          onStop={handleStop}
           provider={provider}
           model={model}
           allModels={allModels}
