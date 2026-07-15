@@ -16,6 +16,7 @@ COPY . .
 
 # Build sqlite-vec extension
 RUN echo "Building sqlite-vec extension..." && \
+    mkdir -p /app/dist/extensions && \
     curl -sL "https://github.com/asg017/sqlite-vec/archive/refs/tags/v0.1.1.tar.gz" | tar xz -C /tmp && \
     cd /tmp/sqlite-vec-* && \
     VERSION=$(cat VERSION) && \
