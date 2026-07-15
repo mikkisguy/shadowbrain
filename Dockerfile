@@ -39,6 +39,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/dist/extensions ./dist/extensions
 COPY . .
 
+# Dummy values for build-time env validation (real values provided at runtime)
+ENV SESSION_SECRET=build-time-dummy-value-not-for-production-use
+ENV ADMIN_USERNAME=build
+ENV ADMIN_PASSWORD_HASH=$2b$10$dummy.hash.for.build.time.validation.only
+
 RUN corepack enable pnpm && pnpm build
 
 # Production image, copy all the files and run next
