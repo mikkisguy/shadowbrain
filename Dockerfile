@@ -8,12 +8,6 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN corepack enable pnpm && pnpm install --frozen-lockfile
 
-# Rebuild the source code only when needed
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-
 # Build sqlite-vec extension
 RUN echo "Building sqlite-vec extension..." && \
     mkdir -p /app/dist/extensions && \
@@ -37,6 +31,13 @@ RUN echo "Building sqlite-vec extension..." && \
         -o /app/dist/extensions/vec0.so sqlite-vec.c -lm && \
     echo "✓ Extension built: /app/dist/extensions/vec0.so" && \
     rm -rf /tmp/sqlite-vec-*
+
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/dist/extensions ./dist/extensions
+COPY . .
 
 RUN corepack enable pnpm && pnpm build
 
