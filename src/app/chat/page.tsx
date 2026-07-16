@@ -44,12 +44,15 @@ function parseToolCalls(
   }
 }
 
+const STORAGE_KEY_ACTIVE_THREAD = "shadowbrain:active-thread-id";
+
 export default function ChatPage() {
   // ------------------------------------------------------------------
   // State
   // ------------------------------------------------------------------
   const [threads, setThreads] = useState<ThreadInfo[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streamingContent, setStreamingContent] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -158,6 +161,12 @@ export default function ChatPage() {
     }
   }, []);
 
+  // Mark mounted (for localStorage guards)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount flag
+    setMounted(true);
+  }, []);
+
   // Fetch threads on mount with cleanup
   useEffect(() => {
     const controller = new AbortController();
@@ -165,6 +174,19 @@ export default function ChatPage() {
     fetchThreads(controller.signal);
     return () => controller.abort();
   }, [fetchThreads]);
+  // Persist active thread ID
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      if (activeThreadId) {
+        localStorage.setItem(STORAGE_KEY_ACTIVE_THREAD, activeThreadId);
+      }
+    } catch {
+      // ignore
+    }
+  }, [activeThreadId, mounted]);
+
+  // Fetch available models on mount
   useEffect(() => {
     fetch("/api/chat/models")
       .then((res) => res.json())
@@ -261,6 +283,25 @@ export default function ChatPage() {
   }, []);
 
   // ------------------------------------------------------------------
+  // Restore saved active thread on first thread load
+  // ------------------------------------------------------------------
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || threads.length === 0) return;
+    restoredRef.current = true;
+    let savedId: string | null = null;
+    try {
+      savedId = localStorage.getItem(STORAGE_KEY_ACTIVE_THREAD);
+    } catch {
+      // ignore
+    }
+    if (savedId && threads.some((t) => t.id === savedId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mount restore
+      handleSelectThread(savedId);
+    }
+  }, [threads, handleSelectThread]);
+
+  // ------------------------------------------------------------------
   // New chat
   // ------------------------------------------------------------------
   const handleNewChat = useCallback(() => {
@@ -277,6 +318,11 @@ export default function ChatPage() {
     setIncludePrivateInAi(false);
     setAllowModelSave(false);
     setSavedItems({});
+    try {
+      localStorage.removeItem(STORAGE_KEY_ACTIVE_THREAD);
+    } catch {
+      // ignore
+    }
   }, []);
 
   // ------------------------------------------------------------------
@@ -289,6 +335,11 @@ export default function ChatPage() {
         if (activeThreadId === id) {
           setActiveThreadId(null);
           setMessages([]);
+          try {
+            localStorage.removeItem(STORAGE_KEY_ACTIVE_THREAD);
+          } catch {
+            // ignore
+          }
         }
         fetchThreads();
       } catch {
