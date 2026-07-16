@@ -281,12 +281,12 @@ export function ChatInput({
     );
 
   return (
-    <div className="border-border bg-background border-t px-4 py-3">
+    <div className="border-border bg-background border-t px-2 py-2 md:px-4 md:py-3">
       <div className="mx-auto max-w-3xl">
         {/* Single unified composer panel */}
         <div className="border-border bg-card focus-within:ring-ring/50 rounded-xl border focus-within:ring-2">
           {/* Textarea at top */}
-          <div className="px-3 pt-3">
+          <div className="px-2 pt-2 md:px-3 md:pt-3">
             <Textarea
               ref={textareaRef}
               value={value}
@@ -303,7 +303,7 @@ export function ChatInput({
           </div>
 
           {/* Controls row at bottom */}
-          <div className="flex items-center gap-2 px-3 pt-2 pb-2">
+          <div className="flex flex-wrap items-center gap-1.5 px-2 pt-2 pb-2 md:gap-2 md:px-3">
             {/* Unified model selector (provider + model in one dropdown) */}
             <ModelSelector
               provider={provider}

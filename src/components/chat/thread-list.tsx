@@ -27,6 +27,7 @@ interface ThreadListProps {
   onNewChat: () => void;
   onDeleteThread: (id: string) => void;
   onRenameThread: (id: string, title: string) => void;
+  className?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -389,6 +390,7 @@ export function ThreadList({
   onNewChat,
   onDeleteThread,
   onRenameThread,
+  className,
 }: ThreadListProps) {
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -408,7 +410,7 @@ export function ThreadList({
     } catch {
       // localStorage unavailable — ignore
     }
-     
+
     setMounted(true);
   }, []);
 
@@ -476,7 +478,12 @@ export function ThreadList({
   }, [buckets]);
 
   return (
-    <aside className="border-border bg-card flex min-h-0 w-64 shrink-0 flex-col border-r">
+    <aside
+      className={cn(
+        "border-border bg-card flex min-h-0 w-full shrink-0 flex-col border-r md:w-64",
+        className
+      )}
+    >
       {/* New Chat button */}
       <div className="p-3 pb-2">
         <Button
