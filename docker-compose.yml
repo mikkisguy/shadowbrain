@@ -1,12 +1,12 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/mikkisguy/shadowbrain:latest
     container_name: shadowbrain-app
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     environment:
       - NODE_ENV=production
       - PORT=${PORT:-3000}
@@ -28,7 +28,4 @@ services:
     labels:
       - com.centurylinklabs.watchtower.enable=true
     volumes:
-      - shadowbrain_data:/app/data
-
-volumes:
-  shadowbrain_data:
+      - ./shadowbrain_data:/app/data
