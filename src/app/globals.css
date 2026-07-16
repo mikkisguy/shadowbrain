@@ -296,6 +296,18 @@
     background: transparent;
   }
 
+  /* Thread list staggered-entry animation */
+  @keyframes thread-enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   /* Respect the user's motion preference. The spec's 150ms ease-out
    * is the default; users who have asked the OS to reduce motion
    * get instant transitions and no animations. */
