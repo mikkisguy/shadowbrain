@@ -8,6 +8,8 @@ import type {
   ApprovalState,
   HermesApprovalDecision,
 } from "@/lib/chat/types";
+import { Menu } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ChatInput } from "@/components/chat/chat-input";
 import type { ThreadInfo } from "@/components/chat/thread-list";
 import type { ModelOption } from "@/lib/chat/providers";
@@ -74,6 +76,9 @@ export default function ChatPage() {
     Record<number, { itemId: string; title: string }>
   >({});
 
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
   const abortRef = useRef<AbortController | null>(null);
   const stopRequestedRef = useRef(false);
   const currentStreamIdRef = useRef(0);
@@ -113,6 +118,18 @@ export default function ChatPage() {
       window.visualViewport?.removeEventListener("resize", update);
     };
   }, []);
+
+  // Track viewport size for responsive thread-list sidebar
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mql = window.matchMedia("(min-width: 768px)");
+    setIsMobile(!mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(!e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Sync refs with state (post-render, no extra renders)
   useEffect(() => {
@@ -992,15 +1009,62 @@ export default function ChatPage() {
         maxHeight: containerHeight ? `${containerHeight}px` : undefined,
       }}
     >
-      <ThreadList
-        threads={threads}
-        activeThreadId={activeThreadId}
-        onSelectThread={handleSelectThread}
-        onNewChat={handleNewChat}
-        onDeleteThread={handleDeleteThread}
-        onRenameThread={handleRenameThread}
-      />
+      {/* Desktop: inline sidebar */}
+      {!isMobile && (
+        <ThreadList
+          threads={threads}
+          activeThreadId={activeThreadId}
+          onSelectThread={(id) => {
+            handleSelectThread(id);
+            setMobileSidebarOpen(false);
+          }}
+          onNewChat={() => {
+            handleNewChat();
+            setMobileSidebarOpen(false);
+          }}
+          onDeleteThread={handleDeleteThread}
+          onRenameThread={handleRenameThread}
+        />
+      )}
+
       <main className="flex flex-1 flex-col overflow-hidden">
+        {/* Mobile: hamburger + Sheet for thread list */}
+        {isMobile && (
+          <div className="border-border flex shrink-0 items-center gap-2 border-b px-2 py-1.5 md:hidden">
+            <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+              <SheetTrigger
+                className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+                aria-label="Open threads"
+              >
+                <Menu className="h-4 w-4" />
+              </SheetTrigger>
+              <SheetContent side="left" className="p-0" showCloseButton={false}>
+                <ThreadList
+                  className="h-full border-0"
+                  threads={threads}
+                  activeThreadId={activeThreadId}
+                  onSelectThread={(id) => {
+                    handleSelectThread(id);
+                    setMobileSidebarOpen(false);
+                  }}
+                  onNewChat={() => {
+                    handleNewChat();
+                    setMobileSidebarOpen(false);
+                  }}
+                  onDeleteThread={handleDeleteThread}
+                  onRenameThread={handleRenameThread}
+                />
+              </SheetContent>
+            </Sheet>
+            <span className="text-foreground text-sm font-medium">
+              {activeThreadId
+                ? (threads.find((t) => t.id === activeThreadId)?.title ??
+                  "Chat")
+                : "New Chat"}
+            </span>
+          </div>
+        )}
+
         <MessageList
           messages={messages}
           streaming={streaming}

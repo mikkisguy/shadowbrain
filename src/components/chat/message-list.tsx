@@ -260,7 +260,7 @@ export function MessageList({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6">
+    <div className="flex-1 overflow-y-auto px-4 py-4 md:py-6">
       {/* Stream error banner */}
       {streamError && (
         <div className="border-destructive/50 bg-destructive/10 text-destructive mx-auto mb-4 max-w-3xl rounded-lg border px-4 py-2 text-sm">
