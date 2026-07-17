@@ -78,6 +78,9 @@ export default function ChatPage() {
 
   const [isMobile, setIsMobile] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [highlightMessageId, setHighlightMessageId] = useState<string | null>(
+    null
+  );
 
   const abortRef = useRef<AbortController | null>(null);
   const stopRequestedRef = useRef(false);
@@ -298,6 +301,17 @@ export default function ChatPage() {
       // silent
     }
   }, []);
+
+  // ------------------------------------------------------------------
+  // Select search result — navigate to thread and highlight message
+  // ------------------------------------------------------------------
+  const handleSelectSearchResult = useCallback(
+    async (threadId: string, messageId: string) => {
+      await handleSelectThread(threadId);
+      setHighlightMessageId(messageId);
+    },
+    [handleSelectThread]
+  );
 
   // ------------------------------------------------------------------
   // Restore saved active thread on first thread load
@@ -1024,6 +1038,7 @@ export default function ChatPage() {
           }}
           onDeleteThread={handleDeleteThread}
           onRenameThread={handleRenameThread}
+          onSelectSearchResult={handleSelectSearchResult}
         />
       )}
 
@@ -1053,6 +1068,7 @@ export default function ChatPage() {
                   }}
                   onDeleteThread={handleDeleteThread}
                   onRenameThread={handleRenameThread}
+                  onSelectSearchResult={handleSelectSearchResult}
                 />
               </SheetContent>
             </Sheet>
@@ -1082,6 +1098,7 @@ export default function ChatPage() {
           onBranch={activeThreadId ? handleBranch : undefined}
           onEditMessage={handleEditMessage}
           temporary={temporary}
+          highlightMessageId={highlightMessageId}
         />
         <ChatInput
           onSend={handleSend}
