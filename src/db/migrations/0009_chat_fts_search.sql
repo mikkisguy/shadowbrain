@@ -19,8 +19,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_chat_messages_fts_delete
   AFTER DELETE ON chat_messages
 BEGIN
-  INSERT INTO chat_messages_search (chat_messages_search, rowid, content)
-  VALUES ('delete', old.rowid, old.content);
+  DELETE FROM chat_messages_search WHERE rowid = old.rowid;
 END;
 
 -- Seed FTS index with existing chat_messages (triggers only fire on new changes).
@@ -32,8 +31,7 @@ CREATE TRIGGER IF NOT EXISTS trg_chat_messages_fts_update
   AFTER UPDATE ON chat_messages
 WHEN old.content IS NOT new.content
 BEGIN
-  INSERT INTO chat_messages_search (chat_messages_search, rowid, content)
-  VALUES ('delete', old.rowid, old.content);
+  DELETE FROM chat_messages_search WHERE rowid = old.rowid;
   INSERT INTO chat_messages_search (rowid, content)
   VALUES (new.rowid, new.content);
 END;
