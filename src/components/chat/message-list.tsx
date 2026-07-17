@@ -70,6 +70,8 @@ interface MessageListProps {
   ) => void;
   /** When true, editing is disabled (messages aren't persisted to DB). */
   temporary?: boolean;
+  /** When set, scroll to the message with this ID and highlight it briefly. */
+  highlightMessageId?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +215,7 @@ export function MessageList({
   onBranch,
   onEditMessage,
   temporary,
+  highlightMessageId,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [hoveredTimestamp, setHoveredTimestamp] = useState<string | null>(null);
@@ -227,6 +230,22 @@ export function MessageList({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingContent]);
+
+  // Scroll to and highlight a message when highlightMessageId changes
+  useEffect(() => {
+    if (!highlightMessageId) return;
+    const el = document.querySelector(
+      `[data-message-id="${CSS.escape(highlightMessageId)}"]`
+    );
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("highlight-message");
+      const timer = setTimeout(() => {
+        el.classList.remove("highlight-message");
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightMessageId]);
 
   if (messages.length === 0 && !streaming) {
     return (
@@ -261,6 +280,15 @@ export function MessageList({
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4 md:py-6">
+      <style>{`
+        .highlight-message {
+          animation: message-highlight 2.5s ease-out;
+        }
+        @keyframes message-highlight {
+          0% { background-color: rgba(245, 158, 11, 0.15); }
+          100% { background-color: transparent; }
+        }
+      `}</style>
       {/* Stream error banner */}
       {streamError && (
         <div className="border-destructive/50 bg-destructive/10 text-destructive mx-auto mb-4 max-w-3xl rounded-lg border px-4 py-2 text-sm">
@@ -277,6 +305,7 @@ export function MessageList({
           return (
             <div
               key={msg.id ?? i}
+              data-message-id={msg.id ?? undefined}
               className={cn(
                 "flex flex-col",
                 msg.role === "user" ? "items-end" : "items-start"

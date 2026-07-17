@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { renderSnippet } from "@/components/command-palette/snippet";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,6 +21,18 @@ export interface ThreadInfo {
   updated_at: string;
 }
 
+interface SearchResult {
+  threadId: string;
+  threadTitle: string;
+  targetProvider: string;
+  targetModel: string;
+  updatedAt: string;
+  messageId: string;
+  messageRole: string;
+  createdAt: string;
+  snippet: string;
+}
+
 interface ThreadListProps {
   threads: ThreadInfo[];
   activeThreadId: string | null;
@@ -27,6 +40,7 @@ interface ThreadListProps {
   onNewChat: () => void;
   onDeleteThread: (id: string) => void;
   onRenameThread: (id: string, title: string) => void;
+  onSelectSearchResult?: (threadId: string, messageId: string) => void;
   className?: string;
 }
 
@@ -200,6 +214,27 @@ function DeleteIcon() {
       <path d="M3 6h18" />
       <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
       <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
     </svg>
   );
 }
@@ -390,6 +425,7 @@ export function ThreadList({
   onNewChat,
   onDeleteThread,
   onRenameThread,
+  onSelectSearchResult,
   className,
 }: ThreadListProps) {
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
@@ -398,6 +434,10 @@ export function ThreadList({
   const [editTitle, setEditTitle] = useState("");
   const [mounted, setMounted] = useState(false);
   const originalTitleRef = useRef("");
+  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(
+    null
+  );
+  const [searchLoading, setSearchLoading] = useState(false);
 
   // Restore saved filter tab on mount
   useEffect(() => {
@@ -423,6 +463,36 @@ export function ThreadList({
       // ignore
     }
   }, [filterTab, mounted]);
+
+  // Debounced search API call
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear search results
+      setSearchResults(null);
+      setSearchLoading(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await fetch(`/api/chat/search?q=${encodeURIComponent(q)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data.results as SearchResult[]);
+        } else {
+          setSearchResults([]);
+        }
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Filter threads by tab + search
   const filteredThreads = useMemo(() => {
@@ -510,7 +580,42 @@ export function ThreadList({
         id="thread-list-panel"
         aria-labelledby={`tab-${filterTab}`}
       >
-        {filteredThreads.length === 0 ? (
+        {searchQuery.trim() ? (
+          searchLoading && searchResults === null ? (
+            <div className="flex items-center justify-center py-10">
+              <div className="text-muted-foreground animate-pulse text-xs">
+                Searching...
+              </div>
+            </div>
+          ) : searchResults && searchResults.length > 0 ? (
+            <ul className="space-y-0.5 p-1">
+              {searchResults.map((result) => (
+                <li key={`${result.threadId}-${result.messageId}`}>
+                  <button
+                    type="button"
+                    className="group hover:bg-accent/40 relative mx-2 flex w-[calc(100%-16px)] cursor-pointer flex-col items-start gap-0.5 rounded-md py-2 pr-2 pl-1.5 text-left transition-all duration-150"
+                    onClick={() => {
+                      if (onSelectSearchResult) {
+                        onSelectSearchResult(result.threadId, result.messageId);
+                      } else {
+                        onSelectThread(result.threadId);
+                      }
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 truncate pl-1.5 text-sm font-medium">
+                      {result.threadTitle}
+                    </span>
+                    <span className="text-muted-foreground line-clamp-2 pl-1.5 text-xs [&_mark]:rounded [&_mark]:bg-amber-500/20 [&_mark]:px-0.5 [&_mark]:text-amber-100">
+                      {renderSnippet(result.snippet)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState isSearching={true} activeTab={filterTab} />
+          )
+        ) : filteredThreads.length === 0 ? (
           <EmptyState isSearching={isSearching} activeTab={filterTab} />
         ) : (
           <ul className="space-y-0.5 p-1">
@@ -610,6 +715,33 @@ export function ThreadList({
                           }}
                         >
                           <EditIcon />
+                        </span>
+                        <span
+                          className="text-muted-foreground hover:text-foreground hover:bg-accent-foreground/10 inline-flex h-6 w-6 items-center justify-center rounded transition-colors"
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Export as Markdown"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const url = `/api/chat/threads/${thread.id}/export?format=markdown`;
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = "";
+                            a.click();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const url = `/api/chat/threads/${thread.id}/export?format=markdown`;
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = "";
+                              a.click();
+                            }
+                          }}
+                        >
+                          <DownloadIcon />
                         </span>
                         <span
                           className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 inline-flex h-6 w-6 items-center justify-center rounded transition-colors"
