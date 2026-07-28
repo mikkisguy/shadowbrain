@@ -237,7 +237,8 @@ relevant:
 - **Patch the README badge too.** `package.json` and the shields.io version
   badge in `README.md` (the `[![Version](...)]` line in the header) must be
   bumped in lockstep — a version bump that leaves the badge stale is a
-  half-applied change.
+  half-applied change. The in-app version string (`src/lib/version.ts`)
+  reads `package.json` directly, so it does not need a separate bump.
 
 When in doubt, bump minor — under `0.x` it is cheap to add more, and the
 version is meant to be a rough signal of how much capability has landed, not
@@ -265,8 +266,8 @@ with _both_ flags set requires _both_ opt-ins to be returned.
 The opt-ins are gated behind authentication at the route layer
 (`requireAuthenticated(request)` from `src/lib/auth/guard.ts`): the
 admin can opt in via `?include_hidden=1` / `?include_private=1` on
-`GET /api/items`, `GET /api/items/[id]`, `GET /api/search`,
-`PATCH /api/items/[id]`, and `DELETE /api/items/[id]`. The body of
+`GET /api/items`, `GET /api/items/[id]`, `GET /api/items/[id]/related`,
+`GET /api/search`, `PATCH /api/items/[id]`, and `DELETE /api/items/[id]`. The body of
 `POST /api/items` and `PATCH /api/items/[id]` accepts an
 `is_hidden` / `is_private` field (admin-only). An unauthenticated
 request always sees the strict default and the route returns 401 —

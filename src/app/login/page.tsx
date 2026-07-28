@@ -29,6 +29,7 @@ import { LoginForm } from "./login-form";
 import { getEnv } from "@/lib/env";
 import { isSessionCookieValid } from "@/lib/auth/session";
 import { CelestialBackdrop } from "@/components/visual/celestial-backdrop";
+import { APP_VERSION } from "@/lib/version";
 
 export const metadata = {
   title: "Sign in — ShadowBrain",
@@ -108,7 +109,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <LoginForm from={safeFrom} />
 
         <footer className="text-muted-foreground border-border flex flex-col gap-1 border-t pt-4 text-center font-serif text-xs">
-          <p>ShadowBrain v{process.env.npm_package_version}</p>
+          <p>ShadowBrain v{APP_VERSION}</p>
         </footer>
       </div>
     </main>

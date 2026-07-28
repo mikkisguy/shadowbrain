@@ -1,6 +1,8 @@
 import Database from "better-sqlite3";
 import { contentLinks } from "./content-links";
 import { contentTags } from "./content-tags";
+import type { LinkedItemRef } from "./content-links";
+
 import {
   buildVisibilityClauses,
   buildListWhereClause,
@@ -47,6 +49,30 @@ export interface VisibilityOptions {
   /** When false (default), rows with `is_private = 1` are excluded from
    *  the result. */
   includePrivate?: boolean;
+}
+
+/**
+ * A single item in the related-items board response.
+ * Enriched with parsed metadata, tags, link type, and optional
+ * parent hint for nested items (e.g. task → event).
+ */
+export interface RelatedItem {
+  id: string;
+  type: string;
+  title: string | null;
+  /** Parsed from `metadata.status`, e.g. "todo" | "in_progress" | "done". */
+  status: string | null;
+  /** Parsed from metadata date fields — each key is present but nullable. */
+  dates: {
+    start_date: string | null;
+    end_date: string | null;
+    due_date: string | null;
+  };
+  tags: string[];
+  /** The link type connecting this item to the project (or `happened_during` for nested-only tasks). */
+  link_type: string;
+  /** For nested tasks, the encapsulating event. `null` for direct related items. */
+  parent: { id: string; title: string | null; type: string } | null;
 }
 
 export const contentItems = {
@@ -329,6 +355,237 @@ export const contentItems = {
     const inbound = contentLinks.findInboundWithItems(db, id, options);
 
     return { item, tags, links: { outbound, inbound } };
+  },
+
+  /**
+   * Load a project and all its related items for the project-board view
+   * (issue #196). Returns `null` when the project does not exist or is
+   * filtered out by visibility (404). Otherwise returns the project row
+   * and a flat list of related items enriched with metadata, tags,
+   * link type, and parent hints.
+   *
+   * Directly-linked items of types `event`, `task`, `bookmark`, `note`,
+   * and `person` are included. For each event among the direct items,
+   * inbound `happened_during` sources of type `task` are resolved and
+   * added as **nested** items with a `parent` hint pointing to the
+   * encapsulating event. Tasks that appear both as a direct link to the
+   * project and as a nested item under an event are deduplicated in
+   * favour of the nested entry (event parent hint wins).
+   *
+   * Tags are fetched in one batched query (no N+1 per item). Metadata
+   * (`status`, `start_date`, `end_date`, `due_date`) is parsed from the
+   * stored `metadata` JSON column.
+   */
+  findRelatedForProject: (
+    db: Database.Database,
+    projectId: string,
+    options: VisibilityOptions = {}
+  ): { project: ContentItem; items: RelatedItem[] } | null => {
+    // 1. Load project with visibility
+    const project = contentItems.findById(db, projectId, options);
+    if (!project) return null;
+
+    // 2. Load inbound + outbound enriched links (visibility-filtered)
+    const outbound = contentLinks.findOutboundWithItems(db, projectId, options);
+    const inbound = contentLinks.findInboundWithItems(db, projectId, options);
+
+    // 3. Collect direct related items — first-encountered link_type wins
+    const linkEntries = new Map<
+      string,
+      { ref: LinkedItemRef; link_type: string }
+    >();
+    for (const link of inbound) {
+      if (!linkEntries.has(link.source.id)) {
+        linkEntries.set(link.source.id, {
+          ref: link.source,
+          link_type: link.link_type,
+        });
+      }
+    }
+    for (const link of outbound) {
+      if (!linkEntries.has(link.target.id)) {
+        linkEntries.set(link.target.id, {
+          ref: link.target,
+          link_type: link.link_type,
+        });
+      }
+    }
+
+    const RELATED_TYPES = new Set([
+      "event",
+      "task",
+      "bookmark",
+      "note",
+      "person",
+    ]);
+
+    const directItems = Array.from(linkEntries.entries()).filter(([, e]) =>
+      RELATED_TYPES.has(e.ref.type)
+    );
+
+    // 4. Collect event IDs for nested-task resolution
+    const eventIds = directItems
+      .filter(([, e]) => e.ref.type === "event")
+      .map(([id]) => id);
+
+    // 5. Batch-query nested tasks under those events (no N+1)
+    const nestedTaskMap = new Map<
+      string,
+      { taskTitle: string | null; eventId: string; eventTitle: string | null }
+    >();
+    if (eventIds.length > 0) {
+      const vis = buildVisibilityClauses(options, "ci");
+      const placeholders = eventIds.map(() => "?").join(", ");
+      const stmt = db.prepare(`
+        SELECT
+          ci.id AS task_id,
+          ci.title AS task_title,
+          'happened_during' AS link_type,
+          cl.target_id AS event_id
+        FROM content_links cl
+        JOIN content_items ci ON ci.id = cl.source_id
+        WHERE cl.target_id IN (${placeholders})
+          AND cl.link_type = 'happened_during'
+          AND ci.type = 'task'
+          AND ${vis.clauses.join(" AND ")}
+        ORDER BY cl.created_at ASC, cl.id ASC
+      `);
+      const rows = stmt.all(...eventIds, ...vis.params) as Array<{
+        task_id: string;
+        task_title: string | null;
+        event_id: string;
+      }>;
+      // Build a lookup for event titles from direct items
+      const eventTitleMap = new Map<string, string | null>();
+      for (const [eid, entry] of directItems) {
+        if (entry.ref.type === "event") {
+          eventTitleMap.set(eid, entry.ref.title);
+        }
+      }
+      for (const row of rows) {
+        // If a task connects to multiple events, keep the first encounter
+        if (!nestedTaskMap.has(row.task_id)) {
+          nestedTaskMap.set(row.task_id, {
+            taskTitle: row.task_title,
+            eventId: row.event_id,
+            eventTitle: eventTitleMap.get(row.event_id) ?? null,
+          });
+        }
+      }
+    }
+
+    // 6. Collect all item IDs for batch fetch
+    const allIds = new Set<string>();
+    for (const [id] of directItems) allIds.add(id);
+    for (const taskId of nestedTaskMap.keys()) allIds.add(taskId);
+
+    // 7. Batch-fetch full rows with same visibility
+    const fullRows = new Map<string, ContentItem>();
+    if (allIds.size > 0) {
+      const vis = buildVisibilityClauses(options);
+      const ids = Array.from(allIds);
+      const placeholders = ids.map(() => "?").join(", ");
+      const stmt = db.prepare(`
+        SELECT * FROM content_items
+        WHERE id IN (${placeholders})
+          AND ${vis.clauses.join(" AND ")}
+      `);
+      const rows = stmt.all(...ids, ...vis.params) as ContentItem[];
+      for (const row of rows) fullRows.set(row.id, row);
+    }
+
+    // 8. Batch-fetch tag names
+    const allIdsArr = Array.from(allIds);
+    const tagsMap = contentTags.findNamesByContentIds(db, allIdsArr);
+
+    // 9. Metadata parser
+    function parseMeta(metadata: string | null): {
+      status: string | null;
+      dates: {
+        start_date: string | null;
+        end_date: string | null;
+        due_date: string | null;
+      };
+    } {
+      const dates = {
+        start_date: null as string | null,
+        end_date: null as string | null,
+        due_date: null as string | null,
+      };
+      if (!metadata) return { status: null, dates };
+      try {
+        const parsed = JSON.parse(metadata);
+        return {
+          status: typeof parsed.status === "string" ? parsed.status : null,
+          dates: {
+            start_date:
+              typeof parsed.start_date === "string" ? parsed.start_date : null,
+            end_date:
+              typeof parsed.end_date === "string" ? parsed.end_date : null,
+            due_date:
+              typeof parsed.due_date === "string" ? parsed.due_date : null,
+          },
+        };
+      } catch {
+        return { status: null, dates };
+      }
+    }
+
+    // 10. Assemble items list — deduped with event parent preference
+    const items: RelatedItem[] = [];
+    const seenIds = new Set<string>();
+
+    function addItem(
+      id: string,
+      type: string,
+      title: string | null,
+      linkType: string,
+      parent: { id: string; title: string | null; type: string } | null
+    ) {
+      if (seenIds.has(id)) return;
+      seenIds.add(id);
+      const row = fullRows.get(id);
+      const { status, dates } = row
+        ? parseMeta(row.metadata)
+        : {
+            status: null,
+            dates: { start_date: null, end_date: null, due_date: null },
+          };
+      items.push({
+        id,
+        type,
+        title,
+        status,
+        dates,
+        tags: tagsMap[id] ?? [],
+        link_type: linkType,
+        parent,
+      });
+    }
+
+    // Add direct items except tasks (tasks may be replaced by nested entries)
+    for (const [id, entry] of directItems) {
+      if (entry.ref.type === "task") continue;
+      addItem(id, entry.ref.type, entry.ref.title, entry.link_type, null);
+    }
+
+    // Add nested tasks (with event parent hint)
+    for (const [taskId, nested] of nestedTaskMap) {
+      addItem(taskId, "task", nested.taskTitle, "happened_during", {
+        id: nested.eventId,
+        title: nested.eventTitle,
+        type: "event",
+      });
+    }
+
+    // Add orphan tasks (direct tasks not covered by nested)
+    for (const [id, entry] of directItems) {
+      if (entry.ref.type === "task" && !seenIds.has(id)) {
+        addItem(id, "task", entry.ref.title, entry.link_type, null);
+      }
+    }
+
+    return { project, items };
   },
 
   delete: (db: Database.Database, id: string) => {

@@ -20,7 +20,6 @@ services:
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - SESSION_SECRET=${SESSION_SECRET}
       - SESSION_MAX_AGE=${SESSION_MAX_AGE:-86400000}
-
       - ADMIN_USERNAME=${ADMIN_USERNAME}
       - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
     env_file:
@@ -28,4 +27,7 @@ services:
     labels:
       - com.centurylinklabs.watchtower.enable=true
     volumes:
-      - ./shadowbrain_data:/app/data
+      - shadowbrain_data:/app/data
+
+volumes:
+  shadowbrain_data:

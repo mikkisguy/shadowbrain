@@ -206,6 +206,66 @@ Cookie: sb_session=...
 | 401    | UNAUTHORIZED | Not authenticated                       |
 | 404    | NOT_FOUND    | Item not found (or visibility excluded) |
 
+## GET /api/items/{id}/related
+
+Get related items for a project board view.
+
+### Query Parameters
+
+| Parameter         | Type   | Description              |
+| ----------------- | ------ | ------------------------ |
+| `include_hidden`  | string | `"1"` to include hidden  |
+| `include_private` | string | `"1"` to include private |
+
+### Request
+
+```http
+GET /api/items/project-uuid/related?include_hidden=1
+Cookie: sb_session=...
+```
+
+### Response (200)
+
+```json
+{
+  "project": {/* full ContentItem row */},
+  "items": [
+    {
+      "id": "event-uuid",
+      "type": "event",
+      "title": "Sprint 1",
+      "status": "done",
+      "dates": { "start_date": null, "end_date": null, "due_date": null },
+      "tags": ["sprint"],
+      "link_type": "happened_during",
+      "parent": null
+    },
+    {
+      "id": "task-uuid",
+      "type": "task",
+      "title": "Implement login",
+      "status": "todo",
+      "dates": {
+        "start_date": null,
+        "end_date": null,
+        "due_date": "2026-08-01T00:00:00.000Z"
+      },
+      "tags": ["auth"],
+      "link_type": "happened_during",
+      "parent": { "id": "event-uuid", "title": "Sprint 1", "type": "event" }
+    }
+  ]
+}
+```
+
+### Errors
+
+| Status | Code         | Message                                       |
+| ------ | ------------ | --------------------------------------------- |
+| 400    | BAD_REQUEST  | Related items are only available for projects |
+| 401    | UNAUTHORIZED | Not authenticated                             |
+| 404    | NOT_FOUND    | Item not found (or visibility excluded)       |
+
 ---
 
 ## PATCH /api/items/{id}

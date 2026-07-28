@@ -8,17 +8,17 @@ directions.
 
 ## Link Types
 
-| Type              | Meaning                      | Example             |
-| ----------------- | ---------------------------- | ------------------- |
-| `references`      | General connection           | Note → related note |
-| `contradicts`     | These disagree               | Note A → Note B     |
-| `questions`       | This questions that          | Note → Question     |
-| `answers`         | This answers that            | Note → Question     |
-| `depends-on`      | Must do before               | Task → Task         |
-| `related-to`      | General relation             | Note → Note         |
-| `involves`        | Person/project participation | Project → Person    |
-| `bookmarked_for`  | Saved for a project          | Bookmark → Project  |
-| `happened_during` | Event context                | Event → Project     |
+| Type              | Meaning                      | Example                                       |
+| ----------------- | ---------------------------- | --------------------------------------------- |
+| `references`      | General connection           | Note → related note                           |
+| `contradicts`     | These disagree               | Note A → Note B                               |
+| `questions`       | This questions that          | Note → Question                               |
+| `answers`         | This answers that            | Note → Question                               |
+| `depends-on`      | Must do before               | Task → Task                                   |
+| `related-to`      | General relation             | Note → Note                                   |
+| `involves`        | Person/project participation | Project → Person                              |
+| `bookmarked_for`  | Saved for a project          | Bookmark → Project                            |
+| `happened_during` | Event/task temporal context  | Event → Project, Task → Event, Task → Project |
 
 ---
 
