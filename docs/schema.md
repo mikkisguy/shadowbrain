@@ -107,17 +107,36 @@ CREATE INDEX idx_links_type ON content_links(link_type);
 
 ### Link Types
 
-| Type              | Meaning                      | Example                         |
-| ----------------- | ---------------------------- | ------------------------------- |
-| `reference`       | General connection           | Note → related note             |
-| `inspired_by`     | This came from that          | Note → bookmark that sparked it |
-| `contradicts`     | These disagree               | Note A → Note B                 |
-| `builds_upon`     | Extends or refines           | Note → earlier note             |
-| `involves`        | Person/project participation | Project → Person                |
-| `bookmarked_for`  | Saved for a project          | Bookmark → Project              |
-| `answers`         | Question resolved            | Note → Question                 |
-| `happened_during` | Event context                | Event → Project                 |
-| `is_prerequisite` | Must do before               | Task → Task                     |
+Closed vocabulary matching `POST /api/links` (`LINK_TYPES`):
+
+| Type              | Meaning                      | Example                                       |
+| ----------------- | ---------------------------- | --------------------------------------------- |
+| `references`      | General connection           | Note → related note                           |
+| `contradicts`     | These disagree               | Note A → Note B                               |
+| `questions`       | This questions that          | Note → Question                               |
+| `answers`         | This answers that            | Note → Question                               |
+| `depends-on`      | Must do before               | Task → Task                                   |
+| `related-to`      | General relation             | Note → Note                                   |
+| `involves`        | Person/project participation | Project → Person                              |
+| `bookmarked_for`  | Saved for a project          | Bookmark → Project                            |
+| `happened_during` | Event/task temporal context  | Event → Project, Task → Event, Task → Project |
+
+### Link Hierarchy
+
+Link types encode structural relationships between content types:
+
+| Edge                    | `link_type`       | Convention                                    |
+| ----------------------- | ----------------- | --------------------------------------------- |
+| Event → Project         | `happened_during` | A time-boxed event belongs to a project       |
+| Task → Event            | `happened_during` | A task was worked on during an event (sprint) |
+| Task → Project (orphan) | `happened_during` | A task tied directly to a project, no event   |
+| Task → Task             | `depends-on`      | Ordering: the source blocks the target        |
+
+The `happened_during` type is reused across these edges; no new
+link verbs are introduced for temporal hierarchy. A task linked
+to an event that itself belongs to a project inherits the project
+context through the event. Tasks linked directly to a project
+(with no intervening event) are orphan project tasks.
 
 ---
 

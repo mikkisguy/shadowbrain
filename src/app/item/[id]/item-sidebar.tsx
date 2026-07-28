@@ -15,7 +15,7 @@
  *   and to pass as `source_id` when creating links)
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -64,6 +64,33 @@ const LINK_TYPE_OPTIONS = [
  *  show them as spaced words. Unknown values pass through unchanged. */
 export function formatLinkType(linkType: string): string {
   return linkType.replace(/[-_]+/g, " ").trim();
+}
+
+/**
+ * Pick the default link type based on the current item's type, following
+ * hierarchy conventions (issue #196):
+ * - task / event -> happened_during (targets events/projects)
+ * - else         -> references
+ */
+export function getDefaultLinkType(itemType: string): string {
+  if (itemType === "task" || itemType === "event") return "happened_during";
+  return "references";
+}
+
+/** Link-type options for the create-link form. For task/event items,
+ *  `happened_during` is moved to the front so the convention is the
+ *  first choice; every type remains available. */
+export function getLinkTypeOptions(itemType: string): typeof LINK_TYPE_OPTIONS {
+  if (itemType === "task" || itemType === "event") {
+    const copy = LINK_TYPE_OPTIONS.slice();
+    const idx = copy.findIndex((o) => o.value === "happened_during");
+    if (idx > 0) {
+      const [item] = copy.splice(idx, 1);
+      copy.unshift(item);
+    }
+    return copy;
+  }
+  return LINK_TYPE_OPTIONS;
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────
@@ -168,7 +195,13 @@ function LinkRow({
  * a dropdown, and on selection lets the user pick a link type and
  * confirm creation via POST /api/links.
  */
-function CreateLinkForm({ itemId }: { itemId: string }) {
+function CreateLinkForm({
+  itemId,
+  itemType,
+}: {
+  itemId: string;
+  itemType: string;
+}) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<
@@ -186,10 +219,16 @@ function CreateLinkForm({ itemId }: { itemId: string }) {
     type: string;
     image_path: string | null;
   } | null>(null);
-  const [linkType, setLinkType] = useState("references");
+  const [linkType, setLinkType] = useState(getDefaultLinkType(itemType));
   const [showResults, setShowResults] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Reorder link type options so the suggested type appears first for
+  // task/event items, while keeping all types available.
+  const linkTypeOptions = useMemo(
+    () => getLinkTypeOptions(itemType),
+    [itemType]
+  );
 
   // Debounced search query. When the input is empty or an item is
   // selected we skip the search — the results are cleared synchronously
@@ -276,7 +315,7 @@ function CreateLinkForm({ itemId }: { itemId: string }) {
       setSearchQuery("");
       setSelectedItem(null);
       setSearchResults([]);
-      setLinkType("references");
+      setLinkType(getDefaultLinkType(itemType));
       router.refresh();
     },
     onError: (error: Error) => {
@@ -409,46 +448,53 @@ function CreateLinkForm({ itemId }: { itemId: string }) {
 
       {/* Link type selector + add button */}
       {selectedItem ? (
-        <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <Select
-              value={linkType}
-              onValueChange={(v) => {
-                if (v) setLinkType(v);
-              }}
-            >
-              <SelectTrigger
-                aria-label="Link type"
-                className="h-7 text-xs"
-                data-testid="link-type-select"
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <Select
+                value={linkType}
+                onValueChange={(v) => {
+                  if (v) setLinkType(v);
+                }}
               >
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                {LINK_TYPE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <SelectTrigger
+                  aria-label="Link type"
+                  className="h-7 text-xs"
+                  data-testid="link-type-select"
+                >
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {linkTypeOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="default"
+              onClick={() => createMutation.mutate()}
+              disabled={createMutation.isPending}
+              aria-label="Add link"
+              title="Add link"
+              data-testid="add-link-button"
+            >
+              {createMutation.isPending ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Plus className="size-3" />
+              )}
+            </Button>
           </div>
-          <Button
-            type="button"
-            size="icon-xs"
-            variant="default"
-            onClick={() => createMutation.mutate()}
-            disabled={createMutation.isPending}
-            aria-label="Add link"
-            title="Add link"
-            data-testid="add-link-button"
-          >
-            {createMutation.isPending ? (
-              <Loader2 className="size-3 animate-spin" />
-            ) : (
-              <Plus className="size-3" />
-            )}
-          </Button>
+          {itemType === "task" || itemType === "event" ? (
+            <p className="text-muted-foreground text-[0.6rem] leading-tight">
+              Suggested: happened during (for events/projects)
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -462,6 +508,7 @@ export interface ItemSidebarProps {
   outbound: OutboundLink[];
   inbound: InboundLink[];
   itemId: string;
+  itemType: string;
 }
 
 export function ItemSidebar({
@@ -469,6 +516,7 @@ export function ItemSidebar({
   outbound,
   inbound,
   itemId,
+  itemType,
 }: ItemSidebarProps) {
   const router = useRouter();
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -525,7 +573,7 @@ export function ItemSidebar({
       ) : null}
 
       <Section title="Links">
-        <CreateLinkForm itemId={itemId} />
+        <CreateLinkForm itemId={itemId} itemType={itemType} />
         {outbound.length > 0 ? (
           <ul className="flex flex-col gap-2">
             {outbound.map((link) => (

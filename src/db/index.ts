@@ -14,7 +14,7 @@ export type { DbConfig, CloseDbConfig } from "./client";
 export type { AuditLog, AuditLogCreateInput } from "./repositories/audit-logs";
 export { auditLogs } from "./repositories/audit-logs";
 
-export type { ContentItem } from "./repositories/content-items";
+export type { ContentItem, RelatedItem } from "./repositories/content-items";
 export { contentItems } from "./repositories/content-items";
 
 export type {
