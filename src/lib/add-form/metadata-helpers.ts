@@ -39,6 +39,7 @@ export function metadataToDraftFields(
       fields.goalEndDate = parsed.goal_end_date;
   }
   if (type === "event") {
+    if (typeof parsed.status === "string") fields.status = parsed.status;
     if (typeof parsed.start_date === "string")
       fields.startDate = parsed.start_date;
     if (typeof parsed.end_date === "string") fields.endDate = parsed.end_date;
@@ -47,6 +48,13 @@ export function metadataToDraftFields(
       typeof parsed.duration === "number"
     )
       fields.duration = String(parsed.duration);
+  }
+  if (type === "task") {
+    if (typeof parsed.status === "string") fields.status = parsed.status;
+    if (typeof parsed.due_date === "string") fields.dueDate = parsed.due_date;
+    if (typeof parsed.start_date === "string")
+      fields.startDate = parsed.start_date;
+    if (typeof parsed.end_date === "string") fields.endDate = parsed.end_date;
   }
   if (type === "dream") {
     if (typeof parsed.mood === "string") fields.mood = parsed.mood;
@@ -70,9 +78,21 @@ export function draftToMetadata(draft: Draft): Record<string, unknown> | null {
     if (draft.goalEndDate) meta.goal_end_date = draft.goalEndDate;
   }
   if (draft.type === "event") {
+    if (
+      draft.status.trim() === "todo" ||
+      draft.status.trim() === "in_progress" ||
+      draft.status.trim() === "done"
+    )
+      meta.status = draft.status.trim();
     if (draft.startDate) meta.start_date = draft.startDate;
     if (draft.endDate) meta.end_date = draft.endDate;
     if (draft.duration.trim()) meta.duration = draft.duration;
+  }
+  if (draft.type === "task") {
+    meta.status = draft.status.trim() || "todo";
+    if (draft.dueDate) meta.due_date = draft.dueDate;
+    if (draft.startDate) meta.start_date = draft.startDate;
+    if (draft.endDate) meta.end_date = draft.endDate;
   }
   if (draft.type === "dream") {
     if (draft.mood.trim()) meta.mood = draft.mood;

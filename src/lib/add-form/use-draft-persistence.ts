@@ -68,6 +68,7 @@ function isNonEmptyDraft(d: Draft): boolean {
     d.goalEndDate ||
     d.startDate ||
     d.endDate ||
+    d.dueDate ||
     d.duration.trim() ||
     d.mood.trim()
   );

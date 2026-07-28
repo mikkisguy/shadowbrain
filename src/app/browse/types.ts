@@ -69,7 +69,7 @@ export interface BrowseResponse {
 /** All content type tabs for the Browse page, plus the sentinel "All"
  *  for the un-filtered view. This list covers all content types in the
  *  system: the original four (note, journal, bookmark, question), the
- *  six new rich types (person, project, event, dream, raw_text, image),
+ *  seven new rich types (person, project, event, dream, raw_text, image, task),
  *  and the catch-all "all" tab. */
 export const BROWSE_TYPE_TABS = [
   "all",
@@ -80,6 +80,7 @@ export const BROWSE_TYPE_TABS = [
   "person",
   "project",
   "event",
+  "task",
   "dream",
   "raw_text",
   "image",
@@ -112,6 +113,7 @@ export const TYPE_TAB_VALUE: Record<BrowseTypeTab, string> = {
   person: "person",
   project: "project",
   event: "event",
+  task: "task",
   dream: "dream",
   raw_text: "raw_text",
   image: "image",
@@ -136,6 +138,7 @@ export const TYPE_TAB_META: Record<BrowseTypeTab, TypeTabMeta> = {
   person: { label: "People", dotClass: "bg-type-person" },
   project: { label: "Projects", dotClass: "bg-type-project" },
   event: { label: "Events", dotClass: "bg-type-event" },
+  task: { label: "Tasks", dotClass: "bg-type-task" },
   dream: { label: "Dreams", dotClass: "bg-type-dream" },
   raw_text: { label: "Raw", dotClass: "bg-type-raw" },
   image: { label: "Images", dotClass: "bg-type-image" },

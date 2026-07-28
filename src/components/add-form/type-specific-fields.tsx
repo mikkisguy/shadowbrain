@@ -3,9 +3,8 @@
 /**
  * Shared type-specific field renderer.
  *
- * Renders the metadata fields for bookmark, person, project, event,
- * and dream types. Used by both the quick-add dialog and the /add
- * page so the field layout stays consistent across surfaces.
+ * Renders the metadata fields for bookmark, person, project, event, task,
+ * and dream types so the field layout stays consistent across surfaces.
  *
  * The bookmark preview card is NOT included here — it depends on
  * preview state (loading / error / metadata) that each surface
@@ -17,8 +16,20 @@ import type { KeyboardEvent } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Draft } from "@/lib/add-form/types";
 import { hasTypeSpecificFields } from "@/lib/add-form/types";
+const WORKFLOW_STATUS_OPTIONS = [
+  { value: "todo", label: "To Do" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "done", label: "Done" },
+] as const;
 
 export interface TypeSpecificFieldsProps {
   draft: Draft;
@@ -154,6 +165,24 @@ export function TypeSpecificFields({
 
         {draft.type === "event" && (
           <>
+            <Select
+              value={draft.status || "todo"}
+              onValueChange={(v) => updateField("status", v ?? "todo")}
+            >
+              <SelectTrigger
+                data-testid="add-dialog-event-status"
+                className="h-7 text-xs"
+              >
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {WORKFLOW_STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Input
               data-testid="add-dialog-event-start"
               className="h-7 text-xs"
@@ -176,6 +205,52 @@ export function TypeSpecificFields({
               placeholder="Duration (e.g. 2h, 90m)"
               value={draft.duration}
               onChange={(e) => updateField("duration", e.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+          </>
+        )}
+        {draft.type === "task" && (
+          <>
+            <Select
+              value={draft.status || "todo"}
+              onValueChange={(v) => updateField("status", v ?? "todo")}
+            >
+              <SelectTrigger
+                data-testid="add-dialog-task-status"
+                className="h-7 text-xs"
+              >
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {WORKFLOW_STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              data-testid="add-dialog-task-due"
+              className="h-7 text-xs"
+              type="datetime-local"
+              value={draft.dueDate}
+              onChange={(e) => updateField("dueDate", e.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+            <Input
+              data-testid="add-dialog-task-start"
+              className="h-7 text-xs"
+              type="datetime-local"
+              value={draft.startDate}
+              onChange={(e) => updateField("startDate", e.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+            <Input
+              data-testid="add-dialog-task-end"
+              className="h-7 text-xs"
+              type="datetime-local"
+              value={draft.endDate}
+              onChange={(e) => updateField("endDate", e.target.value)}
               onKeyDown={handleKeyDown}
             />
           </>

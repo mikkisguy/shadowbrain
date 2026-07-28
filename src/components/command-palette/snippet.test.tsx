@@ -83,6 +83,7 @@ describe("typeBadgeClasses", () => {
       "person",
       "event",
       "dream",
+      "task",
       "raw",
     ];
     for (const t of known) {

@@ -103,6 +103,7 @@ view. See the design system spec for the full rule.
 | dream    | `#D946EF` | `--type-dream`    | Dream journal               |
 | raw      | `#7B8290` | `--type-raw`      | Raw entries, quick captures |
 | image    | `#84CC16` | `--type-image`    | Image captures              |
+| task     | `#6366F1` | `--type-task`     | Actionable work items       |
 
 ---
 
@@ -230,6 +231,7 @@ the utilities without a rebuild.
   --color-type-dream: var(--type-dream);
   --color-type-raw: var(--type-raw);
   --color-type-image: var(--type-image);
+  --color-type-task: var(--type-task);
 
   /* shadcn/ui compatibility aliases (see dedicated section above) */
   --color-card: var(--background);
@@ -328,6 +330,7 @@ The `:root` block holds the source-of-truth values. v1 is dark-only; the
   --type-dream: #d946ef;
   --type-raw: #7b8290;
   --type-image: #84cc16;
+  --type-task: #6366f1;
 }
 ```
 

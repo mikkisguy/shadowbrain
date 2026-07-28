@@ -202,12 +202,17 @@ export async function PATCH(
             }) => {
               const now2 = new Date().toISOString();
               const itemId = crypto.randomUUID();
+              const metadata =
+                type === "task"
+                  ? JSON.stringify({ status: "todo" })
+                  : undefined;
               contentItems.create(db, {
                 id: itemId,
                 type,
                 title: title ?? null,
                 content: itemContent,
                 source: "chat",
+                metadata,
                 created_at: now2,
                 updated_at: now2,
               });

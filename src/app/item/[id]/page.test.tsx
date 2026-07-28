@@ -201,6 +201,46 @@ describe("ItemDetailPage metadata rendering (issue #103)", () => {
     expect(screen.getByText("Apr 12, 2026, 11:15 AM")).toBeInTheDocument();
   });
 
+  it("renders task metadata fields", async () => {
+    mockItem(
+      "task",
+      JSON.stringify({
+        status: "in_progress",
+        due_date: "2026-08-01T00:00:00.000Z",
+        start_date: "2026-07-30T09:00:00.000Z",
+      })
+    );
+
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
+
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("In Progress")).toBeInTheDocument();
+    expect(screen.getByText("Due")).toBeInTheDocument();
+    expect(screen.getByText("Aug 1, 2026, 12:00 AM")).toBeInTheDocument();
+    expect(screen.getByText("Start")).toBeInTheDocument();
+    expect(screen.getByText("Jul 30, 2026, 9:00 AM")).toBeInTheDocument();
+  });
+
+  it("shows Status To Do for event without status", async () => {
+    mockItem(
+      "event",
+      JSON.stringify({
+        start_date: "2026-04-12T09:30:00.000Z",
+        end_date: "2026-04-12T11:15:00.000Z",
+        duration: "1h 45m",
+      })
+    );
+
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
+
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("To Do")).toBeInTheDocument();
+  });
+
   it("omits dream lucidity", async () => {
     mockItem(
       "dream",
