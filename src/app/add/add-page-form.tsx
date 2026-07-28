@@ -29,7 +29,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { MarkdownContent } from "@/app/item/[id]/markdown-content";
 import type { BookmarkMetadata } from "@/lib/metadata-fetcher";
@@ -48,6 +47,7 @@ import { draftToMetadata } from "@/lib/add-form/metadata-helpers";
 import { useDraftPersistence } from "@/lib/add-form/use-draft-persistence";
 import { uploadImage } from "@/lib/add-form/upload-image";
 import { TypeSpecificFields } from "@/components/add-form/type-specific-fields";
+import { ContentTypeLabel } from "@/components/content-type-label";
 import { BookmarkPreview } from "./bookmark-preview";
 
 // Types that get the split-pane markdown editor + preview
@@ -372,12 +372,15 @@ export function AddPageForm({
               aria-label="Content type"
               className="border-border/60 text-muted-foreground hover:border-border hover:text-foreground h-8 w-auto gap-1.5 rounded-full border-dashed px-3 text-xs font-medium transition-colors"
             >
-              <SelectValue placeholder="Select type" />
+              <ContentTypeLabel
+                type={draft.type}
+                label={TYPE_ITEMS[draft.type]}
+              />
             </SelectTrigger>
             <SelectContent>
               {Object.entries(TYPE_ITEMS).map(([value, label]) => (
                 <SelectItem key={value} value={value}>
-                  {label}
+                  <ContentTypeLabel type={value} label={label} />
                 </SelectItem>
               ))}
             </SelectContent>

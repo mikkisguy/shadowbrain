@@ -29,7 +29,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { BookmarkPreview } from "@/app/add/bookmark-preview";
@@ -42,6 +41,7 @@ import {
   hasTypeSpecificFields,
 } from "@/lib/add-form/types";
 import { TypeSpecificFields } from "@/components/add-form/type-specific-fields";
+import { ContentTypeLabel } from "@/components/content-type-label";
 
 // ---------------------------------------------------------------------------
 // Dialog
@@ -151,12 +151,15 @@ function AddForm({
               data-testid="add-dialog-type"
               className="border-border/60 text-muted-foreground hover:border-border hover:text-foreground h-7 w-auto gap-1.5 rounded-full border-dashed px-3 text-xs font-medium transition-colors"
             >
-              <SelectValue placeholder="Select type" />
+              <ContentTypeLabel
+                type={draft.type}
+                label={TYPE_ITEMS[draft.type]}
+              />
             </SelectTrigger>
             <SelectContent>
               {Object.entries(TYPE_ITEMS).map(([value, label]) => (
                 <SelectItem key={value} value={value}>
-                  {label}
+                  <ContentTypeLabel type={value} label={label} />
                 </SelectItem>
               ))}
             </SelectContent>
