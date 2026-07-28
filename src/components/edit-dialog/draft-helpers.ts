@@ -31,6 +31,7 @@ export function draftFromItem(item: ContentItem, tags: Tag[]): EditDraft {
     startDate: meta.startDate ?? "",
     endDate: meta.endDate ?? "",
     duration: meta.duration ?? "",
+    dueDate: meta.dueDate ?? "",
     mood: meta.mood ?? "",
     imageUrl: "",
   };
@@ -58,6 +59,7 @@ export function draftsEqual(a: EditDraft, b: EditDraft): boolean {
     a.startDate === b.startDate &&
     a.endDate === b.endDate &&
     a.duration === b.duration &&
+    a.dueDate === b.dueDate &&
     a.mood === b.mood
   );
 }

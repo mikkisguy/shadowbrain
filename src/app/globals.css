@@ -71,6 +71,7 @@
   --color-type-event: var(--type-event);
   --color-type-dream: var(--type-dream);
   --color-type-raw: var(--type-raw);
+  --color-type-task: var(--type-task);
   --color-type-image: var(--type-image);
 
   /* --- shadcn/ui compatibility aliases ----------------------------
@@ -178,6 +179,7 @@
   --type-event: #f97316;
   --type-dream: #d946ef;
   --type-raw: #7b8290;
+  --type-task: #6366f1;
   --type-image: #84cc16;
 }
 
@@ -216,6 +218,7 @@
   --type-event: #f97316;
   --type-dream: #d946ef;
   --type-raw: #7b8290;
+  --type-task: #6366f1;
   --type-image: #84cc16;
 }
 

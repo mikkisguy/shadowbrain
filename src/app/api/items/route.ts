@@ -54,8 +54,11 @@ const PROJECT_METADATA = z
   })
   .passthrough();
 
+const WORKFLOW_STATUS = z.enum(["todo", "in_progress", "done"]);
+
 const EVENT_METADATA = z
   .object({
+    status: WORKFLOW_STATUS.optional(),
     start_date: isoDateTime.optional(),
     end_date: isoDateTime.optional(),
     duration: z.union([z.string(), z.number()]).nullable().optional(),
@@ -68,11 +71,21 @@ const DREAM_METADATA = z
   })
   .passthrough();
 
+const TASK_METADATA = z
+  .object({
+    status: WORKFLOW_STATUS.optional(),
+    due_date: isoDateTime.optional(),
+    start_date: isoDateTime.optional(),
+    end_date: isoDateTime.optional(),
+  })
+  .passthrough();
+
 const TYPE_METADATA_SCHEMAS: Record<string, z.ZodTypeAny> = {
   person: PERSON_METADATA,
   project: PROJECT_METADATA,
   event: EVENT_METADATA,
   dream: DREAM_METADATA,
+  task: TASK_METADATA,
 };
 
 const createSchema = z
@@ -157,6 +170,10 @@ export async function POST(request: Request) {
     }
     if (parsed.data.metadata) {
       Object.assign(mergedMetadata, parsed.data.metadata);
+    }
+    // Tasks default to "todo" status when none is provided.
+    if (parsed.data.type === "task" && !mergedMetadata.status) {
+      mergedMetadata.status = "todo";
     }
     const metadata =
       Object.keys(mergedMetadata).length > 0

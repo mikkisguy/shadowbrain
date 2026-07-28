@@ -27,10 +27,13 @@ export interface Draft {
   repo: string;
   started: string;
   goalEndDate: string;
-  // event — metadata.{start_date, end_date, duration}
+  // event — metadata.{status, start_date, end_date, duration}
+  // task  — metadata.{status, due_date, start_date, end_date}
+  // (status is shared by project/event/task; meaning differs by type)
   startDate: string;
   endDate: string;
   duration: string;
+  dueDate: string;
   // dream — metadata.mood
   mood: string;
   // image — remote URL (local file tracked in React state, not Draft)
@@ -53,6 +56,7 @@ export function emptyDraft(): Draft {
     startDate: "",
     endDate: "",
     duration: "",
+    dueDate: "",
     mood: "",
     imageUrl: "",
   };
@@ -66,6 +70,7 @@ export const TYPE_ITEMS: Record<string, string> = {
   raw_text: "Raw",
   note: "Note",
   image: "Image",
+  task: "Task",
   bookmark: "Bookmark",
   question: "Question",
   project: "Project",
@@ -91,6 +96,7 @@ export const CONTENT_PLACEHOLDER: Record<string, string> = {
   person: "Notes about this person (optional)\u2026",
   project: "Notes about this project (optional)\u2026",
   event: "Describe this event (optional)\u2026",
+  task: "Describe this task (optional)\u2026",
   dream: "Describe your dream\u2026",
 };
 
@@ -100,6 +106,7 @@ const TITLE_PLACEHOLDER: Record<string, string> = {
   project: "Project name",
   event: "Event name",
   bookmark: "Bookmark title (optional)",
+  task: "Task title",
 };
 
 export function titlePlaceholder(type: string): string {
@@ -119,6 +126,7 @@ const CONTENT_REQUIRED: Record<string, boolean> = {
   person: false,
   project: false,
   event: false,
+  task: false,
   dream: true,
   image: false,
 };
@@ -147,7 +155,13 @@ export function canSubmit(draft: Draft): boolean {
 
 /** Whether the current type has any type-specific metadata fields. */
 export function hasTypeSpecificFields(type: string): boolean {
-  return ["bookmark", "person", "project", "event", "dream", "image"].includes(
-    type
-  );
+  return [
+    "bookmark",
+    "person",
+    "project",
+    "event",
+    "dream",
+    "image",
+    "task",
+  ].includes(type);
 }

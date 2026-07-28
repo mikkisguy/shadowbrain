@@ -30,6 +30,15 @@ export function parseBookmarkMeta(
     siteName: typeof parsed.site_name === "string" ? parsed.site_name : null,
   };
 }
+const WORKFLOW_STATUS_LABELS: Record<string, string> = {
+  todo: "To Do",
+  in_progress: "In Progress",
+  done: "Done",
+};
+
+export function workflowStatusLabel(value: string): string {
+  return WORKFLOW_STATUS_LABELS[value] ?? value;
+}
 
 export function extractMetadataFields(
   type: string,
@@ -114,6 +123,15 @@ export function extractMetadataFields(
       break;
     }
     case "event": {
+      const status = parsed.status;
+      if (typeof status === "string" && status.trim()) {
+        fields.push({
+          label: "Status",
+          value: workflowStatusLabel(status.trim()),
+        });
+      } else {
+        fields.push({ label: "Status", value: "To Do" });
+      }
       const startDate = parsed.start_date;
       if (typeof startDate === "string" && startDate.trim()) {
         fields.push({ label: "Start", value: formatDate(startDate) });
@@ -132,6 +150,30 @@ export function extractMetadataFields(
       const mood = parsed.mood;
       if (typeof mood === "string" && mood.trim()) {
         fields.push({ label: "Mood", value: mood.trim() });
+      }
+      break;
+    }
+    case "task": {
+      const status = parsed.status;
+      if (typeof status === "string" && status.trim()) {
+        fields.push({
+          label: "Status",
+          value: workflowStatusLabel(status.trim()),
+        });
+      } else {
+        fields.push({ label: "Status", value: "To Do" });
+      }
+      const dueDate = parsed.due_date;
+      if (typeof dueDate === "string" && dueDate.trim()) {
+        fields.push({ label: "Due", value: formatDate(dueDate) });
+      }
+      const startDate = parsed.start_date;
+      if (typeof startDate === "string" && startDate.trim()) {
+        fields.push({ label: "Start", value: formatDate(startDate) });
+      }
+      const endDate = parsed.end_date;
+      if (typeof endDate === "string" && endDate.trim()) {
+        fields.push({ label: "End", value: formatDate(endDate) });
       }
       break;
     }

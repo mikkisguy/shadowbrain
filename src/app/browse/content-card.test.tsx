@@ -423,10 +423,19 @@ describe("metadataSummary", () => {
   it("returns the status for a project", () => {
     expect(metadataSummary("project", { status: "active" })).toBe("active");
   });
-  it("returns the start_date for an event", () => {
+  it("returns status and start_date for an event", () => {
     expect(
       metadataSummary("event", { start_date: "2026-04-12T09:30:00Z" })
-    ).toBe("2026-04-12T09:30:00Z");
+    ).toBe("To Do · 2026-04-12T09:30:00Z");
+  });
+  it("returns explicit event status without inventing a start", () => {
+    expect(metadataSummary("event", { status: "done" })).toBe("Done");
+  });
+  it("returns workflow status for a task (default To Do)", () => {
+    expect(metadataSummary("task", {})).toBe("To Do");
+    expect(metadataSummary("task", { status: "in_progress" })).toBe(
+      "In Progress"
+    );
   });
   it("returns the mood for a dream", () => {
     expect(metadataSummary("dream", { mood: "surreal" })).toBe("surreal");

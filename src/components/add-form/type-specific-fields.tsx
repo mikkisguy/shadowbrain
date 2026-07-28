@@ -3,9 +3,8 @@
 /**
  * Shared type-specific field renderer.
  *
- * Renders the metadata fields for bookmark, person, project, event,
- * and dream types. Used by both the quick-add dialog and the /add
- * page so the field layout stays consistent across surfaces.
+ * Renders the metadata fields for bookmark, person, project, event, task,
+ * and dream types so the field layout stays consistent across surfaces.
  *
  * The bookmark preview card is NOT included here — it depends on
  * preview state (loading / error / metadata) that each surface
@@ -13,12 +12,59 @@
  * add dialog wraps it with onBlur and preview logic.
  */
 
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Draft } from "@/lib/add-form/types";
 import { hasTypeSpecificFields } from "@/lib/add-form/types";
+import { cn } from "@/lib/utils";
+
+const WORKFLOW_STATUS_OPTIONS = [
+  { value: "todo", label: "To Do" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "done", label: "Done" },
+] as const;
+
+/** Value → label map for Base UI Select (`items` prop). Without this,
+ *  SelectValue renders the raw enum (`in_progress`) instead of the
+ *  human label. */
+const WORKFLOW_STATUS_ITEMS: Record<string, string> = Object.fromEntries(
+  WORKFLOW_STATUS_OPTIONS.map((opt) => [opt.value, opt.label])
+);
+
+/** Compact label + control stack for Details fields that cannot rely
+ *  on placeholders (datetime-local, selects with a selected value). */
+function DetailField({
+  id,
+  label,
+  children,
+  className,
+}: {
+  id: string;
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-col gap-1", className)}>
+      <label
+        htmlFor={id}
+        className="text-muted-foreground text-[10px] font-medium tracking-wide"
+      >
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 export interface TypeSpecificFieldsProps {
   draft: Draft;
@@ -133,43 +179,77 @@ export function TypeSpecificFields({
               onKeyDown={handleKeyDown}
               type="url"
             />
-            <Input
-              data-testid="add-dialog-project-started"
-              className="h-7 text-xs"
-              type="datetime-local"
-              value={draft.started}
-              onChange={(e) => updateField("started", e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-            <Input
-              data-testid="add-dialog-project-goal-end"
-              className="h-7 text-xs"
-              type="datetime-local"
-              value={draft.goalEndDate}
-              onChange={(e) => updateField("goalEndDate", e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
+            <DetailField id="add-dialog-project-started" label="Started">
+              <Input
+                id="add-dialog-project-started"
+                data-testid="add-dialog-project-started"
+                className="h-7 text-xs"
+                type="datetime-local"
+                value={draft.started}
+                onChange={(e) => updateField("started", e.target.value)}
+                onKeyDown={handleKeyDown}
+              />
+            </DetailField>
+            <DetailField id="add-dialog-project-goal-end" label="Goal end">
+              <Input
+                id="add-dialog-project-goal-end"
+                data-testid="add-dialog-project-goal-end"
+                className="h-7 text-xs"
+                type="datetime-local"
+                value={draft.goalEndDate}
+                onChange={(e) => updateField("goalEndDate", e.target.value)}
+                onKeyDown={handleKeyDown}
+              />
+            </DetailField>
           </>
         )}
 
         {draft.type === "event" && (
           <>
-            <Input
-              data-testid="add-dialog-event-start"
-              className="h-7 text-xs"
-              type="datetime-local"
-              value={draft.startDate}
-              onChange={(e) => updateField("startDate", e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-            <Input
-              data-testid="add-dialog-event-end"
-              className="h-7 text-xs"
-              type="datetime-local"
-              value={draft.endDate}
-              onChange={(e) => updateField("endDate", e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
+            <DetailField id="add-dialog-event-status" label="Status">
+              <Select
+                value={draft.status || "todo"}
+                onValueChange={(v) => updateField("status", v ?? "todo")}
+                items={WORKFLOW_STATUS_ITEMS}
+              >
+                <SelectTrigger
+                  id="add-dialog-event-status"
+                  data-testid="add-dialog-event-status"
+                  className="h-7 text-xs"
+                >
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKFLOW_STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </DetailField>
+            <DetailField id="add-dialog-event-start" label="Start">
+              <Input
+                id="add-dialog-event-start"
+                data-testid="add-dialog-event-start"
+                className="h-7 text-xs"
+                type="datetime-local"
+                value={draft.startDate}
+                onChange={(e) => updateField("startDate", e.target.value)}
+                onKeyDown={handleKeyDown}
+              />
+            </DetailField>
+            <DetailField id="add-dialog-event-end" label="End">
+              <Input
+                id="add-dialog-event-end"
+                data-testid="add-dialog-event-end"
+                className="h-7 text-xs"
+                type="datetime-local"
+                value={draft.endDate}
+                onChange={(e) => updateField("endDate", e.target.value)}
+                onKeyDown={handleKeyDown}
+              />
+            </DetailField>
             <Input
               data-testid="add-dialog-event-duration"
               className="col-span-2 h-7 text-xs"
@@ -178,6 +258,66 @@ export function TypeSpecificFields({
               onChange={(e) => updateField("duration", e.target.value)}
               onKeyDown={handleKeyDown}
             />
+          </>
+        )}
+
+        {draft.type === "task" && (
+          <>
+            <DetailField id="add-dialog-task-status" label="Status">
+              <Select
+                value={draft.status || "todo"}
+                onValueChange={(v) => updateField("status", v ?? "todo")}
+                items={WORKFLOW_STATUS_ITEMS}
+              >
+                <SelectTrigger
+                  id="add-dialog-task-status"
+                  data-testid="add-dialog-task-status"
+                  className="h-7 text-xs"
+                >
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKFLOW_STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </DetailField>
+            <DetailField id="add-dialog-task-due" label="Due">
+              <Input
+                id="add-dialog-task-due"
+                data-testid="add-dialog-task-due"
+                className="h-7 text-xs"
+                type="datetime-local"
+                value={draft.dueDate}
+                onChange={(e) => updateField("dueDate", e.target.value)}
+                onKeyDown={handleKeyDown}
+              />
+            </DetailField>
+            <DetailField id="add-dialog-task-start" label="Start">
+              <Input
+                id="add-dialog-task-start"
+                data-testid="add-dialog-task-start"
+                className="h-7 text-xs"
+                type="datetime-local"
+                value={draft.startDate}
+                onChange={(e) => updateField("startDate", e.target.value)}
+                onKeyDown={handleKeyDown}
+              />
+            </DetailField>
+            <DetailField id="add-dialog-task-end" label="End">
+              <Input
+                id="add-dialog-task-end"
+                data-testid="add-dialog-task-end"
+                className="h-7 text-xs"
+                type="datetime-local"
+                value={draft.endDate}
+                onChange={(e) => updateField("endDate", e.target.value)}
+                onKeyDown={handleKeyDown}
+              />
+            </DetailField>
           </>
         )}
 

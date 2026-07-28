@@ -27,6 +27,7 @@ const TYPE_COLORS: Record<string, string> = {
   raw: "bg-type-raw",
   raw_text: "bg-type-raw",
   image: "bg-type-image",
+  task: "bg-type-task",
 };
 
 /** `content_items.type` → Title-cased display label. Unrecognised
@@ -43,6 +44,7 @@ const TYPE_LABELS: Record<string, string> = {
   raw: "Raw",
   raw_text: "Raw",
   image: "Image",
+  task: "Task",
 };
 
 /** Neutral fallback for types outside the known vocabulary. */

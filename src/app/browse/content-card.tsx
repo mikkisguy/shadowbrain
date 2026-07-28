@@ -44,6 +44,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
 import { parseSnippet } from "@/lib/snippet";
+import { workflowStatusLabel } from "@/lib/metadata-fields";
 import type { BrowseItem } from "./types";
 import { CardImage } from "./card-image";
 import { CardTags } from "./card-tags";
@@ -117,12 +118,26 @@ export function metadataSummary(
       return typeof status === "string" && status.trim() ? status : null;
     }
     case "event": {
+      const status = metadata.status;
+      const statusLabel =
+        typeof status === "string" && status.trim()
+          ? workflowStatusLabel(status.trim())
+          : "To Do";
       const start = metadata.start_date;
-      return typeof start === "string" && start.trim() ? start : null;
+      if (typeof start === "string" && start.trim()) {
+        return `${statusLabel} · ${start}`;
+      }
+      return statusLabel;
     }
     case "dream": {
       const mood = metadata.mood;
       return typeof mood === "string" && mood.trim() ? mood : null;
+    }
+    case "task": {
+      const status = metadata.status;
+      return typeof status === "string" && status.trim()
+        ? workflowStatusLabel(status.trim())
+        : "To Do";
     }
     default:
       return null;

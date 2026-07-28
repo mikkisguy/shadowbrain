@@ -516,7 +516,7 @@ async function handleOpenCodeGoStream(
             type: z
               .string()
               .describe(
-                "The content type: 'note', 'journal', 'bookmark', 'question', 'raw_text', or 'image'"
+                "The content type: 'note', 'journal', 'bookmark', 'question', 'raw_text', 'image', 'person', 'project', 'event', 'dream', or 'task'"
               ),
             content: z
               .string()
@@ -535,12 +535,16 @@ async function handleOpenCodeGoStream(
             const now = new Date().toISOString();
             const id = crypto.randomUUID();
 
+            const metadata =
+              type === "task" ? JSON.stringify({ status: "todo" }) : undefined;
+
             contentItems.create(db, {
               id,
               type,
               title: title ?? null,
               content,
               source: "chat",
+              metadata,
               created_at: now,
               updated_at: now,
             });

@@ -952,6 +952,55 @@ describe("/api/chat", () => {
       expect(savedEvents[0].title).toBe("Test Note");
     });
 
+    it("emits saved event for task-type content", async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockStreamText as any).mockReturnValue({
+        fullStream: createMockFullStream([
+          { type: "text-delta", text: "Creating a task." },
+          {
+            type: "tool-result" as const,
+            toolCallId: "call-2",
+            toolName: "save_to_shadowbrain",
+            args: {
+              type: "task",
+              content: "Buy groceries",
+              title: "Shopping",
+            },
+            output: {
+              itemId: "item-456",
+              title: "Shopping",
+              type: "task",
+            },
+          },
+          { type: "text-delta", text: " Done!" },
+        ]),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 20 }),
+        textStream: (async function* () {
+          yield "Creating a task.";
+          yield " Done!";
+        })(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+
+      const req = await authedRequest("http://localhost/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          threadId: null,
+          target: { provider: "opencode-go", model: "deepseek-v4-pro" },
+          message: "Save this as a task",
+          allowModelSave: true,
+        }),
+      });
+      const res = await POST(req);
+
+      const events = await readSseEvents(res);
+
+      const savedEvents = events.filter((e) => e.type === "saved");
+      expect(savedEvents.length).toBe(1);
+      expect(savedEvents[0].itemId).toBe("item-456");
+      expect(savedEvents[0].item_type).toBe("task");
+    });
+
     it("does not register save_to_shadowbrain tool for Hermes targets", async () => {
       mockCreateRun.mockResolvedValue({ runId: "run-1" });
       mockStreamEvents.mockReturnValue(

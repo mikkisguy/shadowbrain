@@ -61,17 +61,18 @@ the SQL filter; the route plumbing lives in
 
 ### Content Types (`type` column)
 
-| Type       | Description                     | Example                                     | Metadata JSON (optional)                                         |
-| ---------- | ------------------------------- | ------------------------------------------- | ---------------------------------------------------------------- |
-| `raw`      | Quick capture, fleeting thought | "Need to fix the nginx timeout setting"     | `null`                                                           |
-| `journal`  | AI-compiled daily summary       | "You reflected on deployment automation..." | `null`                                                           |
-| `note`     | Permanent knowledge note        | "Docker Networking Deep Dive"               | `null`                                                           |
-| `bookmark` | Saved URL + notes               | Article about Postgres indexing             | `{"url":"https://...", "favicon":null, "read":false}`            |
-| `person`   | Someone you interact with       | "Sarah (DevOps lead)"                       | `{"email":"...", "github":"...", "role":"..."}`                  |
-| `project`  | A project or initiative         | "BranchForge"                               | `{"status":"active", "repo":"https://...", "started":"2026-01"}` |
-| `question` | A question you're exploring     | "Should we use Kafka or NATS?"              | `{"status":"open", "answered_by":null}`                          |
-| `event`    | A timestamped occurrence        | "Deployed v2.3 to production"               | `{"event_date":"2026-04-12", "duration":null}`                   |
-| `dream`    | Dream journal entry             | "I was flying over a city made of..."       | `{"mood":"surreal", "lucidity":3}`                               |
+| Type       | Description                     | Example                                     | Metadata JSON (optional)                                                                                          |
+| ---------- | ------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `raw`      | Quick capture, fleeting thought | "Need to fix the nginx timeout setting"     | `null`                                                                                                            |
+| `journal`  | AI-compiled daily summary       | "You reflected on deployment automation..." | `null`                                                                                                            |
+| `note`     | Permanent knowledge note        | "Docker Networking Deep Dive"               | `null`                                                                                                            |
+| `bookmark` | Saved URL + notes               | Article about Postgres indexing             | `{"url":"https://...", "favicon":null, "read":false}`                                                             |
+| `person`   | Someone you interact with       | "Sarah (DevOps lead)"                       | `{"email":"...", "github":"...", "role":"..."}`                                                                   |
+| `project`  | A project or initiative         | "BranchForge"                               | `{"status":"active", "repo":"https://...", "started":"2026-01"}`                                                  |
+| `question` | A question you're exploring     | "Should we use Kafka or NATS?"              | `{"status":"open", "answered_by":null}`                                                                           |
+| `event`    | A timestamped occurrence        | "Deployed v2.3 to production"               | `{"status":"done","start_date":"2026-04-12T09:30:00.000Z","end_date":"2026-04-12T11:15:00.000Z","duration":null}` |
+| `task`     | An actionable work item         | "Update nginx timeout settings"             | `{"status":"todo","due_date":"2026-08-01T00:00:00.000Z","start_date":null,"end_date":null}`                       |
+| `dream`    | Dream journal entry             | "I was flying over a city made of..."       | `{"mood":"surreal", "lucidity":3}`                                                                                |
 
 ### Why a single table?
 

@@ -823,6 +823,142 @@ describe("/api/items per-type metadata validation", () => {
     const json = await res.json();
     expect(json.type).toBe("note");
   });
+
+  it("creates a task with status in_progress and due_date", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "task",
+        content: "Update nginx timeout settings",
+        metadata: {
+          status: "in_progress",
+          due_date: "2026-08-01T00:00:00.000Z",
+        },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.type).toBe("task");
+    const md = JSON.parse(json.metadata);
+    expect(md.status).toBe("in_progress");
+    expect(md.due_date).toBe("2026-08-01T00:00:00.000Z");
+  });
+
+  it("creates a task with missing metadata and injects default todo status", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "task",
+        content: "Write integration tests",
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.type).toBe("task");
+    const md = JSON.parse(json.metadata);
+    expect(md.status).toBe("todo");
+  });
+
+  it("rejects a task with invalid status", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "task",
+        content: "Bad status",
+        metadata: { status: "nope" },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("creates an event with status done", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "event",
+        content: "Team standup",
+        metadata: {
+          status: "done",
+          start_date: "2026-08-01T09:00:00.000Z",
+          end_date: "2026-08-01T09:30:00.000Z",
+          duration: 30,
+        },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.type).toBe("event");
+    const md = JSON.parse(json.metadata);
+    expect(md.status).toBe("done");
+  });
+
+  it("creates a legacy event without status (status defaults to todo)", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "event",
+        content: "Legacy event",
+        metadata: {
+          start_date: "2026-08-01T09:00:00.000Z",
+          end_date: "2026-08-01T09:30:00.000Z",
+        },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.type).toBe("event");
+  });
+
+  it("rejects an event with invalid status", async () => {
+    const req = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "event",
+        content: "Bad event",
+        metadata: { status: "invalid" },
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("GET /api/items?type=task returns created task", async () => {
+    const createReq = await authedRequest("http://localhost/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "task",
+        content: "Listable task",
+        metadata: { status: "in_progress" },
+      }),
+    });
+    const createRes = await POST(createReq);
+    const created = await createRes.json();
+    expect(created.type).toBe("task");
+
+    const req = await authedRequest("http://localhost/api/items?type=task");
+    const res = await GET(req);
+    const json = await res.json();
+    expect(json.items.length).toBeGreaterThanOrEqual(1);
+    const found = json.items.find((i: { id: string }) => i.id === created.id);
+    expect(found).toBeDefined();
+    expect(found.type).toBe("task");
+  });
 });
 
 describe("/api/items cover-image resolution", () => {
