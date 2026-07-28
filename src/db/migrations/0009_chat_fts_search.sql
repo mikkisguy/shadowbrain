@@ -16,8 +16,9 @@ BEGIN
 END;
 
 -- Trigger: DELETE from chat_messages → remove from FTS index.
+-- Use BEFORE DELETE + DELETE FROM (not FTS5 'delete' command) — see 0010.
 CREATE TRIGGER IF NOT EXISTS trg_chat_messages_fts_delete
-  AFTER DELETE ON chat_messages
+  BEFORE DELETE ON chat_messages
 BEGIN
   DELETE FROM chat_messages_search WHERE rowid = old.rowid;
 END;

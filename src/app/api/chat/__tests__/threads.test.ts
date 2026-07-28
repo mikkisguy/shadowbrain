@@ -175,6 +175,47 @@ describe("/api/chat/threads", () => {
       expect(getRes.status).toBe(404);
     });
 
+    it("deletes a thread with FTS-indexed messages", async () => {
+      const { getDb } = await import("@/db/index");
+      const db = getDb();
+      db.prepare(
+        `INSERT INTO chat_messages (id, thread_id, role, content)
+         VALUES (?, ?, 'user', ?), (?, ?, 'assistant', ?)`
+      ).run(
+        "msg-user-1",
+        threadId,
+        "what is the current disk usage?",
+        "msg-asst-1",
+        threadId,
+        "Disk usage is elevated."
+      );
+
+      const ftsBefore = db
+        .prepare(
+          `SELECT COUNT(*) AS c FROM chat_messages_search
+           WHERE rowid IN (
+             SELECT rowid FROM chat_messages WHERE thread_id = ?
+           )`
+        )
+        .get(threadId) as { c: number };
+      expect(ftsBefore.c).toBe(2);
+
+      const req = await authedRequest(
+        `http://localhost/api/chat/threads/${threadId}`,
+        { method: "DELETE" }
+      );
+      const res = await DELETE(req, {
+        params: Promise.resolve({ id: threadId }),
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+
+      const msgsLeft = db
+        .prepare("SELECT COUNT(*) AS c FROM chat_messages WHERE thread_id = ?")
+        .get(threadId) as { c: number };
+      expect(msgsLeft.c).toBe(0);
+    });
+
     it("returns 404 for unknown thread", async () => {
       const req = await authedRequest(
         "http://localhost/api/chat/threads/nonexistent"
