@@ -237,7 +237,8 @@ relevant:
 - **Patch the README badge too.** `package.json` and the shields.io version
   badge in `README.md` (the `[![Version](...)]` line in the header) must be
   bumped in lockstep — a version bump that leaves the badge stale is a
-  half-applied change.
+  half-applied change. The in-app version string (`src/lib/version.ts`)
+  reads `package.json` directly, so it does not need a separate bump.
 
 When in doubt, bump minor — under `0.x` it is cheap to add more, and the
 version is meant to be a rough signal of how much capability has landed, not
