@@ -109,6 +109,21 @@ export function useItemDetail(itemId: string | null) {
   }, [itemId, fetchItem]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  const updateContent = useCallback((content: string, updatedAt?: string) => {
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            item: {
+              ...current.item,
+              content,
+              updated_at: updatedAt ?? current.item.updated_at,
+            },
+          }
+        : current
+    );
+  }, []);
+
   const handleRetry = useCallback(() => {
     if (!itemId) return;
     cancelledRef.current = false;
@@ -127,5 +142,6 @@ export function useItemDetail(itemId: string | null) {
     status,
     handleRetry,
     refetch,
+    updateContent,
   };
 }

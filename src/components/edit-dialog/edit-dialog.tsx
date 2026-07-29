@@ -415,7 +415,8 @@ function EditForm({
               onChange={(e) =>
                 updateField("is_hidden", e.target.checked ? 1 : 0)
               }
-              className="accent-primary size-3.5"
+              className="app-checkbox"
+              data-interactive="true"
             />
             Hidden
           </label>
@@ -426,7 +427,8 @@ function EditForm({
               onChange={(e) =>
                 updateField("is_private", e.target.checked ? 1 : 0)
               }
-              className="accent-primary size-3.5"
+              className="app-checkbox"
+              data-interactive="true"
             />
             Private
           </label>

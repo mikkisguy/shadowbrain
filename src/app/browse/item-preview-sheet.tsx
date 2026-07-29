@@ -11,7 +11,7 @@
  *   1. Header actions + parent crumb + type badge + title
  *   2. Workflow status strip (task/event only)
  *   3. Dates / type-specific metadata (status omitted when strip is shown)
- *   4. Truncated content preview
+ *   4. Full markdown content with interactive task checkboxes
  *   5. Tags, outbound links, backlinks
  */
 
@@ -45,7 +45,7 @@ import { EditDialog } from "@/components/edit-dialog/edit-dialog";
 import { useEditDialog } from "@/components/edit-dialog/use-edit-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-dialog/delete-confirmation-dialog";
 import { useDeleteDialog } from "@/components/delete-dialog/use-delete-dialog";
-import { previewText } from "./content-card";
+import { MarkdownContent } from "@/app/item/[id]/markdown-content";
 import { MetadataSection } from "./metadata-section";
 import { LinkRow } from "./link-list";
 import { SheetSkeleton, SheetError } from "./sheet-states";
@@ -126,7 +126,8 @@ export interface ItemPreviewSheetProps {
 export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
   const open = itemId !== null;
 
-  const { data, status, handleRetry, refetch } = useItemDetail(itemId);
+  const { data, status, handleRetry, refetch, updateContent } =
+    useItemDetail(itemId);
 
   const { open: editOpen, setOpen: setEditOpen } = useEditDialog();
   const { open: deleteOpen, setOpen: setDeleteOpen } = useDeleteDialog();
@@ -230,10 +231,6 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
     );
     return filtered.length > 0 ? filtered : null;
   }, [item]);
-
-  const contentPreview = item?.content?.trim()
-    ? previewText(item.content, 280)
-    : null;
 
   const bm =
     item?.type === "bookmark" ? parseBookmarkMeta(item.metadata) : null;
@@ -378,13 +375,24 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                   ) : null}
                 </header>
 
-                {contentPreview ? (
-                  <p
-                    data-testid="sheet-content-preview"
-                    className="text-muted-foreground line-clamp-4 font-sans text-sm leading-relaxed break-words"
-                  >
-                    {contentPreview}
-                  </p>
+                {item.content.trim() ? (
+                  <div data-testid="sheet-content-preview">
+                    <MarkdownContent
+                      content={item.content}
+                      updatedAt={item.updated_at}
+                      itemId={item.id}
+                      interactive
+                      onContentSaved={(savedContent, savedUpdatedAt) => {
+                        updateContent(savedContent, savedUpdatedAt);
+                        queryClient.invalidateQueries({
+                          queryKey: queryKeys.browse.all,
+                        });
+                        invalidateViewsQueries(queryClient);
+                      }}
+                      onContentReloadNeeded={refetch}
+                      className="text-sm"
+                    />
+                  </div>
                 ) : null}
 
                 {bm?.image ? (

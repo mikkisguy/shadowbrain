@@ -89,6 +89,7 @@ const patchSchema = z
     is_private: visibilityFlag,
     is_hidden: visibilityFlag,
     tags: z.array(z.string()).optional(),
+    expected_updated_at: isoDateTime.optional(),
   })
   .superRefine((data, ctx) => {
     if (!data.metadata) return;
@@ -179,6 +180,22 @@ export async function PATCH(
     });
     if (!existing) {
       return errorResponse("NOT_FOUND", "Item not found", 404);
+    }
+    if (
+      parsed.data.expected_updated_at !== undefined &&
+      parsed.data.expected_updated_at !== existing.updated_at
+    ) {
+      log("warn", "content_item update conflict", {
+        event: "content_item.update.conflict",
+        id,
+        expected_updated_at: parsed.data.expected_updated_at,
+        actual_updated_at: existing.updated_at,
+      });
+      return errorResponse(
+        "CONFLICT",
+        "Item changed since it was loaded.",
+        409
+      );
     }
 
     const now = new Date().toISOString();

@@ -78,6 +78,28 @@ vi.mock("@/components/ui/sheet", () => ({
   ),
 }));
 
+const markdownProps = vi.hoisted(() => ({
+  current: null as Record<string, unknown> | null,
+}));
+
+vi.mock("@/app/item/[id]/markdown-content", () => ({
+  MarkdownContent: (props: Record<string, unknown>) => {
+    markdownProps.current = props;
+    return (
+      <div
+        data-testid="item-content"
+        data-interactive={String(props.interactive)}
+        data-item-id={String(props.itemId)}
+        data-has-save-callback={String(
+          typeof props.onContentSaved === "function"
+        )}
+      >
+        {String(props.content)}
+      </div>
+    );
+  },
+}));
+
 import { ItemPreviewSheet } from "./item-preview-sheet";
 
 /* ------------------------------------------------------------------ */
@@ -135,6 +157,7 @@ describe("ItemPreviewSheet", () => {
   const onClose = vi.fn();
   beforeEach(() => {
     onClose.mockReset();
+    markdownProps.current = null;
   });
 
   afterEach(() => {
@@ -176,6 +199,11 @@ describe("ItemPreviewSheet", () => {
     expect(screen.getByTestId("sheet-content-preview")).toHaveTextContent(
       "Hello **world**!"
     );
+    expect(markdownProps.current).toMatchObject({
+      interactive: true,
+      itemId: "item-1",
+    });
+    expect(typeof markdownProps.current?.onContentSaved).toBe("function");
     expect(screen.getByText("#docker")).toBeInTheDocument();
     expect(screen.getByText("#infra")).toBeInTheDocument();
     expect(screen.getByText("Linked Item")).toBeInTheDocument();
@@ -186,6 +214,31 @@ describe("ItemPreviewSheet", () => {
     expect(screen.queryByTestId("view-grid")).not.toBeInTheDocument();
     expect(screen.queryByTestId("view-kanban")).not.toBeInTheDocument();
     expect(screen.queryByTestId("view-timeline")).not.toBeInTheDocument();
+  });
+
+  it("keeps the saved markdown and revision in the sheet detail state", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(createFixture()),
+    } as Response);
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+
+    await waitFor(() => expect(markdownProps.current).not.toBeNull());
+    const onContentSaved = markdownProps.current?.onContentSaved as (
+      content: string,
+      updatedAt: string
+    ) => void;
+    onContentSaved("- [x] committed", "2026-07-29T00:00:01.000Z");
+
+    await waitFor(() =>
+      expect(screen.getByTestId("sheet-content-preview")).toHaveTextContent(
+        "- [x] committed"
+      )
+    );
+    expect(markdownProps.current).toMatchObject({
+      content: "- [x] committed",
+      updatedAt: "2026-07-29T00:00:01.000Z",
+    });
   });
 
   it("renders an 'open full page' button that links to the item detail page", async () => {
