@@ -73,6 +73,8 @@ export interface RelatedItem {
   link_type: string;
   /** For nested tasks, the encapsulating event. `null` for direct related items. */
   parent: { id: string; title: string | null; type: string } | null;
+  /** The raw JSON metadata column for merge-safe PATCH payloads. */
+  metadata: string | null;
   /** Last-updated timestamp from the underlying `content_items` row. */
   updated_at: string;
 }
@@ -559,6 +561,7 @@ export const contentItems = {
         title,
         status,
         dates,
+        metadata: row?.metadata ?? null,
         tags: tagsMap[id] ?? [],
         link_type: linkType,
         parent,

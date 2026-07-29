@@ -2,12 +2,12 @@
 
 import { Button } from "@/components/ui/button";
 
-export function ViewsGridLoading() {
+export function ViewsGridLoading({ noun = "grid" }: { noun?: string } = {}) {
   return (
     <div
       data-testid="views-grid-loading"
       role="status"
-      aria-label="Loading grid"
+      aria-label={`Loading ${noun}`}
       className="border-border overflow-hidden rounded-sm border"
     >
       <div className="bg-surface-muted h-9 border-b" />
@@ -28,9 +28,11 @@ export function ViewsGridLoading() {
 export function ViewsGridError({
   error,
   onRetry,
+  noun = "grid",
 }: {
   error: string | null;
   onRetry: () => void;
+  noun?: string;
 }) {
   return (
     <div
@@ -38,7 +40,7 @@ export function ViewsGridError({
       className="border-border bg-surface-elevated flex flex-col items-start gap-3 rounded-sm border p-6"
     >
       <p className="text-error font-sans text-sm font-medium">
-        {error ?? "Couldn't load the grid right now."}
+        {error ?? `Couldn't load the ${noun} right now.`}
       </p>
       <Button type="button" variant="outline" size="sm" onClick={onRetry}>
         Try again
@@ -47,7 +49,13 @@ export function ViewsGridError({
   );
 }
 
-export function ViewsGridEmpty({ scoped }: { scoped: boolean }) {
+export function ViewsGridEmpty({
+  scoped,
+  noun = "grid",
+}: {
+  scoped: boolean;
+  noun?: string;
+}) {
   return (
     <div
       data-testid="views-grid-empty"
@@ -61,7 +69,7 @@ export function ViewsGridEmpty({ scoped }: { scoped: boolean }) {
       <p className="text-muted-foreground mt-1 font-sans text-sm">
         {scoped
           ? "Link events and tasks to this project to see them here."
-          : "Create an event or task to populate the grid."}
+          : `Create an event or task to populate the ${noun}.`}
       </p>
     </div>
   );

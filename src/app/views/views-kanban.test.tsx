@@ -8,7 +8,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as ViewsGridDataModule from "./use-views-grid-data";
 import type { GridRow } from "./types";
-import { groupRowsByStatus, ViewsKanban } from "./views-kanban";
+import {
+  executeKanbanMove,
+  groupRowsByStatus,
+  planKanbanMove,
+  ViewsKanban,
+} from "./views-kanban";
 
 const useViewsGridDataMock = vi.fn();
 const useViewsKanbanMutationMock = vi.fn();
@@ -99,6 +104,75 @@ describe("groupRowsByStatus", () => {
   });
 });
 
+describe("planKanbanMove", () => {
+  it("plans a valid move with the full row payload", () => {
+    const row = rows[0];
+    expect(
+      planKanbanMove({
+        activeId: row.id,
+        overId: "in_progress",
+        rows,
+      })
+    ).toEqual({
+      id: row.id,
+      type: row.type,
+      fromStatus: "todo",
+      toStatus: "in_progress",
+      metadata: row.metadata,
+    });
+  });
+
+  it.each([
+    { overId: null, label: "missing target" },
+    { overId: "event-todo", label: "invalid target" },
+    { overId: "todo", label: "same status target" },
+  ])("does not plan a move for $label", ({ overId }) => {
+    expect(
+      planKanbanMove({
+        activeId: "event-todo",
+        overId,
+        rows,
+      })
+    ).toBeNull();
+  });
+});
+
+describe("executeKanbanMove", () => {
+  it("calls moveCard with a valid plan", () => {
+    const moveCard = vi.fn();
+    executeKanbanMove({
+      activeId: "event-todo",
+      overId: "in_progress",
+      rows,
+      moveCard,
+    });
+
+    expect(moveCard).toHaveBeenCalledWith({
+      id: "event-todo",
+      type: "event",
+      fromStatus: "todo",
+      toStatus: "in_progress",
+      metadata: rows[0].metadata,
+    });
+  });
+
+  it.each([
+    { overId: null, label: "missing target" },
+    { overId: "event-todo", label: "invalid target" },
+    { overId: "todo", label: "same status target" },
+  ])("does not call moveCard for $label", ({ overId }) => {
+    const moveCard = vi.fn();
+    executeKanbanMove({
+      activeId: "event-todo",
+      overId,
+      rows,
+      moveCard,
+    });
+
+    expect(moveCard).not.toHaveBeenCalled();
+  });
+});
+
 describe("ViewsKanban", () => {
   const moveCard = vi.fn();
   const onCardOpen = vi.fn();
@@ -148,6 +222,9 @@ describe("ViewsKanban", () => {
     );
     expect(screen.getByText("Event")).toBeInTheDocument();
     expect(screen.getAllByText("Task").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Drag Team offsite" })
+    ).toBeInTheDocument();
   });
 
   it("shows the parent crumb and opens a card on click", async () => {
@@ -157,7 +234,7 @@ describe("ViewsKanban", () => {
     expect(screen.getByTestId("kanban-card-task-progress")).toHaveTextContent(
       "Team offsite"
     );
-    await user.click(screen.getByText("Book venue"));
+    await user.click(screen.getByRole("button", { name: "Open Book venue" }));
 
     expect(onCardOpen).toHaveBeenCalledWith("task-progress");
   });
@@ -188,7 +265,10 @@ describe("ViewsKanban", () => {
       refetch: vi.fn(),
     });
     const { rerender } = renderKanban();
-    expect(screen.getByTestId("views-grid-loading")).toBeInTheDocument();
+    expect(screen.getByTestId("views-grid-loading")).toHaveAttribute(
+      "aria-label",
+      "Loading Kanban board"
+    );
 
     useViewsGridDataMock.mockReturnValue({
       data: undefined,

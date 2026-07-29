@@ -44,7 +44,7 @@ function createWrapper(queryClient: QueryClient) {
 function createQueryClient() {
   return new QueryClient({
     defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
+      queries: { retry: false, gcTime: 60_000 },
       mutations: { retry: false },
     },
   });
@@ -140,36 +140,104 @@ describe("useViewsKanbanMutation", () => {
     });
   });
 
-  it("restores its optimistic grid row and reports an error when PATCH fails", async () => {
+  it("optimistically updates the grid and restores the row when PATCH fails", async () => {
     const queryClient = createQueryClient();
-    queryClient.setQueryData(queryKeys.views.grid(null), [row]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        json: async () => ({ error: { message: "Move rejected" } }),
-      })
+    const queryKey = queryKeys.views.grid(null);
+    queryClient.setQueryData(queryKey, [row]);
+    let rejectFetch!: (error: Error) => void;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<never>((_, reject) => {
+          rejectFetch = reject;
+        })
     );
+    vi.stubGlobal("fetch", fetchMock);
     const { result } = renderHook(() => useViewsKanbanMutation(null), {
       wrapper: createWrapper(queryClient),
     });
 
-    await act(async () => {
-      await expect(
-        result.current.mutateAsync({
-          id: row.id,
-          type: "task",
-          fromStatus: "todo",
-          toStatus: "done",
-          metadata: row.metadata,
-        })
-      ).rejects.toThrow("Move rejected");
+    let mutationPromise!: Promise<void>;
+    act(() => {
+      mutationPromise = result.current.mutateAsync({
+        id: row.id,
+        type: "task",
+        fromStatus: "todo",
+        toStatus: "done",
+        metadata: row.metadata,
+      });
     });
 
-    expect(
-      queryClient.getQueryData<GridRow[]>(queryKeys.views.grid(null))
-    ).toEqual([row]);
+    await waitFor(() => {
+      expect(queryClient.getQueryData<GridRow[]>(queryKey)).toEqual([
+        {
+          ...row,
+          status: "done",
+          metadata: { ...row.metadata, status: "done" },
+        },
+      ]);
+    });
+
+    rejectFetch(new Error("Move rejected"));
+    await act(async () => {
+      await expect(mutationPromise).rejects.toThrow("Move rejected");
+    });
+
+    expect(queryClient.getQueryData<GridRow[]>(queryKey)).toEqual([row]);
     expect(toastError).toHaveBeenCalledWith("Move rejected");
     expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("rolls back on the captured project cache after the hook switches projects", async () => {
+    const queryClient = createQueryClient();
+    const projectAKey = queryKeys.views.grid("proj-a");
+    const projectBKey = queryKeys.views.grid("proj-b");
+    const projectBRow = { ...row, id: "task-b", title: "Project B task" };
+    queryClient.setQueryData(projectAKey, [row]);
+    queryClient.setQueryData(projectBKey, [projectBRow]);
+    let rejectFetch!: (error: Error) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<never>((_, reject) => {
+            rejectFetch = reject;
+          })
+      )
+    );
+    const { result, rerender } = renderHook(
+      ({ projectId }: { projectId: string }) =>
+        useViewsKanbanMutation(projectId),
+      {
+        initialProps: { projectId: "proj-a" },
+        wrapper: createWrapper(queryClient),
+      }
+    );
+
+    let mutationPromise!: Promise<void>;
+    act(() => {
+      mutationPromise = result.current.mutateAsync({
+        id: row.id,
+        type: "task",
+        fromStatus: "todo",
+        toStatus: "done",
+        metadata: row.metadata,
+      });
+    });
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryData<GridRow[]>(projectAKey)?.[0]?.status
+      ).toBe("done");
+    });
+
+    rerender({ projectId: "proj-b" });
+    rejectFetch(new Error("Move rejected"));
+    await act(async () => {
+      await expect(mutationPromise).rejects.toThrow("Move rejected");
+    });
+
+    expect(queryClient.getQueryData<GridRow[]>(projectAKey)).toEqual([row]);
+    expect(queryClient.getQueryData<GridRow[]>(projectBKey)).toEqual([
+      projectBRow,
+    ]);
   });
 });

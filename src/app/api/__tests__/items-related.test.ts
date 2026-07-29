@@ -124,12 +124,16 @@ describe("/api/items/[id]/related", () => {
     const eventId = createItem({
       type: "event",
       title: "Sprint 1",
-      metadata: JSON.stringify({ start_date: "2025-01-01" }),
+      metadata: JSON.stringify({
+        start_date: "2025-01-01",
+        duration: 60,
+        custom_field: "preserved",
+      }),
     });
     const nestedTaskId = createItem({
       type: "task",
       title: "Nested Task",
-      metadata: JSON.stringify({ status: "todo" }),
+      metadata: JSON.stringify({ status: "todo", custom_field: "preserved" }),
     });
     const orphanTaskId = createItem({
       type: "task",
@@ -162,6 +166,13 @@ describe("/api/items/[id]/related", () => {
     expect(eventItem.parent).toBeNull();
     expect(eventItem.dates.start_date).toBe("2025-01-01");
     expect(typeof eventItem.updated_at).toBe("string");
+    expect(eventItem.metadata).toBe(
+      JSON.stringify({
+        start_date: "2025-01-01",
+        duration: 60,
+        custom_field: "preserved",
+      })
+    );
     expect(eventItem.updated_at.length).toBeGreaterThan(0);
 
     // Nested task has event parent hint
@@ -177,6 +188,9 @@ describe("/api/items/[id]/related", () => {
       type: "event",
     });
     expect(nested.link_type).toBe("happened_during");
+    expect(nested.metadata).toBe(
+      JSON.stringify({ status: "todo", custom_field: "preserved" })
+    );
 
     // Orphan task has null parent
     const orphan = json.items.find(

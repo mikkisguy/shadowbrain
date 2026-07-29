@@ -210,6 +210,10 @@ Cookie: sb_session=...
 
 Get related items for a project board view.
 
+Each related item includes `metadata`, the raw JSON string stored on the
+underlying content item, so clients can preserve unknown fields when issuing
+merge-safe updates.
+
 ### Query Parameters
 
 | Parameter         | Type   | Description              |
@@ -236,6 +240,7 @@ Cookie: sb_session=...
       "title": "Sprint 1",
       "status": "done",
       "dates": { "start_date": null, "end_date": null, "due_date": null },
+      "metadata": "{\"status\":\"done\",\"duration\":60}",
       "tags": ["sprint"],
       "link_type": "happened_during",
       "parent": null,
@@ -251,6 +256,7 @@ Cookie: sb_session=...
         "end_date": null,
         "due_date": "2026-08-01T00:00:00.000Z"
       },
+      "metadata": "{\"status\":\"todo\",\"custom_field\":\"value\"}",
       "tags": ["auth"],
       "link_type": "happened_during",
       "parent": { "id": "event-uuid", "title": "Sprint 1", "type": "event" },

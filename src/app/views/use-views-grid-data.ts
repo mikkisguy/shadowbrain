@@ -20,6 +20,7 @@ interface RelatedItemPayload {
     end_date: string | null;
     due_date: string | null;
   };
+  metadata: string | null;
   tags: string[];
   parent: { id: string; title: string | null; type: string } | null;
   updated_at: string;
@@ -40,6 +41,9 @@ interface ListItemPayload {
 
 interface ListResponse {
   items: ListItemPayload[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 function isGridType(type: string): type is GridRowType {
@@ -85,6 +89,9 @@ export function mapRelatedItemToGridRow(
 
   const startDate = item.dates.start_date;
   const dueDate = item.dates.due_date;
+  const metadata = item.metadata
+    ? parseMetadata(item.metadata)
+    : metadataFromRelated(item);
 
   return {
     id: item.id,
@@ -96,7 +103,7 @@ export function mapRelatedItemToGridRow(
     parent: item.parent,
     tags: item.tags,
     updatedAt: item.updated_at,
-    metadata: metadataFromRelated(item),
+    metadata,
   };
 }
 
@@ -155,28 +162,44 @@ async function fetchProjectGridRows(
   return mapRelatedItemsToGridRows(json.items);
 }
 
-async function fetchGlobalGridRows(signal?: AbortSignal): Promise<GridRow[]> {
-  const [eventsRes, tasksRes] = await Promise.all([
-    fetch("/api/items?type=event&limit=100", {
-      credentials: "same-origin",
-      signal,
-    }),
-    fetch("/api/items?type=task&limit=100", {
-      credentials: "same-origin",
-      signal,
-    }),
+export async function fetchAllItemsByType(
+  type: GridRowType,
+  signal?: AbortSignal
+): Promise<ListItemPayload[]> {
+  const limit = 100;
+  const items: ListItemPayload[] = [];
+  let page = 1;
+
+  while (true) {
+    const res = await fetch(
+      `/api/items?type=${encodeURIComponent(type)}&limit=${limit}&page=${page}`,
+      {
+        credentials: "same-origin",
+        signal,
+      }
+    );
+    if (!res.ok) {
+      throw new Error("Failed to load grid items");
+    }
+
+    const json = (await res.json()) as ListResponse;
+    items.push(...json.items);
+    if (items.length >= json.total || json.items.length === 0) {
+      return items;
+    }
+    page += 1;
+  }
+}
+
+export async function fetchGlobalGridRows(
+  signal?: AbortSignal
+): Promise<GridRow[]> {
+  const [events, tasks] = await Promise.all([
+    fetchAllItemsByType("event", signal),
+    fetchAllItemsByType("task", signal),
   ]);
 
-  if (!eventsRes.ok || !tasksRes.ok) {
-    throw new Error("Failed to load grid items");
-  }
-
-  const [eventsJson, tasksJson] = (await Promise.all([
-    eventsRes.json(),
-    tasksRes.json(),
-  ])) as [ListResponse, ListResponse];
-
-  return mapListItemsToGridRows([...eventsJson.items, ...tasksJson.items]);
+  return mapListItemsToGridRows([...events, ...tasks]);
 }
 
 export function useViewsGridData(projectId: string | null) {

@@ -4,14 +4,18 @@ import {
   DndContext,
   KeyboardSensor,
   PointerSensor,
+  defaultKeyboardCoordinateGetter,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
+  type Announcements,
   type DragEndEvent,
+  type KeyboardCoordinateGetter,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { useMemo, useRef, useState, type MutableRefObject } from "react";
+import { GripVertical } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { ContentTypeLabel } from "@/components/content-type-label";
 import { Button } from "@/components/ui/button";
@@ -66,43 +70,198 @@ function formatKeyDate(value: string): string | null {
     : compactDateFormatter.format(date);
 }
 
+export type KanbanMovePlan = {
+  id: string;
+  type: "event" | "task";
+  fromStatus: WorkflowStatusValue;
+  toStatus: WorkflowStatusValue;
+  metadata: GridRow["metadata"];
+};
+
+export function planKanbanMove({
+  activeId,
+  overId,
+  rows,
+}: {
+  activeId: string;
+  overId?: string | null;
+  rows: GridRow[];
+}): KanbanMovePlan | null {
+  if (overId == null) return null;
+
+  const row = rows.find((candidate) => candidate.id === activeId);
+  if (!row || (row.type !== "event" && row.type !== "task")) return null;
+
+  const toStatus = WORKFLOW_STATUS_OPTIONS.some(
+    (option) => option.value === overId
+  )
+    ? (overId as WorkflowStatusValue)
+    : null;
+  if (!toStatus) return null;
+
+  const fromStatus = parseWorkflowStatus(JSON.stringify(row.metadata));
+  if (fromStatus === toStatus) return null;
+
+  return {
+    id: row.id,
+    type: row.type,
+    fromStatus,
+    toStatus,
+    metadata: row.metadata,
+  };
+}
+
+export function executeKanbanMove({
+  activeId,
+  overId,
+  rows,
+  moveCard,
+}: {
+  activeId: string;
+  overId?: string | null;
+  rows: GridRow[];
+  moveCard: (plan: KanbanMovePlan) => void;
+}) {
+  const plan = planKanbanMove({ activeId, overId, rows });
+  if (plan) moveCard(plan);
+}
+
+function createKanbanAnnouncements(rows: GridRow[]): Announcements {
+  const getRow = (activeId: string) => rows.find((row) => row.id === activeId);
+  const getTitle = (row: GridRow | undefined) =>
+    row?.title?.trim() || "Untitled";
+  const getStatusLabel = (status: WorkflowStatusValue) =>
+    WORKFLOW_STATUS_OPTIONS.find((option) => option.value === status)?.label ??
+    status;
+  const getOverLabel = (over: { id: string | number } | null) => {
+    if (!over) return null;
+    return WORKFLOW_STATUS_OPTIONS.find(
+      (option) => option.value === String(over.id)
+    )?.label;
+  };
+
+  return {
+    onDragStart({ active }) {
+      const row = getRow(String(active.id));
+      if (!row) return;
+      const status = parseWorkflowStatus(JSON.stringify(row.metadata));
+      return `Picked up ${getTitle(row)} in ${getStatusLabel(status)}.`;
+    },
+    onDragOver({ active, over }) {
+      const row = getRow(String(active.id));
+      const status = getOverLabel(over);
+      if (!row || !status) return;
+      return `${getTitle(row)} over ${status}.`;
+    },
+    onDragEnd({ active, over }) {
+      const row = getRow(String(active.id));
+      const status = getOverLabel(over);
+      if (!row) return;
+      return status
+        ? `Dropped ${getTitle(row)} in ${status}.`
+        : `Dropped ${getTitle(row)}.`;
+    },
+    onDragCancel({ active }) {
+      const row = getRow(String(active.id));
+      return row ? `Cancelled dragging ${getTitle(row)}.` : undefined;
+    },
+  };
+}
+
+function createKanbanKeyboardCoordinateGetter(
+  rows: GridRow[]
+): KeyboardCoordinateGetter {
+  return (event, { active, currentCoordinates, context }) => {
+    const isLeft = event.code === "ArrowLeft" || event.key === "ArrowLeft";
+    const isRight = event.code === "ArrowRight" || event.key === "ArrowRight";
+    if (!isLeft && !isRight) {
+      return defaultKeyboardCoordinateGetter(event, {
+        active,
+        currentCoordinates,
+        context,
+      });
+    }
+
+    const row = rows.find((candidate) => candidate.id === String(active));
+    if (!row) return currentCoordinates;
+    const overStatus =
+      context.over &&
+      WORKFLOW_STATUS_OPTIONS.some(
+        (option) => option.value === context.over?.id
+      )
+        ? (context.over.id as WorkflowStatusValue)
+        : null;
+    const currentStatus =
+      overStatus ?? parseWorkflowStatus(JSON.stringify(row.metadata));
+    const currentIndex = WORKFLOW_STATUS_OPTIONS.findIndex(
+      (option) => option.value === currentStatus
+    );
+    const direction = isRight ? 1 : -1;
+    const target = WORKFLOW_STATUS_OPTIONS[currentIndex + direction];
+    if (!target) return currentCoordinates;
+
+    const rect = context.droppableRects.get(target.value);
+    if (!rect) return currentCoordinates;
+
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
+  };
+}
+
 function KanbanCard({
   row,
   onOpen,
-  suppressOpenRef,
 }: {
   row: GridRow;
   onOpen: (id: string) => void;
-  suppressOpenRef: MutableRefObject<boolean>;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({
-      id: row.id,
-      data: { row },
-    });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    isDragging,
+  } = useDraggable({
+    id: row.id,
+    data: { row },
+  });
   const keyDate = row.startOrDue ? formatKeyDate(row.startOrDue) : null;
+  const title = row.title?.trim() || "Untitled";
 
   return (
     <article
       ref={setNodeRef}
-      {...attributes}
-      {...listeners}
       data-testid={`kanban-card-${row.id}`}
       className={cn(
-        "border-border bg-surface-elevated hover:border-foreground/30 cursor-grab rounded-sm border p-3 shadow-sm transition-colors active:cursor-grabbing",
+        "border-border bg-surface-elevated hover:border-foreground/30 rounded-sm border p-3 shadow-sm transition-colors",
         isDragging && "opacity-40"
       )}
       style={{ transform: CSS.Translate.toString(transform) }}
-      onClick={() => {
-        if (!suppressOpenRef.current) onOpen(row.id);
-      }}
     >
-      <div className="text-muted-foreground flex items-center gap-2 font-mono text-[0.65rem] font-medium tracking-[0.12em] uppercase">
+      <div className="text-muted-foreground flex items-center justify-between gap-2 font-mono text-[0.65rem] font-medium tracking-[0.12em] uppercase">
         <ContentTypeLabel type={row.type} />
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          aria-label={`Drag ${title}`}
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring size-8 touch-none rounded-sm p-1 focus-visible:ring-2 focus-visible:outline-none"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical aria-hidden="true" size={14} />
+        </button>
       </div>
-      <p className="text-foreground mt-2 line-clamp-2 font-sans text-sm leading-snug font-medium break-words">
-        {row.title?.trim() || "Untitled"}
-      </p>
+      <button
+        type="button"
+        className="text-foreground focus-visible:ring-ring mt-2 block w-full rounded-sm text-left font-sans text-sm leading-snug font-medium break-words focus-visible:ring-2 focus-visible:outline-none"
+        aria-label={`Open ${title}`}
+        onClick={() => onOpen(row.id)}
+      >
+        {title}
+      </button>
       {(row.parent || keyDate) && (
         <div className="text-muted-foreground mt-3 flex min-w-0 items-center gap-2 font-sans text-xs">
           {row.parent && (
@@ -128,7 +287,6 @@ function KanbanColumn({
   label,
   rows,
   onCardOpen,
-  suppressOpenRef,
   doneExpanded,
   onDoneToggle,
 }: {
@@ -136,7 +294,6 @@ function KanbanColumn({
   label: string;
   rows: GridRow[];
   onCardOpen: (id: string) => void;
-  suppressOpenRef: MutableRefObject<boolean>;
   doneExpanded: boolean;
   onDoneToggle: () => void;
 }) {
@@ -172,12 +329,7 @@ function KanbanColumn({
         )}
       >
         {visibleRows.map((row) => (
-          <KanbanCard
-            key={row.id}
-            row={row}
-            onOpen={onCardOpen}
-            suppressOpenRef={suppressOpenRef}
-          />
+          <KanbanCard key={row.id} row={row} onOpen={onCardOpen} />
         ))}
       </div>
       {isCollapsibleDone && (
@@ -206,59 +358,47 @@ export function ViewsKanban({ projectId, onCardOpen }: ViewsKanbanProps) {
     useViewsGridData(projectId);
   const { moveCard } = useViewsKanbanMutation(projectId);
   const [doneExpanded, setDoneExpanded] = useState(false);
-  const suppressOpenRef = useRef(false);
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor)
-  );
   const rows = useMemo(() => data ?? [], [data]);
   const groups = useMemo(() => groupRowsByStatus(rows), [rows]);
-
-  function resolveDropStatus(overId: string): WorkflowStatusValue | null {
-    if (WORKFLOW_STATUS_OPTIONS.some((option) => option.value === overId)) {
-      return overId as WorkflowStatusValue;
-    }
-    const overRow = rows.find((candidate) => candidate.id === overId);
-    if (!overRow) return null;
-    return parseWorkflowStatus(JSON.stringify(overRow.metadata));
-  }
+  const keyboardCoordinateGetter = useMemo(
+    () => createKanbanKeyboardCoordinateGetter(rows),
+    [rows]
+  );
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: keyboardCoordinateGetter })
+  );
+  const announcements = useMemo(() => createKanbanAnnouncements(rows), [rows]);
 
   function handleDragEnd({ active, over }: DragEndEvent) {
-    suppressOpenRef.current = true;
-    window.setTimeout(() => {
-      suppressOpenRef.current = false;
-    }, 0);
-
-    const row = active.data.current?.row as GridRow | undefined;
-    if (!row || over == null || (row.type !== "event" && row.type !== "task")) {
-      return;
-    }
-
-    const toStatus = resolveDropStatus(String(over.id));
-    if (!toStatus) return;
-
-    moveCard({
-      id: row.id,
-      type: row.type,
-      fromStatus: parseWorkflowStatus(JSON.stringify(row.metadata)),
-      toStatus,
-      metadata: row.metadata,
+    executeKanbanMove({
+      activeId: String(active.id),
+      overId: over == null ? null : String(over.id),
+      rows,
+      moveCard,
     });
   }
 
-  if (isPending) return <ViewsGridLoading />;
+  if (isPending) return <ViewsGridLoading noun="Kanban board" />;
   if (isError) {
     return (
       <ViewsGridError
         error={error instanceof Error ? error.message : null}
         onRetry={() => void refetch()}
+        noun="Kanban board"
       />
     );
   }
-  if (rows.length === 0) return <ViewsGridEmpty scoped={projectId != null} />;
+  if (rows.length === 0) {
+    return <ViewsGridEmpty scoped={projectId != null} noun="Kanban board" />;
+  }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      onDragEnd={handleDragEnd}
+      accessibility={{ announcements }}
+    >
       <div data-testid="views-kanban" className="grid gap-4 lg:grid-cols-3">
         {WORKFLOW_STATUS_OPTIONS.map(({ value, label }) => (
           <KanbanColumn
@@ -267,7 +407,6 @@ export function ViewsKanban({ projectId, onCardOpen }: ViewsKanbanProps) {
             label={label}
             rows={groups[value]}
             onCardOpen={onCardOpen}
-            suppressOpenRef={suppressOpenRef}
             doneExpanded={doneExpanded}
             onDoneToggle={() => setDoneExpanded((expanded) => !expanded)}
           />

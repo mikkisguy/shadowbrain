@@ -17,8 +17,11 @@ export interface MoveKanbanCardVariables {
   metadata: Record<string, unknown>;
 }
 
+type KanbanGridQueryKey = readonly ["views", "grid", string];
+
 interface KanbanMutationContext {
-  previousRows: GridRow[] | undefined;
+  queryKey: KanbanGridQueryKey;
+  previousRow: GridRow | undefined;
 }
 
 async function patchKanbanCard({
@@ -62,13 +65,14 @@ export function useViewsKanbanMutation(projectId: string | null) {
         ? Promise.resolve()
         : patchKanbanCard(variables),
     onMutate: async (variables) => {
+      const queryKey = queryKeys.views.grid(projectId);
       if (variables.fromStatus === variables.toStatus) {
-        return { previousRows: undefined };
+        return { queryKey, previousRow: undefined };
       }
 
-      const queryKey = queryKeys.views.grid(projectId);
       await queryClient.cancelQueries({ queryKey });
-      const previousRows = queryClient.getQueryData<GridRow[]>(queryKey);
+      const rows = queryClient.getQueryData<GridRow[]>(queryKey);
+      const previousRow = rows?.find((row) => row.id === variables.id);
 
       queryClient.setQueryData<GridRow[]>(queryKey, (rows) =>
         rows?.map((row) =>
@@ -84,13 +88,17 @@ export function useViewsKanbanMutation(projectId: string | null) {
         )
       );
 
-      return { previousRows };
+      return { queryKey, previousRow };
     },
     onError: (error, variables, context) => {
-      if (variables.fromStatus !== variables.toStatus) {
-        queryClient.setQueryData(
-          queryKeys.views.grid(projectId),
-          context?.previousRows
+      if (variables.fromStatus !== variables.toStatus && context?.previousRow) {
+        queryClient.setQueryData<GridRow[]>(context.queryKey, (rows) =>
+          rows?.map((row) =>
+            row.id === context.previousRow?.id &&
+            row.status === variables.toStatus
+              ? context.previousRow
+              : row
+          )
         );
       }
       toast.error(error.message ?? "Failed to update item");

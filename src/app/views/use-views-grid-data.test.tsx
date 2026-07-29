@@ -1,13 +1,19 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  fetchGlobalGridRows,
   mapListItemToGridRow,
   mapListItemsToGridRows,
   mapRelatedItemToGridRow,
   mapRelatedItemsToGridRows,
 } from "./use-views-grid-data";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("mapRelatedItemToGridRow", () => {
   it("maps event and task related items into grid rows", () => {
@@ -21,6 +27,13 @@ describe("mapRelatedItemToGridRow", () => {
         end_date: "2025-01-02T10:00:00.000Z",
         due_date: null,
       },
+      metadata: JSON.stringify({
+        status: "in_progress",
+        start_date: "2025-01-01T10:00:00.000Z",
+        end_date: "2025-01-02T10:00:00.000Z",
+        duration: 2,
+        custom_field: "preserved",
+      }),
       tags: ["work"],
       parent: null,
       updated_at: "2025-01-03T12:00:00.000Z",
@@ -40,6 +53,8 @@ describe("mapRelatedItemToGridRow", () => {
         status: "in_progress",
         start_date: "2025-01-01T10:00:00.000Z",
         end_date: "2025-01-02T10:00:00.000Z",
+        duration: 2,
+        custom_field: "preserved",
       },
     });
 
@@ -53,6 +68,7 @@ describe("mapRelatedItemToGridRow", () => {
         end_date: null,
         due_date: "2025-02-05T10:00:00.000Z",
       },
+      metadata: null,
       tags: [],
       parent: { id: "e1", title: "Sprint", type: "event" },
       updated_at: "2025-02-02T08:00:00.000Z",
@@ -60,6 +76,11 @@ describe("mapRelatedItemToGridRow", () => {
 
     expect(task?.startOrDue).toBe("2025-02-05T10:00:00.000Z");
     expect(task?.parent?.title).toBe("Sprint");
+    expect(task?.metadata).toEqual({
+      status: "todo",
+      start_date: "2025-02-01T10:00:00.000Z",
+      due_date: "2025-02-05T10:00:00.000Z",
+    });
   });
 
   it("filters out non event/task related items", () => {
@@ -75,6 +96,7 @@ describe("mapRelatedItemToGridRow", () => {
             end_date: null,
             due_date: null,
           },
+          metadata: null,
           tags: [],
           parent: null,
           updated_at: "2025-01-01T00:00:00.000Z",
@@ -83,12 +105,13 @@ describe("mapRelatedItemToGridRow", () => {
           id: "t1",
           type: "task",
           title: "Task",
-          status: "done",
+          status: null,
           dates: {
             start_date: null,
             end_date: null,
             due_date: "2025-03-01T00:00:00.000Z",
           },
+          metadata: null,
           tags: [],
           parent: null,
           updated_at: "2025-03-02T00:00:00.000Z",
@@ -147,5 +170,59 @@ describe("mapListItemToGridRow", () => {
     ]);
 
     expect(rows.map((row) => row.id)).toEqual(["e1", "t1"]);
+  });
+});
+
+describe("fetchGlobalGridRows", () => {
+  it("loads every page when a type has more than 100 items", async () => {
+    const fetchMock = vi.fn(async (input: string) => {
+      const url = new URL(input, "http://localhost");
+      const type = url.searchParams.get("type");
+      const page = Number(url.searchParams.get("page"));
+
+      if (type === "event") {
+        const items =
+          page === 1
+            ? Array.from({ length: 100 }, (_, index) => ({
+                id: `event-${index}`,
+                type: "event",
+                title: `Event ${index}`,
+                metadata: JSON.stringify({ duration: index }),
+                tags: [],
+                updated_at: "2025-01-01T00:00:00.000Z",
+              }))
+            : [
+                {
+                  id: "event-100",
+                  type: "event",
+                  title: "Event 100",
+                  metadata: JSON.stringify({ custom: "preserved" }),
+                  tags: [],
+                  updated_at: "2025-01-01T00:00:00.000Z",
+                },
+              ];
+        return {
+          ok: true,
+          json: async () => ({ items, total: 101, page, limit: 100 }),
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ items: [], total: 0, page, limit: 100 }),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rows = await fetchGlobalGridRows();
+
+    expect(rows).toHaveLength(101);
+    expect(rows[100]).toMatchObject({
+      id: "event-100",
+      metadata: { custom: "preserved" },
+    });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toContain(
+      "/api/items?type=event&limit=100&page=2"
+    );
   });
 });
