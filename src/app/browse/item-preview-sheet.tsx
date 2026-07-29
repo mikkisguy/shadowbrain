@@ -270,7 +270,7 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                   <img
                     src={`/api/images/${item.image_path.replace(/^\//, "")}`}
                     alt={item.title ?? ""}
-                    className="h-auto max-h-40 max-w-full object-cover"
+                    className="h-auto max-w-full"
                   />
                 </div>
               ) : null}
