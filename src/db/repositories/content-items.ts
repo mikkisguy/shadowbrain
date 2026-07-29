@@ -73,6 +73,8 @@ export interface RelatedItem {
   link_type: string;
   /** For nested tasks, the encapsulating event. `null` for direct related items. */
   parent: { id: string; title: string | null; type: string } | null;
+  /** Last-updated timestamp from the underlying `content_items` row. */
+  updated_at: string;
 }
 
 export const contentItems = {
@@ -560,6 +562,7 @@ export const contentItems = {
         tags: tagsMap[id] ?? [],
         link_type: linkType,
         parent,
+        updated_at: row?.updated_at ?? "",
       });
     }
 

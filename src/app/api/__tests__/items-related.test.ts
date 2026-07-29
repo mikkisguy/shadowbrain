@@ -161,6 +161,8 @@ describe("/api/items/[id]/related", () => {
     expect(eventItem.type).toBe("event");
     expect(eventItem.parent).toBeNull();
     expect(eventItem.dates.start_date).toBe("2025-01-01");
+    expect(typeof eventItem.updated_at).toBe("string");
+    expect(eventItem.updated_at.length).toBeGreaterThan(0);
 
     // Nested task has event parent hint
     const nested = json.items.find(

@@ -30,15 +30,9 @@ export function parseBookmarkMeta(
     siteName: typeof parsed.site_name === "string" ? parsed.site_name : null,
   };
 }
-const WORKFLOW_STATUS_LABELS: Record<string, string> = {
-  todo: "To Do",
-  in_progress: "In Progress",
-  done: "Done",
-};
+import { workflowStatusLabel } from "@/lib/workflow-status";
 
-export function workflowStatusLabel(value: string): string {
-  return WORKFLOW_STATUS_LABELS[value] ?? value;
-}
+export { workflowStatusLabel };
 
 export function extractMetadataFields(
   type: string,

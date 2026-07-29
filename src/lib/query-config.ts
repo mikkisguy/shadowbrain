@@ -33,6 +33,7 @@ export const staleTimes = {
   systemInfo: 60_000,
   tags: 30_000,
   search: 60_000,
+  views: 5_000,
 } as const;
 
 export const queryKeys = {
@@ -88,5 +89,17 @@ export const queryKeys = {
   apiTokens: {
     all: ["api-tokens"] as const,
     list: ["api-tokens", "list"] as const,
+  },
+
+  /**
+   * Views page queries.
+   * - `all`: invalidates all views queries
+   * - `grid`: event/task grid for a project (null = global)
+   */
+  views: {
+    all: ["views"] as const,
+    grid: (projectId: string | null) =>
+      ["views", "grid", projectId ?? "global"] as const,
+    projects: (q: string) => ["views", "projects", q] as const,
   },
 } as const;

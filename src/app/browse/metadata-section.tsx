@@ -7,14 +7,20 @@ import { formatAbsolute } from "@/lib/dates";
 export function MetadataSection({
   type,
   metadata,
+  excludeLabels,
 }: {
   type: string;
   metadata: string | null;
+  excludeLabels?: string[];
 }) {
-  const fields = useMemo(
-    () => extractMetadataFields(type, metadata, formatAbsolute),
-    [type, metadata]
-  );
+  const fields = useMemo(() => {
+    const extracted = extractMetadataFields(type, metadata, formatAbsolute);
+    if (!extracted) return null;
+    if (!excludeLabels?.length) return extracted;
+    const excluded = new Set(excludeLabels);
+    const filtered = extracted.filter((field) => !excluded.has(field.label));
+    return filtered.length > 0 ? filtered : null;
+  }, [type, metadata, excludeLabels]);
 
   if (!fields) return null;
 

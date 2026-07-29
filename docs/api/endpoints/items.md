@@ -238,7 +238,8 @@ Cookie: sb_session=...
       "dates": { "start_date": null, "end_date": null, "due_date": null },
       "tags": ["sprint"],
       "link_type": "happened_during",
-      "parent": null
+      "parent": null,
+      "updated_at": "2026-07-01T12:00:00.000Z"
     },
     {
       "id": "task-uuid",
@@ -252,7 +253,8 @@ Cookie: sb_session=...
       },
       "tags": ["auth"],
       "link_type": "happened_during",
-      "parent": { "id": "event-uuid", "title": "Sprint 1", "type": "event" }
+      "parent": { "id": "event-uuid", "title": "Sprint 1", "type": "event" },
+      "updated_at": "2026-07-01T12:00:00.000Z"
     }
   ]
 }

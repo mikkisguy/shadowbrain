@@ -3,18 +3,19 @@
 /**
  * Item preview sheet.
  *
- * A right-side Sheet panel that shows an item's full detail without
+ * A right-side Sheet panel that shows a compact peek of an item without
  * navigating away from the browse feed. Opened by a regular (no modifier)
  * click on a card; the URL picks up `?item=<id>` for shareable deep links.
  *
  * Layout (top to bottom):
- *   1. Cover image banner (non-image types) or inline image (image type)
- *   2. Header: type badge, title, dates, source
- *   3. Scrollable body: markdown content + metadata section
- *   4. Bottom: tags, outbound links, backlinks
+ *   1. Header actions + parent crumb + type badge + title
+ *   2. Workflow status strip (task/event only)
+ *   3. Dates / type-specific metadata (status omitted when strip is shown)
+ *   4. Truncated content preview
+ *   5. Tags, outbound links, backlinks
  */
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import Link from "next/link";
 import { ChevronRight, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -23,8 +24,15 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
 import { formatAbsolute } from "@/lib/dates";
-import { parseBookmarkMeta } from "@/lib/metadata-fields";
+import {
+  extractMetadataFields,
+  parseBookmarkMeta,
+} from "@/lib/metadata-fields";
 import { queryKeys } from "@/lib/query-config";
+import {
+  parseWorkflowStatus,
+  type WorkflowStatusValue,
+} from "@/lib/workflow-status";
 import {
   Sheet,
   SheetContent,
@@ -32,15 +40,76 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { MarkdownContent } from "@/app/item/[id]/markdown-content";
+import { WorkflowStatusStrip } from "@/components/workflow-status-strip";
 import { EditDialog } from "@/components/edit-dialog/edit-dialog";
 import { useEditDialog } from "@/components/edit-dialog/use-edit-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-dialog/delete-confirmation-dialog";
 import { useDeleteDialog } from "@/components/delete-dialog/use-delete-dialog";
+import { previewText } from "./content-card";
 import { MetadataSection } from "./metadata-section";
 import { LinkRow } from "./link-list";
 import { SheetSkeleton, SheetError } from "./sheet-states";
 import { useItemDetail } from "./use-item-detail";
+import type { ItemDetailResponse } from "./use-item-detail";
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function invalidateViewsQueries(
+  queryClient: ReturnType<typeof useQueryClient>
+) {
+  queryClient.invalidateQueries({ queryKey: queryKeys.views.all });
+}
+
+function parseMetadataObject(metadata: string | null): Record<string, unknown> {
+  if (!metadata) return {};
+  try {
+    const parsed = JSON.parse(metadata);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    /* fall through */
+  }
+  return {};
+}
+
+interface ParentCrumb {
+  id: string;
+  title: string | null;
+  type: string;
+}
+
+function resolveParentCrumb(
+  links: ItemDetailResponse["links"] | undefined
+): ParentCrumb | null {
+  if (!links) return null;
+
+  const outboundParent = links.outbound.find(
+    (link) =>
+      link.link_type === "happened_during" &&
+      (link.target.type === "event" || link.target.type === "project")
+  );
+  if (outboundParent) {
+    return outboundParent.target;
+  }
+
+  const inboundParent = links.inbound.find(
+    (link) =>
+      link.link_type === "happened_during" &&
+      (link.source.type === "event" || link.source.type === "project")
+  );
+  if (inboundParent) {
+    return inboundParent.source;
+  }
+
+  return null;
+}
+
+function hasWorkflowStatus(type: string): boolean {
+  return type === "task" || type === "event";
+}
 
 /* ------------------------------------------------------------------ */
 /*  Main component                                                     */
@@ -55,16 +124,11 @@ export interface ItemPreviewSheetProps {
 }
 
 export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
-  // Derive `open` from `itemId` — no local toggle state, the parent
-  // controls visibility via the URL param.
   const open = itemId !== null;
 
   const { data, status, handleRetry, refetch } = useItemDetail(itemId);
 
-  // Edit dialog state
   const { open: editOpen, setOpen: setEditOpen } = useEditDialog();
-
-  // Delete dialog state
   const { open: deleteOpen, setOpen: setDeleteOpen } = useDeleteDialog();
   const queryClient = useQueryClient();
 
@@ -82,6 +146,7 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.browse.all });
+      invalidateViewsQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: queryKeys.tags.all });
       toast.success("Item deleted.");
       setDeleteOpen(false);
@@ -89,6 +154,44 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
     },
     onError: (error: Error) => {
       toast.error(error.message ?? "Failed to delete item.");
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async ({
+      id,
+      type,
+      metadata,
+      nextStatus,
+    }: {
+      id: string;
+      type: string;
+      metadata: string | null;
+      nextStatus: WorkflowStatusValue;
+    }) => {
+      const merged = {
+        ...parseMetadataObject(metadata),
+        status: nextStatus,
+      };
+      const res = await fetch(`/api/items/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, metadata: merged }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        const msg: string | undefined = payload?.error?.message;
+        throw new Error(msg ?? "Failed to update status");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.browse.all });
+      invalidateViewsQueries(queryClient);
+      refetch();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message ?? "Failed to update status.");
     },
   });
 
@@ -101,7 +204,6 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
     [onClose]
   );
 
-  // Refresh item data after edit
   const handleEditSaved = useCallback(() => {
     refetch();
   }, [refetch]);
@@ -110,10 +212,44 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
   const tags = data?.tags;
   const links = data?.links;
   const isImageType = item?.type === "image";
+  const showWorkflowStatus = item ? hasWorkflowStatus(item.type) : false;
+  const workflowStatus = item ? parseWorkflowStatus(item.metadata) : "todo";
+  const parentCrumb = useMemo(() => resolveParentCrumb(links), [links]);
 
-  // Parse bookmark metadata for rich display
+  const dateFields = useMemo(() => {
+    if (!item || !hasWorkflowStatus(item.type)) return null;
+    const fields = extractMetadataFields(
+      item.type,
+      item.metadata,
+      formatAbsolute
+    );
+    if (!fields) return null;
+    const dateLabels = new Set(["Start", "End", "Due"]);
+    const filtered = fields.filter(
+      (field) => field.label !== "Status" && dateLabels.has(field.label)
+    );
+    return filtered.length > 0 ? filtered : null;
+  }, [item]);
+
+  const contentPreview = item?.content?.trim()
+    ? previewText(item.content, 280)
+    : null;
+
   const bm =
     item?.type === "bookmark" ? parseBookmarkMeta(item.metadata) : null;
+
+  const handleStatusChange = useCallback(
+    (nextStatus: WorkflowStatusValue) => {
+      if (!item) return;
+      statusMutation.mutate({
+        id: item.id,
+        type: item.type,
+        metadata: item.metadata,
+        nextStatus,
+      });
+    },
+    [item, statusMutation]
+  );
 
   return (
     <>
@@ -131,36 +267,20 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
 
           {status === "success" && item ? (
             <div className="flex h-full flex-col overflow-hidden">
-              {/* Cover image banner (non-image types) */}
-              {!isImageType && item.image_path ? (
-                <div className="shrink-0 overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/api/images/${item.image_path.replace(/^\//, "")}`}
-                    alt=""
-                    className="size-full object-cover"
-                    style={{ height: 160 }}
-                  />
-                </div>
-              ) : null}
-
-              {/* Image-type: show inline in content area */}
               {isImageType && item.image_path ? (
                 <div className="border-border shrink-0 overflow-hidden border-b">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={`/api/images/${item.image_path.replace(/^\//, "")}`}
                     alt={item.title ?? ""}
-                    className="h-auto max-w-full"
+                    className="h-auto max-h-40 max-w-full object-cover"
                   />
                 </div>
               ) : null}
 
-              {/* Scrollable content area */}
-              <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-6">
-                {/* Header */}
+              <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-5">
                 <header className="flex flex-col gap-3">
-                  <div className="mb-4 flex items-center gap-2">
+                  <div className="flex items-center gap-2">
                     <Link
                       href={`/item/${item.id}`}
                       className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1.5 rounded-sm font-sans text-sm transition-colors"
@@ -192,6 +312,35 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
+
+                  {parentCrumb ? (
+                    <nav
+                      aria-label="Parent"
+                      className="text-muted-foreground flex items-center gap-1 font-sans text-xs"
+                    >
+                      <Link
+                        href={`/item/${parentCrumb.id}`}
+                        data-testid="sheet-parent-crumb"
+                        className="hover:text-foreground inline-flex items-center gap-1 transition-colors"
+                      >
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "size-1.5 rounded-full",
+                            typeColorClass(parentCrumb.type)
+                          )}
+                        />
+                        <span className="line-clamp-1">
+                          {parentCrumb.title?.trim() || "Untitled"}
+                        </span>
+                      </Link>
+                      <ChevronRight className="size-3 shrink-0" aria-hidden />
+                      <span className="text-foreground line-clamp-1">
+                        {item.title?.trim() || "Untitled"}
+                      </span>
+                    </nav>
+                  ) : null}
+
                   <span
                     data-testid="sheet-type-badge"
                     className={cn(
@@ -201,50 +350,64 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                   >
                     {typeLabel(item.type)}
                   </span>
+
                   {item.title ? (
-                    <h2 className="text-foreground flex items-center gap-2 font-serif text-2xl font-semibold tracking-[-0.01em] wrap-break-word">
+                    <h2 className="text-foreground font-serif text-2xl font-semibold tracking-[-0.01em] wrap-break-word">
                       {item.title}
                     </h2>
                   ) : null}
-                  <dl className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs">
-                    <div className="flex gap-1.5">
-                      <dt>Created</dt>
-                      <dd className="text-foreground">
-                        {formatAbsolute(item.created_at)}
-                      </dd>
-                    </div>
-                    <div className="flex gap-1.5">
-                      <dt>Updated</dt>
-                      <dd className="text-foreground">
-                        {formatAbsolute(item.updated_at)}
-                      </dd>
-                    </div>
-                    <div className="flex gap-1.5">
-                      <dt>Source</dt>
-                      <dd className="text-foreground">{item.source}</dd>
-                    </div>
-                  </dl>
+
+                  {showWorkflowStatus ? (
+                    <WorkflowStatusStrip
+                      value={workflowStatus}
+                      onChange={handleStatusChange}
+                      disabled={statusMutation.isPending}
+                      data-testid="sheet-workflow-status"
+                    />
+                  ) : null}
+
+                  {dateFields ? (
+                    <dl className="text-muted-foreground flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs">
+                      {dateFields.map((field) => (
+                        <div key={field.label} className="flex gap-1.5">
+                          <dt>{field.label}</dt>
+                          <dd className="text-foreground">{field.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : null}
                 </header>
 
-                {/* Bookmark: og:image preview */}
+                {contentPreview ? (
+                  <p
+                    data-testid="sheet-content-preview"
+                    className="text-muted-foreground line-clamp-4 font-sans text-sm leading-relaxed break-words"
+                  >
+                    {contentPreview}
+                  </p>
+                ) : null}
+
                 {bm?.image ? (
                   <figure className="flex flex-col gap-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(bm.image)}`}
                       alt={item.title ?? ""}
-                      className="border-border h-auto max-w-full rounded-sm border"
+                      className="border-border h-auto max-h-32 max-w-full rounded-sm border object-cover"
                     />
                   </figure>
                 ) : null}
 
-                {/* Markdown body */}
-                <MarkdownContent content={item.content} />
+                {!hasWorkflowStatus(item.type) ? (
+                  <MetadataSection type={item.type} metadata={item.metadata} />
+                ) : (
+                  <MetadataSection
+                    type={item.type}
+                    metadata={item.metadata}
+                    excludeLabels={["Status", "Start", "End", "Due"]}
+                  />
+                )}
 
-                {/* Type-specific metadata */}
-                <MetadataSection type={item.type} metadata={item.metadata} />
-
-                {/* Source URL with favicon */}
                 {item.source_url && item.source_url !== item.content ? (
                   <p className="text-foreground flex items-center gap-2 font-sans text-sm">
                     {bm?.favicon ? (
@@ -259,53 +422,48 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                       href={item.source_url}
                       rel="noopener noreferrer"
                       target="_blank"
-                      className="text-primary break-all hover:underline"
+                      className="text-primary line-clamp-1 break-all hover:underline"
                     >
                       {item.source_url}
                     </a>
                     {bm?.siteName ? (
-                      <span className="text-muted-foreground">
+                      <span className="text-muted-foreground shrink-0">
                         ({bm.siteName})
                       </span>
                     ) : null}
                   </p>
                 ) : null}
+
+                {tags && tags.length > 0 ? (
+                  <section aria-label="Tags">
+                    <h3 className="text-muted-foreground mb-2 font-mono text-xs font-medium tracking-wide uppercase">
+                      Tags
+                    </h3>
+                    <ul className="flex flex-wrap items-center gap-1.5">
+                      {tags.map((tag) => (
+                        <li key={tag.id}>
+                          <Link
+                            href={`/?tag=${encodeURIComponent(tag.name)}`}
+                            className="border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong rounded-sm border px-2 py-0.5 font-mono text-[0.7rem] tracking-wide transition-colors"
+                          >
+                            #{tag.name}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
               </div>
 
-              {/* Sticky bottom section: tags, links, backlinks */}
-              {(tags && tags.length > 0) ||
-              (links && links.outbound.length > 0) ||
+              {(links && links.outbound.length > 0) ||
               (links && links.inbound.length > 0) ? (
                 <div className="border-border bg-background shrink-0 border-t p-4">
                   <div className="flex max-h-64 flex-col gap-3 overflow-y-auto">
-                    {/* Tags */}
-                    {tags && tags.length > 0 ? (
-                      <details className="group [&>summary::-webkit-details-marker]:hidden [&>summary::marker]:hidden">
-                        <summary className="text-muted-foreground hover:text-foreground border-border flex cursor-pointer items-center justify-between border-b pb-2 font-mono text-xs font-medium tracking-wide uppercase transition-colors">
-                          <span>Tags ({tags.length})</span>
-                          <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
-                        </summary>
-                        <ul
-                          aria-label="Tags"
-                          className="mt-3 flex flex-wrap items-center gap-1.5"
-                        >
-                          {tags.map((tag) => (
-                            <li key={tag.id}>
-                              <Link
-                                href={`/?tag=${encodeURIComponent(tag.name)}`}
-                                className="border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong rounded-sm border px-2 py-0.5 font-mono text-[0.7rem] tracking-wide transition-colors"
-                              >
-                                #{tag.name}
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    ) : null}
-
-                    {/* Outbound links */}
                     {links && links.outbound.length > 0 ? (
-                      <details className="group [&>summary::-webkit-details-marker]:hidden [&>summary::marker]:hidden">
+                      <details
+                        open
+                        className="group [&>summary::-webkit-details-marker]:hidden [&>summary::marker]:hidden"
+                      >
                         <summary className="text-muted-foreground hover:text-foreground border-border flex cursor-pointer items-center justify-between border-b pb-2 font-mono text-xs font-medium tracking-wide uppercase transition-colors">
                           <span>Links ({links.outbound.length})</span>
                           <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
@@ -324,9 +482,11 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
                       </details>
                     ) : null}
 
-                    {/* Backlinks */}
                     {links && links.inbound.length > 0 ? (
-                      <details className="group [&>summary::-webkit-details-marker]:hidden [&>summary::marker]:hidden">
+                      <details
+                        open
+                        className="group [&>summary::-webkit-details-marker]:hidden [&>summary::marker]:hidden"
+                      >
                         <summary className="text-muted-foreground hover:text-foreground border-border flex cursor-pointer items-center justify-between border-b pb-2 font-mono text-xs font-medium tracking-wide uppercase transition-colors">
                           <span>Backlinks ({links.inbound.length})</span>
                           <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
@@ -352,7 +512,6 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
         </SheetContent>
       </Sheet>
 
-      {/* Edit dialog rendered outside the sheet to avoid stacking context issues */}
       {data && (
         <EditDialog
           item={data.item}
@@ -363,7 +522,6 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
         />
       )}
 
-      {/* Delete confirmation dialog */}
       {data && (
         <DeleteConfirmationDialog
           open={deleteOpen}
