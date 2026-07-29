@@ -1,4 +1,4 @@
-export const WORKFLOW_STATUS_VALUES = ["todo", "in_progress", "done"] as const;
+const WORKFLOW_STATUS_VALUES = ["todo", "in_progress", "done"] as const;
 
 export type WorkflowStatusValue = (typeof WORKFLOW_STATUS_VALUES)[number];
 
@@ -20,9 +20,7 @@ export function workflowStatusLabel(value: string): string {
   return WORKFLOW_STATUS_ITEMS[value] ?? value;
 }
 
-export function isWorkflowStatusValue(
-  value: unknown
-): value is WorkflowStatusValue {
+function isWorkflowStatusValue(value: unknown): value is WorkflowStatusValue {
   return (
     typeof value === "string" &&
     (WORKFLOW_STATUS_VALUES as readonly string[]).includes(value)
