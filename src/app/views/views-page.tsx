@@ -6,6 +6,7 @@ import { ItemPreviewSheet } from "@/app/browse/item-preview-sheet";
 import { ProjectPicker } from "./project-picker";
 import { useViewsState } from "./use-views-state";
 import { ViewsGrid } from "./views-grid";
+import { ViewsKanban } from "./views-kanban";
 import { ViewsTabs } from "./views-tabs";
 
 function TimelinePlaceholder() {
@@ -23,26 +24,6 @@ function TimelinePlaceholder() {
       <p className="text-muted-foreground font-sans text-sm">
         Timeline view will chart events and tasks over time. Routing and URL
         sync are wired; the visual ships in a follow-up.
-      </p>
-    </section>
-  );
-}
-
-function KanbanPlaceholder() {
-  return (
-    <section
-      data-testid="views-kanban-placeholder"
-      className="border-border bg-surface-elevated flex max-w-2xl flex-col gap-3 rounded-sm border p-6"
-    >
-      <p className="text-accent-cyan font-sans text-xs font-medium tracking-[0.12em] uppercase">
-        Kanban
-      </p>
-      <h2 className="text-foreground font-sans text-lg font-medium">
-        Coming soon
-      </h2>
-      <p className="text-muted-foreground font-sans text-sm">
-        Kanban view will group tasks by status. Routing and URL sync are wired;
-        the board ships in a follow-up.
       </p>
     </section>
   );
@@ -85,7 +66,9 @@ export function ViewsPage() {
           <ViewsGrid projectId={projectId} onRowOpen={setItemId} />
         )}
         {view === "timeline" && <TimelinePlaceholder />}
-        {view === "kanban" && <KanbanPlaceholder />}
+        {view === "kanban" && (
+          <ViewsKanban projectId={projectId} onCardOpen={setItemId} />
+        )}
       </div>
 
       <ItemPreviewSheet itemId={itemId} onClose={clearItem} />
