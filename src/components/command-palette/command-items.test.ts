@@ -7,7 +7,7 @@ import { allItems, pages, searchHaystack, utilities } from "./command-items";
  * palette's "Pages" and "Utilities" groups. These tests pin
  * the contract the spec calls out:
  *
- *   - 6 page entries (Browse, Chat, Graph, Add, Tags, Settings)
+ *   - 7 page entries (Browse, Views, Chat, Graph, Add, Tags, Settings)
  *   - The `/search` route is NOT in the page list (the spec
  *     removes the dedicated search page in favour of the
  *     palette's content search)
@@ -18,9 +18,10 @@ import { allItems, pages, searchHaystack, utilities } from "./command-items";
  */
 
 describe("command-items catalogue", () => {
-  it("exposes exactly 6 page entries in a fixed order", () => {
+  it("exposes exactly 7 page entries in a fixed order", () => {
     expect(pages.map((p) => p.label)).toEqual([
       "Browse",
+      "Views",
       "Chat",
       "Graph",
       "Add",
@@ -63,6 +64,7 @@ describe("command-items catalogue", () => {
     expect(hrefs).toContain("/add");
     expect(hrefs).toContain("/tags");
     expect(hrefs).toContain("/settings");
+    expect(hrefs).toContain("/views");
   });
 });
 

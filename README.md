@@ -5,7 +5,7 @@
 
 # ShadowBrain
 
-[![Version](https://img.shields.io/badge/version-0.42.1-yellow)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.43.1-yellow)](CHANGELOG.md)
 
 </div>
 

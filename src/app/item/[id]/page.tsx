@@ -3,11 +3,9 @@ import { notFound } from "next/navigation";
 import { getDb, contentItems, contentLinks } from "@/db/index";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
 import { formatAbsolute } from "@/lib/dates";
-import {
-  extractMetadataFields,
-  parseBookmarkMeta,
-} from "@/lib/metadata-fields";
+import { parseBookmarkMeta } from "@/lib/metadata-fields";
 
+import { MetadataSection } from "@/app/browse/metadata-section";
 import { CoverBackground } from "./cover-background";
 import { DetailLayout } from "./detail-layout";
 import { ItemEditor } from "./item-editor";
@@ -164,36 +162,7 @@ export default async function ItemDetailPage({
           <MarkdownContent content={item.content} />
 
           {/* Type-specific metadata display (issue #103) */}
-          {(() => {
-            const fields = extractMetadataFields(
-              item.type,
-              item.metadata,
-              formatAbsolute
-            );
-            if (!fields) return null;
-            return (
-              <section
-                className="border-border bg-surface-elevated flex flex-col gap-3 rounded-sm border p-4"
-                aria-label="Metadata"
-              >
-                <h3 className="text-muted-foreground font-mono text-xs font-medium tracking-wide uppercase">
-                  Metadata
-                </h3>
-                <dl className="text-sm">
-                  {fields.map((f) => (
-                    <div key={f.label} className="flex gap-4 py-0.5">
-                      <dt className="text-muted-foreground min-w-20 font-medium">
-                        {f.label}
-                      </dt>
-                      <dd className="text-foreground wrap-break-word">
-                        {f.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </section>
-            );
-          })()}
+          <MetadataSection type={item.type} metadata={item.metadata} />
 
           {/* Source URL with favicon */}
           {item.source_url && item.source_url !== item.content ? (

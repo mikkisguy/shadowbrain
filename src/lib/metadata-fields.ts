@@ -1,6 +1,13 @@
+import {
+  WORKFLOW_STATUS_ITEMS,
+  workflowStatusLabel,
+} from "@/lib/workflow-status";
+
 export type MetadataField = {
   label: string;
   value: string;
+  /** When set, the value renders as an external link. */
+  href?: string;
 };
 
 /** Parsed bookmark metadata for rich display (images, description, site). */
@@ -30,14 +37,40 @@ export function parseBookmarkMeta(
     siteName: typeof parsed.site_name === "string" ? parsed.site_name : null,
   };
 }
-const WORKFLOW_STATUS_LABELS: Record<string, string> = {
-  todo: "To Do",
-  in_progress: "In Progress",
-  done: "Done",
-};
 
-export function workflowStatusLabel(value: string): string {
-  return WORKFLOW_STATUS_LABELS[value] ?? value;
+export { workflowStatusLabel };
+
+/**
+ * Humanize a freeform or workflow status token for display.
+ * Known workflow values use their canonical labels; snake/kebab
+ * tokens become Title Case (`in_progress` → `In Progress`).
+ */
+export function humanizeStatus(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  const known = WORKFLOW_STATUS_ITEMS[trimmed];
+  if (known) return known;
+  return trimmed
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Build an absolute href for a repository field. Accepts full URLs or
+ * bare host paths like `github.com/acme/repo`. Returns undefined when
+ * the value does not look linkable.
+ */
+export function repoHref(repo: string): string | undefined {
+  const trimmed = repo.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  // Bare host / host/path — common for GitHub-style repo fields.
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(\/[\w./-]*)?$/i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return undefined;
 }
 
 export function extractMetadataFields(
@@ -103,11 +136,19 @@ export function extractMetadataFields(
     case "project": {
       const status = parsed.status;
       if (typeof status === "string" && status.trim()) {
-        fields.push({ label: "Status", value: status.trim() });
+        fields.push({
+          label: "Status",
+          value: humanizeStatus(status),
+        });
       }
       const repo = parsed.repo;
       if (typeof repo === "string" && repo.trim()) {
-        fields.push({ label: "Repository", value: repo.trim() });
+        const value = repo.trim();
+        fields.push({
+          label: "Repository",
+          value,
+          href: repoHref(value),
+        });
       }
       const started = parsed.started;
       if (typeof started === "string" && started.trim()) {

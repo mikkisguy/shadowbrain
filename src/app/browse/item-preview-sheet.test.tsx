@@ -26,6 +26,7 @@ function renderWithQuery(ui: React.ReactElement) {
   );
   return {
     ...result,
+    queryClient,
     rerender: (newUi: React.ReactElement) =>
       result.rerender(
         <QueryClientProvider client={queryClient}>{newUi}</QueryClientProvider>
@@ -44,12 +45,10 @@ vi.mock("@/components/ui/sheet", () => ({
     onOpenChange?: (open: boolean) => void;
     children?: React.ReactNode;
   }) => {
-    // When open is false, render nothing (simulating the real Sheet's behaviour).
     if (!open) return null;
     return (
       <div data-testid="sheet-root">
         <div data-testid="sheet-content">{children}</div>
-        {/* Simulate the close button calling onOpenChange(false) */}
         <button
           data-testid="mock-sheet-close"
           onClick={() => onOpenChange?.(false)}
@@ -79,13 +78,6 @@ vi.mock("@/components/ui/sheet", () => ({
   ),
 }));
 
-// Mock MarkdownContent — it's well-tested elsewhere.
-vi.mock("@/app/item/[id]/markdown-content", () => ({
-  MarkdownContent: ({ content }: { content: string }) => (
-    <div data-testid="markdown-content">{content}</div>
-  ),
-}));
-
 import { ItemPreviewSheet } from "./item-preview-sheet";
 
 /* ------------------------------------------------------------------ */
@@ -95,6 +87,8 @@ import { ItemPreviewSheet } from "./item-preview-sheet";
 function createFixture(
   overrides: Record<string, unknown> = {}
 ): Record<string, unknown> {
+  const { item: itemOverrides, links: linksOverrides, ...rest } = overrides;
+
   return {
     item: {
       id: "item-1",
@@ -107,13 +101,13 @@ function createFixture(
       metadata: null,
       created_at: "2026-06-21T12:00:00.000Z",
       updated_at: "2026-06-22T08:30:00.000Z",
-      ...(overrides.item as Record<string, unknown>),
+      ...(itemOverrides as Record<string, unknown> | undefined),
     },
     tags: [
       { id: "tag-1", name: "docker" },
       { id: "tag-2", name: "infra" },
     ],
-    links: {
+    links: linksOverrides ?? {
       outbound: [
         {
           id: "link-1",
@@ -129,7 +123,7 @@ function createFixture(
         },
       ],
     },
-    ...overrides,
+    ...rest,
   };
 }
 
@@ -139,7 +133,6 @@ function createFixture(
 
 describe("ItemPreviewSheet", () => {
   const onClose = vi.fn();
-
   beforeEach(() => {
     onClose.mockReset();
   });
@@ -156,7 +149,6 @@ describe("ItemPreviewSheet", () => {
   });
 
   it("shows a loading skeleton while fetching", () => {
-    // Mock fetch to return a promise that never resolves during this render.
     vi.spyOn(globalThis, "fetch").mockReturnValue(
       new Promise<Response>(() => {
         /* never resolves */
@@ -179,25 +171,21 @@ describe("ItemPreviewSheet", () => {
       expect(screen.getByTestId("sheet-type-badge")).toHaveTextContent("Note");
     });
 
-    // Title — appears in the h2 and in the SheetTitle; use getAllByText
-    // and assert at least one is the rendered h2.
     const titles = screen.getAllByText("Test Note");
     expect(titles.length).toBeGreaterThanOrEqual(1);
-    // Markdown content (mocked)
-    expect(screen.getByTestId("markdown-content")).toHaveTextContent(
+    expect(screen.getByTestId("sheet-content-preview")).toHaveTextContent(
       "Hello **world**!"
     );
-    // Tags
     expect(screen.getByText("#docker")).toBeInTheDocument();
     expect(screen.getByText("#infra")).toBeInTheDocument();
-    // Outbound link
     expect(screen.getByText("Linked Item")).toBeInTheDocument();
-    // Inbound link
     expect(screen.getByText("Backlink Item")).toBeInTheDocument();
-    // Dates
-    expect(screen.getByText(/Jun 21, 2026/)).toBeInTheDocument();
-    // Source
-    expect(screen.getByText("manual")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sheet-workflow-status")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("view-grid")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("view-kanban")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("view-timeline")).not.toBeInTheDocument();
   });
 
   it("renders an 'open full page' button that links to the item detail page", async () => {
@@ -254,7 +242,6 @@ describe("ItemPreviewSheet", () => {
 
   it("renders the retry button on error and refetches on click", async () => {
     const user = userEvent.setup();
-    // First call fails
     vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(
       new Error("Network error")
     );
@@ -265,7 +252,6 @@ describe("ItemPreviewSheet", () => {
       expect(screen.getByTestId("sheet-error")).toBeInTheDocument();
     });
 
-    // Second call succeeds
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve(createFixture()),
@@ -301,10 +287,14 @@ describe("ItemPreviewSheet", () => {
     expect(screen.getByText("sarah@example.com")).toBeInTheDocument();
   });
 
-  it("renders cover image when image_path is set on non-image type", async () => {
+  it("shows the workflow status strip for task items", async () => {
     const fixture = createFixture({
       item: {
-        image_path: "notes/cover.webp",
+        type: "task",
+        metadata: JSON.stringify({
+          status: "in_progress",
+          due_date: "2026-07-01T12:00:00.000Z",
+        }),
       },
     });
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
@@ -315,13 +305,142 @@ describe("ItemPreviewSheet", () => {
     renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
 
     await waitFor(() => {
-      // The cover image has alt="" (presentational), so getByRole("img")
-      // won't find it. Query via container for the src attribute instead.
-      const img = document.querySelector<HTMLImageElement>(
-        'img[src="/api/images/notes/cover.webp"]'
-      );
-      expect(img).not.toBeNull();
+      expect(screen.getByTestId("sheet-workflow-status")).toBeInTheDocument();
     });
+    expect(
+      screen.getByRole("button", { name: /in progress/i })
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/Jul 1, 2026/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Status$/)).not.toBeInTheDocument();
+  });
+
+  it("shows the workflow status strip for event items", async () => {
+    const fixture = createFixture({
+      item: {
+        type: "event",
+        metadata: JSON.stringify({
+          status: "done",
+          start_date: "2026-07-01T09:00:00.000Z",
+        }),
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(fixture),
+    } as Response);
+
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sheet-workflow-status")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /done/i })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+  });
+
+  it("patches merged metadata when workflow status changes", async () => {
+    const user = userEvent.setup();
+    const fixture = createFixture({
+      item: {
+        id: "task-1",
+        type: "task",
+        metadata: JSON.stringify({
+          status: "todo",
+          due_date: "2026-07-01T12:00:00.000Z",
+        }),
+      },
+    });
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(fixture),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ok: true }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ...fixture,
+            item: {
+              ...(fixture.item as Record<string, unknown>),
+              metadata: JSON.stringify({
+                status: "in_progress",
+                due_date: "2026-07-01T12:00:00.000Z",
+              }),
+            },
+          }),
+      } as Response);
+
+    renderWithQuery(<ItemPreviewSheet itemId="task-1" onClose={onClose} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sheet-workflow-status")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("sheet-workflow-status-in_progress"));
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/items/task-1",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({
+            type: "task",
+            metadata: {
+              status: "in_progress",
+              due_date: "2026-07-01T12:00:00.000Z",
+            },
+          }),
+        })
+      );
+    });
+  });
+
+  it("renders a parent crumb from outbound happened_during links", async () => {
+    const fixture = createFixture({
+      item: {
+        type: "task",
+        metadata: JSON.stringify({ status: "todo" }),
+      },
+      links: {
+        outbound: [
+          {
+            id: "link-parent",
+            target: {
+              id: "project-1",
+              title: "Launch Project",
+              type: "project",
+            },
+            link_type: "happened_during",
+          },
+        ],
+        inbound: [],
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(fixture),
+    } as Response);
+
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sheet-parent-crumb")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("sheet-parent-crumb")).toHaveAttribute(
+      "href",
+      "/item/project-1"
+    );
+    expect(screen.getByTestId("sheet-parent-crumb")).toHaveTextContent(
+      "Launch Project"
+    );
   });
 
   it("does not fetch when itemId changes from a value to null", () => {
@@ -335,11 +454,9 @@ describe("ItemPreviewSheet", () => {
     );
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-    // When itemId becomes null, the sheet closes — no new fetch.
     rerender(<ItemPreviewSheet itemId={null} onClose={onClose} />);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-    // Cleanup
     fetchSpy.mockRestore();
   });
 });

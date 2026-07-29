@@ -3,7 +3,7 @@
  *
  * The palette's default view shows two groups:
  *
- *   - **Pages** — the 6 app routes. Routes that are not yet
+ *   - **Pages** — the 7 app routes. Routes that are not yet
  *     built (chat, graph, tags, settings) are listed anyway
  *     because the design spec promises the palette as the
  *     primary navigation; missing pages fall back to a
@@ -56,7 +56,7 @@ const utility = (
   item: Omit<UtilityCommandItem, "kind">
 ): UtilityCommandItem => ({ ...item, kind: "utility" });
 
-/** The 6 app routes, in display order. The list is intentionally
+/** The 7 app routes, in display order. The list is intentionally
  *  fixed so the user can build muscle memory — see the design
  *  spec's "Default view" section. */
 export const pages: PageCommandItem[] = [
@@ -66,6 +66,21 @@ export const pages: PageCommandItem[] = [
     description: "Browse your knowledge base",
     href: "/",
     keywords: ["home", "feed", "all"],
+  }),
+  page({
+    id: "page.views",
+    label: "Views",
+    description: "Grid, timeline, and kanban over events and tasks",
+    href: "/views",
+    keywords: [
+      "views",
+      "grid",
+      "board",
+      "kanban",
+      "timeline",
+      "tasks",
+      "events",
+    ],
   }),
   page({
     id: "page.chat",

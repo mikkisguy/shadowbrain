@@ -26,19 +26,10 @@ import {
 import type { Draft } from "@/lib/add-form/types";
 import { hasTypeSpecificFields } from "@/lib/add-form/types";
 import { cn } from "@/lib/utils";
-
-const WORKFLOW_STATUS_OPTIONS = [
-  { value: "todo", label: "To Do" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "done", label: "Done" },
-] as const;
-
-/** Value → label map for Base UI Select (`items` prop). Without this,
- *  SelectValue renders the raw enum (`in_progress`) instead of the
- *  human label. */
-const WORKFLOW_STATUS_ITEMS: Record<string, string> = Object.fromEntries(
-  WORKFLOW_STATUS_OPTIONS.map((opt) => [opt.value, opt.label])
-);
+import {
+  WORKFLOW_STATUS_ITEMS,
+  WORKFLOW_STATUS_OPTIONS,
+} from "@/lib/workflow-status";
 
 /** Compact label + control stack for Details fields that cannot rely
  *  on placeholders (datetime-local, selects with a selected value). */
