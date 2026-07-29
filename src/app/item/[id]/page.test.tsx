@@ -164,8 +164,8 @@ describe("ItemDetailPage metadata rendering (issue #103)", () => {
     mockItem(
       "project",
       JSON.stringify({
-        status: "active",
-        repo: "https://github.com/example/branchforge",
+        status: "in_progress",
+        repo: "github.com/example/branchforge",
         started: "2026-01-01T09:00:00.000Z",
         goal_end_date: "2026-12-31T18:00:00.000Z",
       })
@@ -174,6 +174,20 @@ describe("ItemDetailPage metadata rendering (issue #103)", () => {
     renderWithQuery(
       await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
     );
+
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("In Progress")).toBeInTheDocument();
+    expect(screen.queryByText("in_progress")).not.toBeInTheDocument();
+
+    const repoLink = screen.getByRole("link", {
+      name: "github.com/example/branchforge",
+    });
+    expect(repoLink).toHaveAttribute(
+      "href",
+      "https://github.com/example/branchforge"
+    );
+    expect(repoLink).toHaveAttribute("target", "_blank");
+    expect(repoLink).toHaveAttribute("rel", "noopener noreferrer");
 
     expect(screen.getByText("Goal end date")).toBeInTheDocument();
     expect(screen.getByText("Dec 31, 2026, 6:00 PM")).toBeInTheDocument();

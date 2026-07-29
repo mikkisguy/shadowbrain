@@ -421,7 +421,10 @@ describe("metadataSummary", () => {
     );
   });
   it("returns the status for a project", () => {
-    expect(metadataSummary("project", { status: "active" })).toBe("active");
+    expect(metadataSummary("project", { status: "active" })).toBe("Active");
+    expect(metadataSummary("project", { status: "in_progress" })).toBe(
+      "In Progress"
+    );
   });
   it("returns status and start_date for an event", () => {
     expect(

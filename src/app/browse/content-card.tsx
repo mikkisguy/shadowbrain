@@ -44,7 +44,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { typeColorClass, typeLabel } from "@/lib/content-types";
 import { parseSnippet } from "@/lib/snippet";
-import { workflowStatusLabel } from "@/lib/metadata-fields";
+import { humanizeStatus, workflowStatusLabel } from "@/lib/metadata-fields";
 import type { BrowseItem } from "./types";
 import { CardImage } from "./card-image";
 import { CardTags } from "./card-tags";
@@ -115,7 +115,9 @@ export function metadataSummary(
     }
     case "project": {
       const status = metadata.status;
-      return typeof status === "string" && status.trim() ? status : null;
+      return typeof status === "string" && status.trim()
+        ? humanizeStatus(status)
+        : null;
     }
     case "event": {
       const status = metadata.status;
