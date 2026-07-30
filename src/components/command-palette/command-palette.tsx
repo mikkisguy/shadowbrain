@@ -57,11 +57,12 @@ export function CommandPalette() {
             // Desktop: a centered modal sized to fit all
             // three groups (Pages, Content, Utilities)
             // comfortably.
-            // Mobile: full-screen. The `md:` breakpoint is
-            // the same one the top nav uses.
+            // Mobile: inset panel with rounded corners so
+            // the dimmed app peeks around the edges. The
+            // `md:` breakpoint matches the top nav.
             "bg-popover text-popover-foreground border-border fixed z-50 flex flex-col overflow-hidden border outline-none",
-            "top-0 right-0 bottom-0 left-0 rounded-none",
-            "md:top-[20%] md:right-auto md:bottom-auto md:left-1/2 md:max-h-[72vh] md:w-[min(40rem,calc(100%-3rem))] md:-translate-x-1/2 md:rounded-lg"
+            "inset-3 rounded-xl",
+            "md:inset-auto md:top-[20%] md:right-auto md:bottom-auto md:left-1/2 md:max-h-[72vh] md:w-[min(40rem,calc(100%-3rem))] md:-translate-x-1/2 md:rounded-lg"
           )}
         >
           <DialogPrimitive.Title className="sr-only">

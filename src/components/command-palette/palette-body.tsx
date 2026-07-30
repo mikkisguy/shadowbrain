@@ -205,9 +205,9 @@ function PaletteBody() {
       </CommandList>
       <div
         data-testid="command-palette-footer"
-        className="border-border text-muted-foreground hidden items-center justify-between gap-4 border-t px-3 py-1.5 font-mono text-[10px] md:flex"
+        className="border-border text-muted-foreground flex items-center justify-end gap-4 border-t px-3 py-1.5 font-mono text-[10px] md:justify-between"
       >
-        <span>
+        <span className="hidden md:inline">
           <kbd className="font-mono">↑</kbd> <kbd className="font-mono">↓</kbd>{" "}
           navigate <kbd className="font-mono">↵</kbd> select{" "}
           <kbd className="font-mono">Esc</kbd> close
