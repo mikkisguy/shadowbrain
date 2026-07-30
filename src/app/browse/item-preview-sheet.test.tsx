@@ -162,6 +162,7 @@ describe("ItemPreviewSheet", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("renders nothing when itemId is null", () => {
@@ -494,6 +495,43 @@ describe("ItemPreviewSheet", () => {
     expect(screen.getByTestId("sheet-parent-crumb")).toHaveTextContent(
       "Launch Project"
     );
+  });
+
+  it("scrolls image and metadata together for image items", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () =>
+        createFixture({
+          item: {
+            type: "image",
+            title: "Tall Portrait",
+            content: "Portrait description",
+            image_path: "/uploads/portrait.jpg",
+          },
+        }),
+    } as Response);
+
+    renderWithQuery(<ItemPreviewSheet itemId="item-1" onClose={onClose} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sheet-type-badge")).toHaveTextContent("Image");
+    });
+
+    const scrollBody = screen.getByTestId("sheet-scroll-body");
+    const image = screen.getByRole("img", { name: "Tall Portrait" });
+    const linksHeading = screen.getByText("Links (1)");
+
+    // Structural contract for unified tall-image scroll:
+    // image + metadata share one overflow-y-auto flex child; links stay pinned.
+    expect(scrollBody).toHaveClass("overflow-y-auto", "min-h-0", "flex-1");
+    expect(scrollBody).toContainElement(image);
+    expect(scrollBody).toContainElement(
+      screen.getByRole("heading", { name: "Tall Portrait" })
+    );
+    expect(scrollBody).toContainElement(
+      screen.getByText("Portrait description")
+    );
+    expect(scrollBody).not.toContainElement(linksHeading);
   });
 
   it("does not fetch when itemId changes from a value to null", () => {

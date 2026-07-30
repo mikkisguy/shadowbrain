@@ -8,11 +8,12 @@
  * click on a card; the URL picks up `?item=<id>` for shareable deep links.
  *
  * Layout (top to bottom):
- *   1. Header actions + parent crumb + type badge + title
+ *   1. Image (image items) + header/title/metadata/content/tags in one scroll
  *   2. Workflow status strip (task/event only)
  *   3. Dates / type-specific metadata (status omitted when strip is shown)
  *   4. Full markdown content with interactive task checkboxes
- *   5. Tags, outbound links, backlinks
+ *   5. Tags
+ *   6. Outbound links / backlinks (pinned footer with its own scroll)
  */
 
 import { useCallback, useMemo } from "react";
@@ -264,203 +265,211 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
 
           {status === "success" && item ? (
             <div className="flex h-full flex-col overflow-hidden">
-              {isImageType && item.image_path ? (
-                <div className="border-border shrink-0 overflow-hidden border-b">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/api/images/${item.image_path.replace(/^\//, "")}`}
-                    alt={item.title ?? ""}
-                    className="h-auto max-w-full"
-                  />
-                </div>
-              ) : null}
-
-              <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-5">
-                <header className="flex flex-col gap-3">
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/item/${item.id}`}
-                      className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1.5 rounded-sm font-sans text-sm transition-colors"
-                      aria-label="Open full page"
-                    >
-                      <ExternalLink className="size-4" />
-                      <span>Open full page</span>
-                    </Link>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setEditOpen(true)}
-                      aria-label="Edit item"
-                      title="Edit item"
-                      className="text-muted-foreground hover:text-foreground shrink-0"
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setDeleteOpen(true)}
-                      aria-label="Delete item"
-                      title="Delete item"
-                      className="text-muted-foreground hover:text-foreground shrink-0"
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-
-                  {parentCrumb ? (
-                    <nav
-                      aria-label="Parent"
-                      className="text-muted-foreground flex items-center gap-1 font-sans text-xs"
-                    >
-                      <Link
-                        href={`/item/${parentCrumb.id}`}
-                        data-testid="sheet-parent-crumb"
-                        className="hover:text-foreground inline-flex items-center gap-1 transition-colors"
-                      >
-                        <span
-                          aria-hidden
-                          className={cn(
-                            "size-1.5 rounded-full",
-                            typeColorClass(parentCrumb.type)
-                          )}
-                        />
-                        <span className="line-clamp-1">
-                          {parentCrumb.title?.trim() || "Untitled"}
-                        </span>
-                      </Link>
-                      <ChevronRight className="size-3 shrink-0" aria-hidden />
-                      <span className="text-foreground line-clamp-1">
-                        {item.title?.trim() || "Untitled"}
-                      </span>
-                    </nav>
-                  ) : null}
-
-                  <span
-                    data-testid="sheet-type-badge"
-                    className={cn(
-                      typeColorClass(item.type),
-                      "text-foreground-inverted inline-flex w-fit items-center rounded-sm px-2 py-0.5 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase"
-                    )}
-                  >
-                    {typeLabel(item.type)}
-                  </span>
-
-                  {item.title ? (
-                    <h2 className="text-foreground font-serif text-2xl font-semibold tracking-[-0.01em] wrap-break-word">
-                      {item.title}
-                    </h2>
-                  ) : null}
-
-                  {showWorkflowStatus ? (
-                    <WorkflowStatusStrip
-                      value={workflowStatus}
-                      onChange={handleStatusChange}
-                      disabled={statusMutation.isPending}
-                      data-testid="sheet-workflow-status"
-                    />
-                  ) : null}
-
-                  {dateFields ? (
-                    <dl className="text-muted-foreground flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs">
-                      {dateFields.map((field) => (
-                        <div key={field.label} className="flex gap-1.5">
-                          <dt>{field.label}</dt>
-                          <dd className="text-foreground">{field.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ) : null}
-                </header>
-
-                {item.content.trim() ? (
-                  <div data-testid="sheet-content-preview">
-                    <MarkdownContent
-                      content={item.content}
-                      updatedAt={item.updated_at}
-                      itemId={item.id}
-                      interactive
-                      onContentSaved={(savedContent, savedUpdatedAt) => {
-                        updateContent(savedContent, savedUpdatedAt);
-                        queryClient.invalidateQueries({
-                          queryKey: queryKeys.browse.all,
-                        });
-                        invalidateViewsQueries(queryClient);
-                      }}
-                      onContentReloadNeeded={refetch}
-                      className="text-sm"
-                    />
-                  </div>
-                ) : null}
-
-                {bm?.image ? (
-                  <figure className="flex flex-col gap-2">
+              <div
+                data-testid="sheet-scroll-body"
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+              >
+                {isImageType && item.image_path ? (
+                  <div className="border-border shrink-0 overflow-hidden border-b">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(bm.image)}`}
+                      src={`/api/images/${item.image_path.replace(/^\//, "")}`}
                       alt={item.title ?? ""}
-                      className="border-border h-auto max-h-32 max-w-full rounded-sm border object-cover"
+                      className="h-auto w-full"
                     />
-                  </figure>
+                  </div>
                 ) : null}
 
-                {!hasWorkflowStatus(item.type) ? (
-                  <MetadataSection type={item.type} metadata={item.metadata} />
-                ) : (
-                  <MetadataSection
-                    type={item.type}
-                    metadata={item.metadata}
-                    excludeLabels={["Status", "Start", "End", "Due"]}
-                  />
-                )}
+                <div className="flex flex-col gap-5 p-5">
+                  <header className="flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/item/${item.id}`}
+                        className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1.5 rounded-sm font-sans text-sm transition-colors"
+                        aria-label="Open full page"
+                      >
+                        <ExternalLink className="size-4" />
+                        <span>Open full page</span>
+                      </Link>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setEditOpen(true)}
+                        aria-label="Edit item"
+                        title="Edit item"
+                        className="text-muted-foreground hover:text-foreground shrink-0"
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setDeleteOpen(true)}
+                        aria-label="Delete item"
+                        title="Delete item"
+                        className="text-muted-foreground hover:text-foreground shrink-0"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
 
-                {item.source_url && item.source_url !== item.content ? (
-                  <p className="text-foreground flex items-center gap-2 font-sans text-sm">
-                    {bm?.favicon ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(bm.favicon)}`}
-                        alt=""
-                        className="size-4 shrink-0 rounded"
+                    {parentCrumb ? (
+                      <nav
+                        aria-label="Parent"
+                        className="text-muted-foreground flex items-center gap-1 font-sans text-xs"
+                      >
+                        <Link
+                          href={`/item/${parentCrumb.id}`}
+                          data-testid="sheet-parent-crumb"
+                          className="hover:text-foreground inline-flex items-center gap-1 transition-colors"
+                        >
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "size-1.5 rounded-full",
+                              typeColorClass(parentCrumb.type)
+                            )}
+                          />
+                          <span className="line-clamp-1">
+                            {parentCrumb.title?.trim() || "Untitled"}
+                          </span>
+                        </Link>
+                        <ChevronRight className="size-3 shrink-0" aria-hidden />
+                        <span className="text-foreground line-clamp-1">
+                          {item.title?.trim() || "Untitled"}
+                        </span>
+                      </nav>
+                    ) : null}
+
+                    <span
+                      data-testid="sheet-type-badge"
+                      className={cn(
+                        typeColorClass(item.type),
+                        "text-foreground-inverted inline-flex w-fit items-center rounded-sm px-2 py-0.5 font-mono text-[0.65rem] font-medium tracking-[0.16em] uppercase"
+                      )}
+                    >
+                      {typeLabel(item.type)}
+                    </span>
+
+                    {item.title ? (
+                      <h2 className="text-foreground font-serif text-2xl font-semibold tracking-[-0.01em] wrap-break-word">
+                        {item.title}
+                      </h2>
+                    ) : null}
+
+                    {showWorkflowStatus ? (
+                      <WorkflowStatusStrip
+                        value={workflowStatus}
+                        onChange={handleStatusChange}
+                        disabled={statusMutation.isPending}
+                        data-testid="sheet-workflow-status"
                       />
                     ) : null}
-                    <a
-                      href={item.source_url}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                      className="text-primary line-clamp-1 break-all hover:underline"
-                    >
-                      {item.source_url}
-                    </a>
-                    {bm?.siteName ? (
-                      <span className="text-muted-foreground shrink-0">
-                        ({bm.siteName})
-                      </span>
-                    ) : null}
-                  </p>
-                ) : null}
 
-                {tags && tags.length > 0 ? (
-                  <section aria-label="Tags">
-                    <h3 className="text-muted-foreground mb-2 font-mono text-xs font-medium tracking-wide uppercase">
-                      Tags
-                    </h3>
-                    <ul className="flex flex-wrap items-center gap-1.5">
-                      {tags.map((tag) => (
-                        <li key={tag.id}>
-                          <Link
-                            href={`/?tag=${encodeURIComponent(tag.name)}`}
-                            className="border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong rounded-sm border px-2 py-0.5 font-mono text-[0.7rem] tracking-wide transition-colors"
-                          >
-                            #{tag.name}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
+                    {dateFields ? (
+                      <dl className="text-muted-foreground flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs">
+                        {dateFields.map((field) => (
+                          <div key={field.label} className="flex gap-1.5">
+                            <dt>{field.label}</dt>
+                            <dd className="text-foreground">{field.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
+                  </header>
+
+                  {item.content.trim() ? (
+                    <div data-testid="sheet-content-preview">
+                      <MarkdownContent
+                        content={item.content}
+                        updatedAt={item.updated_at}
+                        itemId={item.id}
+                        interactive
+                        onContentSaved={(savedContent, savedUpdatedAt) => {
+                          updateContent(savedContent, savedUpdatedAt);
+                          queryClient.invalidateQueries({
+                            queryKey: queryKeys.browse.all,
+                          });
+                          invalidateViewsQueries(queryClient);
+                        }}
+                        onContentReloadNeeded={refetch}
+                        className="text-sm"
+                      />
+                    </div>
+                  ) : null}
+
+                  {bm?.image ? (
+                    <figure className="flex flex-col gap-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(bm.image)}`}
+                        alt={item.title ?? ""}
+                        className="border-border h-auto max-h-32 max-w-full rounded-sm border object-cover"
+                      />
+                    </figure>
+                  ) : null}
+
+                  {!hasWorkflowStatus(item.type) ? (
+                    <MetadataSection
+                      type={item.type}
+                      metadata={item.metadata}
+                    />
+                  ) : (
+                    <MetadataSection
+                      type={item.type}
+                      metadata={item.metadata}
+                      excludeLabels={["Status", "Start", "End", "Due"]}
+                    />
+                  )}
+
+                  {item.source_url && item.source_url !== item.content ? (
+                    <p className="text-foreground flex items-center gap-2 font-sans text-sm">
+                      {bm?.favicon ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={`/api/bookmarks/image-proxy?url=${encodeURIComponent(bm.favicon)}`}
+                          alt=""
+                          className="size-4 shrink-0 rounded"
+                        />
+                      ) : null}
+                      <a
+                        href={item.source_url}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                        className="text-primary line-clamp-1 break-all hover:underline"
+                      >
+                        {item.source_url}
+                      </a>
+                      {bm?.siteName ? (
+                        <span className="text-muted-foreground shrink-0">
+                          ({bm.siteName})
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : null}
+
+                  {tags && tags.length > 0 ? (
+                    <section aria-label="Tags">
+                      <h3 className="text-muted-foreground mb-2 font-mono text-xs font-medium tracking-wide uppercase">
+                        Tags
+                      </h3>
+                      <ul className="flex flex-wrap items-center gap-1.5">
+                        {tags.map((tag) => (
+                          <li key={tag.id}>
+                            <Link
+                              href={`/?tag=${encodeURIComponent(tag.name)}`}
+                              className="border-border bg-background text-muted-foreground hover:text-foreground hover:border-border-strong rounded-sm border px-2 py-0.5 font-mono text-[0.7rem] tracking-wide transition-colors"
+                            >
+                              #{tag.name}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+                </div>
               </div>
 
               {(links && links.outbound.length > 0) ||
