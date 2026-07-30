@@ -8,26 +8,7 @@ import { useViewsState } from "./use-views-state";
 import { ViewsGrid } from "./views-grid";
 import { ViewsKanban } from "./views-kanban";
 import { ViewsTabs } from "./views-tabs";
-
-function TimelinePlaceholder() {
-  return (
-    <section
-      data-testid="views-timeline-placeholder"
-      className="border-border bg-surface-elevated flex max-w-2xl flex-col gap-3 rounded-sm border p-6"
-    >
-      <p className="text-accent-cyan font-sans text-xs font-medium tracking-[0.12em] uppercase">
-        Timeline
-      </p>
-      <h2 className="text-foreground font-sans text-lg font-medium">
-        Coming soon
-      </h2>
-      <p className="text-muted-foreground font-sans text-sm">
-        Timeline view will chart events and tasks over time. Routing and URL
-        sync are wired; the visual ships in a follow-up.
-      </p>
-    </section>
-  );
-}
+import { ViewsTimeline } from "./views-timeline";
 
 export function ViewsPage() {
   const {
@@ -65,7 +46,9 @@ export function ViewsPage() {
         {view === "grid" && (
           <ViewsGrid projectId={projectId} onRowOpen={setItemId} />
         )}
-        {view === "timeline" && <TimelinePlaceholder />}
+        {view === "timeline" && (
+          <ViewsTimeline projectId={projectId} onItemOpen={setItemId} />
+        )}
         {view === "kanban" && (
           <ViewsKanban projectId={projectId} onCardOpen={setItemId} />
         )}
