@@ -299,6 +299,71 @@
     background: transparent;
   }
 
+  /* Shared editorial checkbox chrome (MarkdownContent task lists,
+   * edit-dialog visibility flags, etc.).
+   * Native <input type="checkbox"> cannot use ::before/::after, so the
+   * checkmark lives on background-image. Keep fill on background-color
+   * only — Tailwind bg-* utilities use the background shorthand and
+   * would wipe the checkmark. Unchecked fill matches the add-form
+   * textarea field (#0F0F0F on the near-black canvas).
+   * Cream tick is an inline SVG data URL; CSP already allows
+   * `img-src ... data:` so this is permitted. */
+  .app-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    border-radius: 2px;
+    border: 1px solid var(--border-strong);
+    background-color: #0f0f0f;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 0.75rem 0.75rem;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      box-shadow 150ms ease,
+      opacity 150ms ease;
+  }
+
+  /* Task-list rows need a slight optical nudge to align with body text. */
+  .app-checkbox--task {
+    margin-top: 0.2rem;
+  }
+
+  .app-checkbox:checked {
+    border-color: var(--primary-strong);
+    background-color: var(--primary-strong);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3.25 8.25l3.1 3.1 6.4-6.4' stroke='%23e4dcc8' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+
+  .app-checkbox:focus-visible {
+    outline: none;
+    border-color: var(--foreground);
+    box-shadow: 0 0 0 3px
+      color-mix(in oklch, var(--foreground) 50%, transparent);
+  }
+
+  .app-checkbox[data-interactive="true"] {
+    cursor: pointer;
+  }
+
+  .app-checkbox[data-interactive="true"]:hover:not(:checked) {
+    border-color: color-mix(in oklch, var(--foreground) 40%, transparent);
+  }
+
+  .app-checkbox[data-interactive="true"]:checked:hover {
+    background-color: color-mix(in oklch, var(--primary-strong) 90%, black);
+    border-color: var(--primary-strong);
+  }
+
+  .app-checkbox[data-interactive="false"],
+  .app-checkbox:disabled {
+    cursor: default;
+    opacity: 0.7;
+  }
+
   /* Thread list staggered-entry animation */
   @keyframes thread-enter {
     from {

@@ -46,6 +46,70 @@ ENV ADMIN_PASSWORD_HASH=$2b$10$dummy.hash.for.build.time.validation.only
 
 RUN corepack enable pnpm && pnpm build
 
+# Next standalone NFT tracing keeps @img/sharp-libvips-* package metadata but
+# often omits the dlopened libvips shared library. Overlay the host-arch natives
+# from the full builder node_modules into every matching standalone package path.
+RUN node <<'EOF'
+const fs = require("fs");
+const path = require("path");
+const { execFileSync } = require("child_process");
+
+const archMap = {
+  x64: "x64",
+  arm64: "arm64",
+  arm: "arm",
+};
+const arch = archMap[process.arch];
+if (!arch) {
+  throw new Error(`Unsupported sharp arch for overlay: ${process.arch}`);
+}
+
+const pkgName = `sharp-libvips-linux-${arch}`;
+const sharpEntry = require.resolve("sharp");
+const imgRoot = path.join(path.dirname(sharpEntry), "..", "..", "@img");
+const srcPkg = path.join(imgRoot, pkgName);
+const srcLib = path.join(srcPkg, "lib");
+if (!fs.existsSync(srcLib)) {
+  throw new Error(`Missing sharp libvips natives at ${srcLib}`);
+}
+
+const soName = fs
+  .readdirSync(srcLib)
+  .find((name) => name.startsWith("libvips-cpp.so."));
+if (!soName) {
+  throw new Error(`No libvips-cpp.so.* under ${srcLib}`);
+}
+
+const standaloneRoot = path.join("/app", ".next", "standalone");
+const matches = execFileSync(
+  "find",
+  [standaloneRoot, "-type", "d", "-path", `*/@img/${pkgName}`],
+  { encoding: "utf8" }
+)
+  .split("\n")
+  .map((line) => line.trim())
+  .filter(Boolean);
+
+if (matches.length === 0) {
+  throw new Error(
+    `No standalone @img/${pkgName} packages found under ${standaloneRoot}`
+  );
+}
+
+for (const destPkg of matches) {
+  const destLib = path.join(destPkg, "lib");
+  fs.mkdirSync(destLib, { recursive: true });
+  fs.cpSync(srcLib, destLib, { recursive: true, dereference: true });
+  if (!fs.existsSync(path.join(destLib, soName))) {
+    throw new Error(`Failed to overlay ${soName} into ${destLib}`);
+  }
+}
+
+console.log(
+  `sharp natives overlaid for ${arch}: ${soName} -> ${matches.length} @img location(s)`
+);
+EOF
+
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
@@ -64,6 +128,9 @@ COPY --from=builder /app/dist/extensions ./dist/extensions
 
 # Verify better-sqlite3 native module is functional
 RUN node -e "const sqlite = require('better-sqlite3'); const db = new sqlite(':memory:'); db.exec('CREATE TABLE test (id INTEGER)'); db.prepare('INSERT INTO test (id) VALUES (1)').run(); const row = db.prepare('SELECT * FROM test').get(); if (!row || row.id !== 1) { process.exit(1); } console.log('SQLite native module verification passed'); db.close();"
+
+# Verify sharp can load its arch-specific libvips native bindings
+RUN node -e "require('sharp'); console.log('sharp native module verification passed');"
 
 # Create data directory for database
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data

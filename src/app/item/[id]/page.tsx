@@ -159,7 +159,12 @@ export default async function ItemDetailPage({
             </figure>
           ) : null}
 
-          <MarkdownContent content={item.content} />
+          <MarkdownContent
+            content={item.content}
+            updatedAt={item.updated_at}
+            itemId={item.id}
+            interactive
+          />
 
           {/* Type-specific metadata display (issue #103) */}
           <MetadataSection type={item.type} metadata={item.metadata} />

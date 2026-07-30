@@ -429,6 +429,61 @@ describe("/api/items/[id]", () => {
     // Verify deleteImage was NOT called (type didn't change)
     expect(mockDeleteImage).not.toHaveBeenCalled();
   });
+  it("PATCHes hidden and private items when both visibility flags are opted in", async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    const id = "hidden-private-patch";
+    db.prepare(
+      `INSERT INTO content_items
+       (id, type, title, content, source, is_private, is_hidden, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, "note", "Hidden", "before", "manual", 1, 1, now, now);
+
+    const patchReq = await authedRequest(
+      `http://localhost/api/items/${id}?include_hidden=1&include_private=1`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "after", expected_updated_at: now }),
+      }
+    );
+    const patchRes = await PATCH(patchReq, {
+      params: Promise.resolve({ id }),
+    });
+    expect(patchRes.status).toBe(200);
+    expect((await patchRes.json()).item.content).toBe("after");
+  });
+
+  it("returns 409 when expected_updated_at is stale", async () => {
+    const db = getDb();
+    const original = new Date("2026-07-29T00:00:00.000Z").toISOString();
+    const current = new Date("2026-07-29T00:00:01.000Z").toISOString();
+    const id = "conflict-patch";
+    db.prepare(
+      `INSERT INTO content_items
+       (id, type, title, content, source, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, "note", "Conflict", "current", "manual", original, current);
+
+    const patchReq = await authedRequest(`http://localhost/api/items/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: "stale overwrite",
+        expected_updated_at: original,
+      }),
+    });
+    const patchRes = await PATCH(patchReq, {
+      params: Promise.resolve({ id }),
+    });
+    expect(patchRes.status).toBe(409);
+    expect((await patchRes.json()).error.code).toBe("CONFLICT");
+    expect(
+      db.prepare("SELECT content FROM content_items WHERE id = ?").get(id)
+    ).toEqual({
+      content: "current",
+    });
+  });
 });
 
 describe("/api/items bookmark auto-fetch", () => {
