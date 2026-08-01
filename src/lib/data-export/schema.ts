@@ -79,15 +79,29 @@ function metadataDepth(value: unknown, depth = 0): number {
 }
 
 const metadataSchema = z
-  .record(z.string().max(IMPORT_MAX_METADATA_KEY_LENGTH), z.unknown())
+  // Intentionally unbounded key schema: putting `.max()` on record keys makes
+  // Zod emit one issue per offending key and can amplify a small payload into
+  // tens of thousands of issues before our importer budget applies.
+  .record(z.string(), z.unknown())
   .nullable()
   .superRefine((value, ctx) => {
     if (value === null) return;
-    if (Object.keys(value).length > IMPORT_MAX_METADATA_PROPERTIES) {
+    const keys = Object.keys(value);
+    if (keys.length > IMPORT_MAX_METADATA_PROPERTIES) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `metadata must have at most ${IMPORT_MAX_METADATA_PROPERTIES} properties`,
       });
+      return;
+    }
+    for (const key of keys) {
+      if (key.length > IMPORT_MAX_METADATA_KEY_LENGTH) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `metadata keys must be at most ${IMPORT_MAX_METADATA_KEY_LENGTH} characters`,
+        });
+        return;
+      }
     }
     let serialized: string;
     try {

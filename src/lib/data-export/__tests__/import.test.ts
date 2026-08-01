@@ -474,4 +474,49 @@ describe("runJsonImport", () => {
     ).toBe(true);
     expect(contentItems.findAll(db)).toHaveLength(0);
   });
+
+  it("does not amplify validation work for many overlong metadata keys", () => {
+    const keys = Object.fromEntries(
+      Array.from({ length: 25_000 }, (_, index) => [
+        `${"k".repeat(257)}${index}`,
+        true,
+      ])
+    );
+    const started = Date.now();
+    const result = runJsonImport(
+      db,
+      minimalEnvelope({
+        items: [baseItem("meta-keys", { metadata: keys })],
+      }),
+      importOptions
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues.length).toBeGreaterThan(0);
+    expect(result.issues.length).toBeLessThanOrEqual(50);
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(contentItems.findAll(db)).toHaveLength(0);
+  });
+
+  it("round-trips nested person social_links metadata", () => {
+    const result = runJsonImport(
+      db,
+      minimalEnvelope({
+        items: [
+          baseItem("person-1", {
+            type: "person",
+            metadata: { social_links: ["https://example.com"] },
+          }),
+        ],
+      }),
+      importOptions
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const rows = contentItems.findAll(db);
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(rows[0]!.metadata ?? "null")).toEqual({
+      social_links: ["https://example.com"],
+    });
+  });
 });
