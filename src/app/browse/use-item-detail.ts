@@ -56,7 +56,18 @@ export interface ItemDetailResponse {
   };
 }
 
-export function useItemDetail(itemId: string | null) {
+export interface ItemDetailVisibilityOptions {
+  includeHidden?: boolean;
+  includePrivate?: boolean;
+}
+
+export function useItemDetail(
+  itemId: string | null,
+  {
+    includeHidden = false,
+    includePrivate = false,
+  }: ItemDetailVisibilityOptions = {}
+) {
   const [data, setData] = useState<ItemDetailResponse | null>(null);
   const [status, setStatus] = useState<
     "idle" | "loading" | "success" | "error"
@@ -64,34 +75,41 @@ export function useItemDetail(itemId: string | null) {
 
   const cancelledRef = useRef(false);
 
-  const fetchItem = useCallback((id: string, { reset }: { reset: boolean }) => {
-    if (reset) {
-      setStatus("loading");
-      setData(null);
-    }
-    fetch(`/api/items/${id}`, {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const text = await res.text().catch(() => "Request failed");
-          throw new Error(text);
-        }
-        return res.json() as Promise<ItemDetailResponse>;
+  const fetchItem = useCallback(
+    (id: string, { reset }: { reset: boolean }) => {
+      if (reset) {
+        setStatus("loading");
+        setData(null);
+      }
+      const params = new URLSearchParams();
+      if (includeHidden) params.set("include_hidden", "1");
+      if (includePrivate) params.set("include_private", "1");
+      const query = params.toString();
+      fetch(`/api/items/${id}${query ? `?${query}` : ""}`, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
       })
-      .then((json) => {
-        if (!cancelledRef.current) {
-          setData(json);
-          setStatus("success");
-        }
-      })
-      .catch(() => {
-        if (!cancelledRef.current) {
-          setStatus("error");
-        }
-      });
-  }, []);
+        .then(async (res) => {
+          if (!res.ok) {
+            const text = await res.text().catch(() => "Request failed");
+            throw new Error(text);
+          }
+          return res.json() as Promise<ItemDetailResponse>;
+        })
+        .then((json) => {
+          if (!cancelledRef.current) {
+            setData(json);
+            setStatus("success");
+          }
+        })
+        .catch(() => {
+          if (!cancelledRef.current) {
+            setStatus("error");
+          }
+        });
+    },
+    [includeHidden, includePrivate]
+  );
 
   // When `itemId` changes, fetch the item detail. When it becomes null
   // the sheet closes (via `open` being false) so there is no need to

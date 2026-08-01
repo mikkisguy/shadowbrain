@@ -40,6 +40,8 @@ import {
 export interface ViewsTimelineProps {
   projectId: string | null;
   onItemOpen: (id: string) => void;
+  includeHidden?: boolean;
+  includePrivate?: boolean;
 }
 
 const RAIL_WIDTH = "14rem";
@@ -368,9 +370,16 @@ function Unscheduled({
   );
 }
 
-export function ViewsTimeline({ projectId, onItemOpen }: ViewsTimelineProps) {
-  const { data, isPending, isError, error, refetch } =
-    useViewsGridData(projectId);
+export function ViewsTimeline({
+  projectId,
+  onItemOpen,
+  includeHidden = false,
+  includePrivate = false,
+}: ViewsTimelineProps) {
+  const { data, isPending, isError, error, refetch } = useViewsGridData(
+    projectId,
+    { includeHidden, includePrivate }
+  );
   const [anchor, setAnchor] = useState<Date>(() => new Date(0));
   const [zoom, setZoom] = useState<TimelineZoom>(DEFAULT_TIMELINE_ZOOM);
   const [calendarReady, setCalendarReady] = useState(false);

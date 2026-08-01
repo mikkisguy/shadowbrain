@@ -217,6 +217,30 @@ describe("ItemPreviewSheet", () => {
     expect(screen.queryByTestId("view-timeline")).not.toBeInTheDocument();
   });
 
+  it("passes opted-in visibility to item detail fetches", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(createFixture()),
+    } as Response);
+
+    renderWithQuery(
+      <ItemPreviewSheet
+        itemId="item-1"
+        onClose={onClose}
+        includeHidden
+        includePrivate
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("sheet-type-badge")).toBeInTheDocument()
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/items/item-1?include_hidden=1&include_private=1",
+      expect.objectContaining({ credentials: "same-origin" })
+    );
+  });
+
   it("keeps the saved markdown and revision in the sheet detail state", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
       ok: true,
@@ -432,7 +456,14 @@ describe("ItemPreviewSheet", () => {
           }),
       } as Response);
 
-    renderWithQuery(<ItemPreviewSheet itemId="task-1" onClose={onClose} />);
+    renderWithQuery(
+      <ItemPreviewSheet
+        itemId="task-1"
+        onClose={onClose}
+        includeHidden
+        includePrivate
+      />
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId("sheet-workflow-status")).toBeInTheDocument();
@@ -442,7 +473,7 @@ describe("ItemPreviewSheet", () => {
 
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
-        "/api/items/task-1",
+        "/api/items/task-1?include_hidden=1&include_private=1",
         expect.objectContaining({
           method: "PATCH",
           body: JSON.stringify({
@@ -456,7 +487,6 @@ describe("ItemPreviewSheet", () => {
       );
     });
   });
-
   it("renders a parent crumb from outbound happened_during links", async () => {
     const fixture = createFixture({
       item: {

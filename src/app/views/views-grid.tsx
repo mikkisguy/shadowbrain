@@ -26,6 +26,8 @@ type GridSortDirection = "asc" | "desc";
 export interface ViewsGridProps {
   projectId: string | null;
   onRowOpen: (id: string) => void;
+  includeHidden?: boolean;
+  includePrivate?: boolean;
 }
 
 function toDatetimeLocalValue(iso: string | null): string {
@@ -123,10 +125,17 @@ function SortableHeader({
   );
 }
 
-export function ViewsGrid({ projectId, onRowOpen }: ViewsGridProps) {
-  const { data, isPending, isError, error, refetch } =
-    useViewsGridData(projectId);
-  const mutation = useViewsGridMutation();
+export function ViewsGrid({
+  projectId,
+  onRowOpen,
+  includeHidden = false,
+  includePrivate = false,
+}: ViewsGridProps) {
+  const { data, isPending, isError, error, refetch } = useViewsGridData(
+    projectId,
+    { includeHidden, includePrivate }
+  );
+  const mutation = useViewsGridMutation({ includeHidden, includePrivate });
   const [sortKey, setSortKey] = useState<GridSortKey>("title");
   const [sortDirection, setSortDirection] = useState<GridSortDirection>("asc");
 
