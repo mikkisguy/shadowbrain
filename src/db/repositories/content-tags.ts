@@ -1,6 +1,12 @@
 import Database from "better-sqlite3";
 import type { Tag } from "./tags";
 
+export interface ContentTagRow {
+  content_id: string;
+  tag_id: string;
+  created_at: string;
+}
+
 export const contentTags = {
   addTag: (
     db: Database.Database,
@@ -12,6 +18,13 @@ export const contentTags = {
       "INSERT OR IGNORE INTO content_tags (content_id, tag_id, created_at) VALUES (?, ?, ?)"
     );
     return stmt.run(contentId, tagId, createdAt);
+  },
+
+  findAll: (db: Database.Database): ContentTagRow[] => {
+    const stmt = db.prepare(
+      "SELECT content_id, tag_id, created_at FROM content_tags ORDER BY created_at, content_id, tag_id"
+    );
+    return stmt.all() as ContentTagRow[];
   },
 
   removeTag: (db: Database.Database, contentId: string, tagId: string) => {

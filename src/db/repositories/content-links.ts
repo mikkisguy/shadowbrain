@@ -108,6 +108,12 @@ export const contentLinks = {
       link.created_at
     );
   },
+  findAll: (db: Database.Database): ContentLink[] => {
+    const stmt = db.prepare(
+      "SELECT * FROM content_links ORDER BY created_at, id"
+    );
+    return stmt.all() as ContentLink[];
+  },
 
   findBySource: (db: Database.Database, sourceId: string) => {
     const stmt = db.prepare("SELECT * FROM content_links WHERE source_id = ?");
