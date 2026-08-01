@@ -6,6 +6,7 @@ import {
   createTestDb,
 } from "@/db/test-utils";
 import { getDb, settings } from "@/db/index";
+import * as dataExport from "@/lib/data-export";
 import { GET, PATCH } from "@/app/api/settings/route";
 import { POST as POST_TEST } from "@/app/api/settings/test-connection/route";
 import { GET as GET_SYSTEM_INFO } from "@/app/api/settings/system-info/route";
@@ -132,15 +133,39 @@ describe("/api/settings", () => {
     expect(json).toHaveProperty("databaseSize");
     expect(json).toHaveProperty("lastBackupAt");
   });
-
   it("exports content as JSON", async () => {
     const res = await GET_EXPORT(
       await authedGet("http://localhost/api/export?format=json")
     );
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toContain("application/json");
-    const body = await res.text();
-    expect(body.startsWith("[")).toBe(true);
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+    const body = JSON.parse(await res.text());
+    expect(body.format).toBe("shadowbrain-export");
+    expect(body.version).toBe(1);
+    expect(body.items).toEqual(expect.any(Array));
+    expect(body.tags).toEqual(expect.any(Array));
+    expect(body.item_tags).toEqual(expect.any(Array));
+    expect(body.links).toEqual(expect.any(Array));
+    expect(body.journal_periods).toEqual(expect.any(Array));
+  });
+
+  it("marks a small JSON export as importable", async () => {
+    const res = await GET_EXPORT(
+      await authedGet("http://localhost/api/export?format=json")
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-ShadowBrain-Importable")).toBe("1");
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
+  it("sets no-store on markdown exports", async () => {
+    const res = await GET_EXPORT(
+      await authedGet("http://localhost/api/export?format=markdown")
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("text/markdown");
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
   });
 
   it("records last_backup_at on a successful export", async () => {
@@ -153,6 +178,24 @@ describe("/api/settings", () => {
     const lastBackupAt = settings.get(db, "last_backup_at");
     expect(lastBackupAt).not.toBeNull();
     expect(() => new Date(lastBackupAt as string).toISOString()).not.toThrow();
+  });
+
+  it("does not update last_backup_at when serialization fails", async () => {
+    const db = getDb();
+    settings.set(db, "last_backup_at", "2020-01-01T00:00:00.000Z");
+    const serializeSpy = vi
+      .spyOn(dataExport, "exportAsJsonString")
+      .mockImplementation(() => {
+        throw new Error("serialization failed");
+      });
+
+    const res = await GET_EXPORT(
+      await authedGet("http://localhost/api/export?format=json")
+    );
+
+    expect(res.status).toBe(500);
+    expect(settings.get(db, "last_backup_at")).toBe("2020-01-01T00:00:00.000Z");
+    serializeSpy.mockRestore();
   });
 
   describe("unauthenticated access", () => {

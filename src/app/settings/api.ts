@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import type { PublicSettings } from "@/lib/settings/public";
 import type {
   OpenRouterModelSummary,
@@ -8,45 +10,114 @@ import type {
   TestConnectionResult,
 } from "./types";
 import { publicSettingsToSnapshot } from "./types";
+import { IMPORT_MAX_ISSUE_MESSAGE_LENGTH } from "@/lib/data-export/limits";
 
 export class SettingsApiError extends Error {
   readonly status: number;
   readonly code: string | null;
+  readonly issues: string[];
 
-  constructor(status: number, message: string, code: string | null = null) {
+  constructor(
+    status: number,
+    message: string,
+    code: string | null = null,
+    issues: string[] = []
+  ) {
     super(message);
     this.name = "SettingsApiError";
     this.status = status;
     this.code = code;
+    this.issues = issues;
   }
 }
 
-async function readErrorCode(response: Response): Promise<string | null> {
-  try {
-    const body = (await response.json()) as unknown;
+const MAX_VALIDATION_ISSUES = 50;
+
+const errorResponseSchema = z.object({
+  error: z.object({
+    code: z.unknown().optional(),
+    message: z.unknown().optional(),
+    details: z.unknown().optional(),
+  }),
+});
+
+function parseValidationIssues(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const issues: string[] = [];
+  for (const issue of value) {
+    if (issues.length >= MAX_VALIDATION_ISSUES) break;
+
+    if (typeof issue === "string") {
+      if (issue.length > 0) {
+        issues.push(issue.slice(0, IMPORT_MAX_ISSUE_MESSAGE_LENGTH));
+      }
+      continue;
+    }
+
     if (
-      body &&
-      typeof body === "object" &&
-      "error" in body &&
-      body.error &&
-      typeof body.error === "object" &&
-      "code" in body.error &&
-      typeof (body.error as { code: unknown }).code === "string"
+      issue &&
+      typeof issue === "object" &&
+      !Array.isArray(issue) &&
+      "message" in issue &&
+      typeof issue.message === "string" &&
+      issue.message.length > 0
     ) {
-      return (body.error as { code: string }).code;
+      const path =
+        "path" in issue && typeof issue.path === "string" ? issue.path : "";
+      const text = path ? `${path}: ${issue.message}` : issue.message;
+      issues.push(text.slice(0, IMPORT_MAX_ISSUE_MESSAGE_LENGTH));
+    }
+  }
+  return issues;
+}
+
+async function readErrorDetails(response: Response): Promise<{
+  code: string | null;
+  message: string;
+  issues: string[];
+}> {
+  try {
+    const parsed = errorResponseSchema.safeParse(await response.json());
+    if (parsed.success) {
+      const details = parsed.data.error.details;
+      const issues =
+        details &&
+        typeof details === "object" &&
+        !Array.isArray(details) &&
+        "issues" in details
+          ? details.issues
+          : undefined;
+      return {
+        code:
+          typeof parsed.data.error.code === "string"
+            ? parsed.data.error.code
+            : null,
+        message:
+          typeof parsed.data.error.message === "string" &&
+          parsed.data.error.message.length > 0
+            ? parsed.data.error.message
+            : `Request failed with status ${response.status}`,
+        issues: parseValidationIssues(issues),
+      };
     }
   } catch {
     // Non-JSON body.
   }
-  return null;
+  return {
+    code: null,
+    message: `Request failed with status ${response.status}`,
+    issues: [],
+  };
 }
 
 async function throwForResponse(response: Response): Promise<never> {
-  const code = await readErrorCode(response);
+  const details = await readErrorDetails(response);
   throw new SettingsApiError(
     response.status,
-    `Request failed with status ${response.status}`,
-    code
+    details.message,
+    details.code,
+    details.issues
   );
 }
 
@@ -148,6 +219,44 @@ export async function fetchSystemInfo(
 
 export function exportUrl(format: "markdown" | "json"): string {
   return `/api/export?format=${format}`;
+}
+
+export function importSchemaUrl(): string {
+  return "/api/import/schema";
+}
+
+export function importTemplateUrl(): string {
+  return "/api/import/template";
+}
+
+export interface JsonImportSummary {
+  mode: "merge";
+  created: {
+    items: number;
+    tags: number;
+    item_tags: number;
+    links: number;
+    journal_periods: number;
+  };
+  reused_tags: number;
+  warnings: string[];
+}
+
+export async function importJsonData(
+  data: unknown,
+  mode?: "merge"
+): Promise<JsonImportSummary> {
+  const response = await fetch("/api/import", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ mode: mode ?? "merge", data }),
+  });
+  if (!response.ok) await throwForResponse(response);
+  return (await response.json()) as JsonImportSummary;
 }
 
 export interface ApiTokenInfo {

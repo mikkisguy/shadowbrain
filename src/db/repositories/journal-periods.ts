@@ -31,6 +31,12 @@ export const journalPeriods = {
       period.model_used ?? null
     );
   },
+  findAll: (db: Database.Database): JournalPeriod[] => {
+    const stmt = db.prepare(
+      "SELECT * FROM journal_periods ORDER BY period_start, content_id"
+    );
+    return stmt.all() as JournalPeriod[];
+  },
 
   findByContentId: (db: Database.Database, contentId: string) => {
     const stmt = db.prepare(
