@@ -7,17 +7,15 @@ import {
   journalPeriods,
   tags,
 } from "@/db/index";
-import { IMPORT_MAX_ISSUE_MESSAGE_LENGTH, IMPORT_MAX_ISSUES } from "./limits";
-import {
-  exportEnvelopeShellSchema,
-  exportItemSchema,
-  exportItemTagSchema,
-  exportJournalPeriodSchema,
-  exportLinkSchema,
-  exportTagSchema,
-} from "./schema";
-import type { z } from "zod";
+import { IMPORT_MAX_ISSUES } from "./limits";
+import { exportEnvelopeShellSchema } from "./schema";
 import type { ShadowbrainExportItem, ShadowbrainExportV1 } from "./types";
+import {
+  findUnknownEnvelopeKey,
+  formatIssue,
+  parseTypedEnvelope,
+  truncateIssueText,
+} from "./validate-envelope";
 
 interface ImportSummary {
   mode: "merge";
@@ -44,17 +42,6 @@ interface ImportOptions {
   now?: string;
   ip?: string | null;
   userAgent?: string | null;
-}
-
-function truncateIssueText(value: string): string {
-  if (value.length <= IMPORT_MAX_ISSUE_MESSAGE_LENGTH) return value;
-  return `${value.slice(0, IMPORT_MAX_ISSUE_MESSAGE_LENGTH - 1)}…`;
-}
-
-function formatIssue(path: string, message: string): string {
-  return truncateIssueText(
-    `${truncateIssueText(path || "data")}: ${truncateIssueText(message)}`
-  );
 }
 
 function normalizeMetadata(value: unknown): Record<string, unknown> | null {
@@ -106,7 +93,7 @@ function normalizeLegacyItem(
   );
   if (unknownField) {
     return {
-      error: `items[${index}] contains unknown property '${unknownField}'`,
+      error: `items[${index}] contains an unrecognized property`,
     };
   }
   for (const field of LEGACY_REQUIRED_FIELDS) {
@@ -185,103 +172,6 @@ function normalizeLegacyItem(
   };
 }
 
-function pushZodIssues(
-  issues: string[],
-  pathPrefix: string,
-  zodIssues: Array<{ path: PropertyKey[]; message: string }>
-): boolean {
-  for (const issue of zodIssues) {
-    if (issues.length >= IMPORT_MAX_ISSUES) return true;
-    const suffix = issue.path.map(String).join(".");
-    const path = suffix ? `${pathPrefix}.${suffix}` : pathPrefix;
-    issues.push(formatIssue(path, issue.message));
-  }
-  return issues.length >= IMPORT_MAX_ISSUES;
-}
-
-function parseTypedEnvelope(
-  shell: z.infer<typeof exportEnvelopeShellSchema>
-): { ok: true; data: ShadowbrainExportV1 } | { ok: false; issues: string[] } {
-  const issues: string[] = [];
-
-  const items: ShadowbrainExportV1["items"] = [];
-  for (const [index, raw] of shell.items.entries()) {
-    if (issues.length >= IMPORT_MAX_ISSUES) break;
-    const parsed = exportItemSchema.safeParse(raw);
-    if (!parsed.success) {
-      if (pushZodIssues(issues, `items[${index}]`, parsed.error.issues)) break;
-      continue;
-    }
-    items.push(parsed.data);
-  }
-
-  const tags: ShadowbrainExportV1["tags"] = [];
-  for (const [index, raw] of shell.tags.entries()) {
-    if (issues.length >= IMPORT_MAX_ISSUES) break;
-    const parsed = exportTagSchema.safeParse(raw);
-    if (!parsed.success) {
-      if (pushZodIssues(issues, `tags[${index}]`, parsed.error.issues)) break;
-      continue;
-    }
-    tags.push(parsed.data);
-  }
-
-  const itemTags: ShadowbrainExportV1["item_tags"] = [];
-  for (const [index, raw] of shell.item_tags.entries()) {
-    if (issues.length >= IMPORT_MAX_ISSUES) break;
-    const parsed = exportItemTagSchema.safeParse(raw);
-    if (!parsed.success) {
-      if (pushZodIssues(issues, `item_tags[${index}]`, parsed.error.issues)) {
-        break;
-      }
-      continue;
-    }
-    itemTags.push(parsed.data);
-  }
-
-  const links: ShadowbrainExportV1["links"] = [];
-  for (const [index, raw] of shell.links.entries()) {
-    if (issues.length >= IMPORT_MAX_ISSUES) break;
-    const parsed = exportLinkSchema.safeParse(raw);
-    if (!parsed.success) {
-      if (pushZodIssues(issues, `links[${index}]`, parsed.error.issues)) break;
-      continue;
-    }
-    links.push(parsed.data);
-  }
-
-  const journalPeriods: ShadowbrainExportV1["journal_periods"] = [];
-  for (const [index, raw] of shell.journal_periods.entries()) {
-    if (issues.length >= IMPORT_MAX_ISSUES) break;
-    const parsed = exportJournalPeriodSchema.safeParse(raw);
-    if (!parsed.success) {
-      if (
-        pushZodIssues(issues, `journal_periods[${index}]`, parsed.error.issues)
-      ) {
-        break;
-      }
-      continue;
-    }
-    journalPeriods.push(parsed.data);
-  }
-
-  if (issues.length > 0) return { ok: false, issues };
-
-  return {
-    ok: true,
-    data: {
-      format: shell.format,
-      version: shell.version,
-      exported_at: shell.exported_at,
-      items,
-      tags,
-      item_tags: itemTags,
-      links,
-      journal_periods: journalPeriods,
-    },
-  };
-}
-
 function normalizeImportData(
   raw: unknown
 ): ShadowbrainExportV1 | { error: string } | { issues: string[] } {
@@ -308,7 +198,12 @@ function normalizeImportData(
         issues: shell.error.issues
           .slice(0, IMPORT_MAX_ISSUES)
           .map((issue) =>
-            formatIssue(issue.path.join(".") || "data", issue.message)
+            formatIssue(
+              issue.path
+                .map((segment) => truncateIssueText(String(segment)))
+                .join(".") || "data",
+              issue.message
+            )
           ),
       };
     }
@@ -317,13 +212,27 @@ function normalizeImportData(
     return typed.data;
   }
 
+  if (typeof raw !== "object" || raw === null) {
+    return { error: "Import data must be an object or array" };
+  }
+  if (findUnknownEnvelopeKey(raw)) {
+    return {
+      issues: [formatIssue("data", "contains an unrecognized key")],
+    };
+  }
+
   const shell = exportEnvelopeShellSchema.safeParse(raw);
   if (!shell.success) {
     return {
       issues: shell.error.issues
         .slice(0, IMPORT_MAX_ISSUES)
         .map((issue) =>
-          formatIssue(issue.path.join(".") || "data", issue.message)
+          formatIssue(
+            issue.path
+              .map((segment) => truncateIssueText(String(segment)))
+              .join(".") || "data",
+            issue.message
+          )
         ),
     };
   }

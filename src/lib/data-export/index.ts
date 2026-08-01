@@ -7,3 +7,4 @@ export {
 export { runJsonImport } from "./import";
 export { IMPORT_MAX_BYTES } from "./limits";
 export type { ShadowbrainExportItem, ShadowbrainExportV1 } from "./types";
+export { isExportEnvelopeSchemaValid } from "./validate-envelope";

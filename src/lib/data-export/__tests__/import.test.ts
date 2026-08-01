@@ -13,6 +13,8 @@ import {
   type ShadowbrainExportItem,
   type ShadowbrainExportV1,
 } from "@/lib/data-export";
+import { isExportEnvelopeSchemaValid } from "@/lib/data-export/validate-envelope";
+import { readFileSync } from "node:fs";
 
 const baseItem = (
   id: string,
@@ -396,21 +398,19 @@ describe("runJsonImport", () => {
   });
 
   it("bounds validation work for 50_000 empty item objects", () => {
+    const payload = {
+      format: "shadowbrain-export" as const,
+      version: 1 as const,
+      exported_at: "2024-01-01T00:00:00.000Z",
+      items: Array.from({ length: 50_000 }, () => ({})),
+      tags: [],
+      item_tags: [],
+      links: [],
+      journal_periods: [],
+    };
     const started = Date.now();
-    const result = runJsonImport(
-      db,
-      {
-        format: "shadowbrain-export",
-        version: 1,
-        exported_at: "2024-01-01T00:00:00.000Z",
-        items: Array.from({ length: 50_000 }, () => ({})),
-        tags: [],
-        item_tags: [],
-        links: [],
-        journal_periods: [],
-      },
-      importOptions
-    );
+    const result = runJsonImport(db, payload, importOptions);
+    const importMs = Date.now() - started;
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.issues.length).toBeGreaterThan(0);
@@ -418,8 +418,23 @@ describe("runJsonImport", () => {
     expect(result.issues.every((issue) => issue.message.length <= 200)).toBe(
       true
     );
-    expect(Date.now() - started).toBeLessThan(2000);
+    // Prove bounded work, not only a capped response array: the incremental
+    // path must finish far faster than full-array Zod amplification (~2s+).
+    expect(importMs).toBeLessThan(500);
+    expect(isExportEnvelopeSchemaValid(payload)).toBe(false);
     expect(contentItems.findAll(db)).toHaveLength(0);
+  });
+
+  it("does not use full exportEnvelopeSchema on import/export request paths", () => {
+    const files = [
+      "src/lib/data-export/import.ts",
+      "src/app/api/import/route.ts",
+      "src/app/api/export/route.ts",
+    ];
+    for (const relative of files) {
+      const source = readFileSync(relative, "utf8");
+      expect(source).not.toContain("exportEnvelopeSchema");
+    }
   });
 
   it("truncates extremely long validation messages", () => {
@@ -442,9 +457,57 @@ describe("runJsonImport", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.issues.length).toBeGreaterThan(0);
+    expect(result.issues.length).toBeLessThanOrEqual(50);
     expect(result.issues.every((issue) => issue.message.length <= 200)).toBe(
       true
     );
+    expect(
+      result.issues.some((issue) => /unrecognized key/i.test(issue.message))
+    ).toBe(true);
+    expect(result.issues.every((issue) => !issue.message.includes(huge))).toBe(
+      true
+    );
+
+    const itemLevel = runJsonImport(
+      db,
+      {
+        format: "shadowbrain-export",
+        version: 1,
+        exported_at: "2024-01-01T00:00:00.000Z",
+        items: [
+          {
+            id: "item-1",
+            type: "note",
+            title: null,
+            content: "hello",
+            image_path: null,
+            source: "manual",
+            source_url: null,
+            metadata: null,
+            is_private: 0,
+            is_hidden: 0,
+            created_at: "2024-01-01T00:00:00.000Z",
+            updated_at: "2024-01-01T00:00:00.000Z",
+            [huge]: true,
+          },
+        ],
+        tags: [],
+        item_tags: [],
+        links: [],
+        journal_periods: [],
+      },
+      importOptions
+    );
+    expect(itemLevel.ok).toBe(false);
+    if (itemLevel.ok) return;
+    expect(itemLevel.issues.length).toBeGreaterThan(0);
+    expect(itemLevel.issues.length).toBeLessThanOrEqual(50);
+    expect(itemLevel.issues.every((issue) => issue.message.length <= 200)).toBe(
+      true
+    );
+    expect(
+      itemLevel.issues.every((issue) => !issue.message.includes(huge))
+    ).toBe(true);
   });
 
   it("rejects legacy items missing is_private without writing", () => {

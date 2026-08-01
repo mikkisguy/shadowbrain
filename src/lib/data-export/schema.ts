@@ -221,7 +221,12 @@ export const exportEnvelopeShellSchema = z
   })
   .strict();
 
-/** Fully typed envelope used after incremental record validation. */
+/**
+ * Fully typed envelope for small trusted payloads (guide/template/tests).
+ * Do NOT safeParse untrusted or large arrays with this schema — Zod will
+ * allocate one issue per missing field across every element. Use
+ * `exportEnvelopeShellSchema` + `parseTypedEnvelope` / `isExportEnvelopeSchemaValid`.
+ */
 export const exportEnvelopeSchema = z
   .object({
     format: z.literal("shadowbrain-export"),

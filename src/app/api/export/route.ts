@@ -10,7 +10,7 @@ import {
   tags,
 } from "@/db/index";
 import { buildExportEnvelope, exportAsJsonString } from "@/lib/data-export";
-import { exportEnvelopeSchema } from "@/lib/data-export/schema";
+import { isExportEnvelopeSchemaValid } from "@/lib/data-export/validate-envelope";
 import {
   IMPORT_MAX_BYTES,
   IMPORT_MAX_ITEM_TAGS,
@@ -135,9 +135,7 @@ export async function GET(request: Request) {
 
     const bodyBytes = new TextEncoder().encode(snapshot.body).byteLength;
     const schemaOk =
-      format !== "json"
-        ? true
-        : exportEnvelopeSchema.safeParse(snapshot.envelope).success;
+      format !== "json" ? true : isExportEnvelopeSchemaValid(snapshot.envelope);
     const importable =
       format !== "json"
         ? true
