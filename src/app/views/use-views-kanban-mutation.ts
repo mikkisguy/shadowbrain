@@ -3,11 +3,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { queryKeys } from "@/lib/query-config";
+import { queryKeys, type ViewsGridQueryKey } from "@/lib/query-config";
 import type { WorkflowStatusValue } from "@/lib/workflow-status";
 
 import type { GridRow } from "./types";
-import { mergeGridMetadata } from "./use-views-grid-mutation";
+import {
+  mergeGridMetadata,
+  withVisibilityQuery,
+} from "./use-views-grid-mutation";
+import type { ViewsVisibilityOptions } from "./use-views-grid-data";
 
 export interface MoveKanbanCardVariables {
   id: string;
@@ -16,21 +20,18 @@ export interface MoveKanbanCardVariables {
   toStatus: WorkflowStatusValue;
   metadata: Record<string, unknown>;
 }
-
-type KanbanGridQueryKey = readonly ["views", "grid", string];
+type KanbanGridQueryKey = ViewsGridQueryKey;
 
 interface KanbanMutationContext {
   queryKey: KanbanGridQueryKey;
   previousRow: GridRow | undefined;
 }
 
-async function patchKanbanCard({
-  id,
-  type,
-  toStatus,
-  metadata,
-}: MoveKanbanCardVariables): Promise<void> {
-  const res = await fetch(`/api/items/${id}`, {
+async function patchKanbanCard(
+  { id, type, toStatus, metadata }: MoveKanbanCardVariables,
+  visibility?: ViewsVisibilityOptions
+): Promise<void> {
+  const res = await fetch(withVisibilityQuery(`/api/items/${id}`, visibility), {
     method: "PATCH",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -52,7 +53,10 @@ async function patchKanbanCard({
   }
 }
 
-export function useViewsKanbanMutation(projectId: string | null) {
+export function useViewsKanbanMutation(
+  projectId: string | null,
+  visibility: ViewsVisibilityOptions = {}
+) {
   const queryClient = useQueryClient();
   const mutation = useMutation<
     void,
@@ -63,9 +67,9 @@ export function useViewsKanbanMutation(projectId: string | null) {
     mutationFn: (variables) =>
       variables.fromStatus === variables.toStatus
         ? Promise.resolve()
-        : patchKanbanCard(variables),
+        : patchKanbanCard(variables, visibility),
     onMutate: async (variables) => {
-      const queryKey = queryKeys.views.grid(projectId);
+      const queryKey = queryKeys.views.grid(projectId, visibility);
       if (variables.fromStatus === variables.toStatus) {
         return { queryKey, previousRow: undefined };
       }

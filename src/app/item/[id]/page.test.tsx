@@ -54,6 +54,14 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+vi.mock("./project-board-section", () => ({
+  ProjectBoardSection: ({ projectId }: { projectId: string }) => (
+    <section data-testid="project-board-section">
+      Project board for {projectId}
+    </section>
+  ),
+}));
+
 afterEach(() => {
   mocks.findWithRelations.mockReset();
   mocks.getDb.mockClear();
@@ -401,6 +409,32 @@ describe("ItemDetailPage foundation (issue #25)", () => {
 
     const link = screen.getByRole("link", { name: "section" });
     expect(link).not.toHaveAttribute("target");
+  });
+});
+
+describe("ItemDetailPage project board", () => {
+  it("renders the board for project items", async () => {
+    mockItem("project", null);
+
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
+
+    expect(screen.getByTestId("project-board-section")).toHaveTextContent(
+      "Project board for 1"
+    );
+  });
+
+  it("does not render the board for non-project items", async () => {
+    mockItem("event", null);
+
+    renderWithQuery(
+      await ItemDetailPage({ params: Promise.resolve({ id: "1" }) })
+    );
+
+    expect(
+      screen.queryByTestId("project-board-section")
+    ).not.toBeInTheDocument();
   });
 });
 

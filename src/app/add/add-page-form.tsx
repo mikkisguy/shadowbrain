@@ -63,12 +63,23 @@ interface AddPageFormProps {
   prefillType?: string;
   prefillText?: string;
   prefillUrl?: string;
+  prefillProjectId?: string;
+}
+
+interface CreateResult {
+  item: { id?: string; [key: string]: unknown };
+  linkedProjectId?: string;
+}
+
+interface CreateError extends Error {
+  createdItemId?: string;
 }
 
 export function AddPageForm({
   prefillType,
   prefillText,
   prefillUrl,
+  prefillProjectId,
 }: AddPageFormProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -93,8 +104,16 @@ export function AddPageForm({
     prefillAppliedRef.current = true;
 
     setDraft((prev) => {
-      // If a draft was restored from localStorage, don't overwrite with params
-      if (prev.content.trim() || prev.title.trim() || prev.sourceUrl.trim()) {
+      // A project task/event CTA is explicit type intent, even when a
+      // previously restored draft contains a different type.
+      const hasDraftData = Boolean(
+        prev.content.trim() || prev.title.trim() || prev.sourceUrl.trim()
+      );
+      const isProjectTypePrefill =
+        Boolean(prefillProjectId) &&
+        (prefillType === "task" || prefillType === "event");
+
+      if (hasDraftData && !isProjectTypePrefill) {
         return prev;
       }
 
@@ -102,14 +121,16 @@ export function AddPageForm({
       let changed = false;
 
       if (prefillType && prefillType in TYPE_ITEMS) {
-        next.type = prefillType;
-        changed = true;
+        if (next.type !== prefillType) {
+          next.type = prefillType;
+          changed = true;
+        }
       }
-      if (prefillText) {
+      if (prefillText && !hasDraftData) {
         next.content = prefillText;
         changed = true;
       }
-      if (prefillUrl) {
+      if (prefillUrl && !hasDraftData) {
         next.sourceUrl = prefillUrl;
         if (
           prefillType === "bookmark" ||
@@ -122,7 +143,7 @@ export function AddPageForm({
 
       return changed ? next : prev;
     });
-  }, [prefillType, prefillText, prefillUrl]);
+  }, [prefillType, prefillText, prefillUrl, prefillProjectId]);
 
   // Auto-focus content textarea
   useEffect(() => {
@@ -133,20 +154,24 @@ export function AddPageForm({
   }, []);
 
   // Mutation
-  const mutation = useMutation({
-    mutationFn: async (draftToSubmit: Draft) => {
+  const mutation = useMutation<CreateResult, CreateError, Draft>({
+    mutationFn: async (draftToSubmit) => {
       if (draftToSubmit.type === "image") {
         if (selectedFile) {
-          return uploadImage(selectedFile, {
-            title: draftToSubmit.title,
-            content: draftToSubmit.content,
-          });
+          return {
+            item: await uploadImage(selectedFile, {
+              title: draftToSubmit.title,
+              content: draftToSubmit.content,
+            }),
+          };
         }
         if (draftToSubmit.imageUrl.trim()) {
-          return uploadImage(draftToSubmit.imageUrl.trim(), {
-            title: draftToSubmit.title,
-            content: draftToSubmit.content,
-          });
+          return {
+            item: await uploadImage(draftToSubmit.imageUrl.trim(), {
+              title: draftToSubmit.title,
+              content: draftToSubmit.content,
+            }),
+          };
         }
         throw new Error("No image selected");
       }
@@ -202,22 +227,67 @@ export function AddPageForm({
         throw new Error(msg ?? "Failed to save");
       }
 
-      return res.json();
+      const item = await res.json();
+      const shouldLinkToProject =
+        Boolean(prefillProjectId) &&
+        (draftToSubmit.type === "task" || draftToSubmit.type === "event");
+
+      if (shouldLinkToProject) {
+        const linkRes = await fetch("/api/links", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_id: item?.id,
+            target_id: prefillProjectId,
+            link_type: "happened_during",
+          }),
+        });
+
+        if (!linkRes.ok) {
+          const payload = await linkRes.json().catch(() => ({}));
+          const msg: string | undefined = payload?.error?.message;
+          const error = new Error(
+            msg ?? "Saved item, but failed to link it to the project"
+          ) as CreateError;
+          error.createdItemId = item?.id;
+          throw error;
+        }
+      }
+
+      return {
+        item,
+        linkedProjectId: shouldLinkToProject ? prefillProjectId : undefined,
+      };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.browse.all });
+      if (data.linkedProjectId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.views.all });
+      }
       clearDraft();
       toast.success("Saved.");
-      // Redirect to the new item's detail page
-      const itemId = data?.id;
+      if (data.linkedProjectId) {
+        router.push(`/item/${data.linkedProjectId}`);
+        return;
+      }
+
+      // Otherwise redirect to the new item's detail page.
+      const itemId = data.item?.id;
       if (itemId) {
         router.push(`/item/${itemId}`);
       } else {
         router.push("/");
       }
     },
-    onError: (error: Error) => {
+    onError: (error) => {
       toast.error(error.message ?? "Failed to save");
+      // A link failure happens after creation; avoid making the user recreate
+      // the item and take them to its detail page instead.
+      if (error.createdItemId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.browse.all });
+        clearDraft();
+        router.push(`/item/${error.createdItemId}`);
+      }
     },
   });
 
@@ -344,6 +414,9 @@ export function AddPageForm({
   const contentRequired = isContentRequired(draft.type);
   const submitDisabled = mutation.isPending || !canSubmitImage;
   const error = mutation.error ? mutation.error.message : null;
+  const willLinkToProject =
+    Boolean(prefillProjectId) &&
+    (draft.type === "task" || draft.type === "event");
 
   return (
     <div className="flex flex-col gap-4">
@@ -387,6 +460,12 @@ export function AddPageForm({
           </Select>
         </div>
       </div>
+
+      {willLinkToProject && (
+        <p className="text-muted-foreground text-xs">
+          This {draft.type} will be added to the project.
+        </p>
+      )}
 
       {/* Main form area */}
       {draft.type === "image" ? (

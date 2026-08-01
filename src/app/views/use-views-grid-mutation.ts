@@ -5,6 +5,8 @@ import { toast } from "sonner";
 
 import { queryKeys } from "@/lib/query-config";
 
+import type { ViewsVisibilityOptions } from "./use-views-grid-data";
+
 type GridRowType = "event" | "task";
 
 export interface GridMetadataPatch {
@@ -13,12 +15,23 @@ export interface GridMetadataPatch {
   metadata: Record<string, unknown>;
 }
 
-async function patchGridItem({
-  id,
-  type,
-  metadata,
-}: GridMetadataPatch): Promise<void> {
-  const res = await fetch(`/api/items/${id}`, {
+export function withVisibilityQuery(
+  path: string,
+  visibility?: ViewsVisibilityOptions
+): string {
+  const params = new URLSearchParams();
+  if (visibility?.includeHidden) params.set("include_hidden", "1");
+  if (visibility?.includePrivate) params.set("include_private", "1");
+  const query = params.toString();
+  if (!query) return path;
+  return path.includes("?") ? `${path}&${query}` : `${path}?${query}`;
+}
+
+async function patchGridItem(
+  { id, type, metadata }: GridMetadataPatch,
+  visibility?: ViewsVisibilityOptions
+): Promise<void> {
+  const res = await fetch(withVisibilityQuery(`/api/items/${id}`, visibility), {
     method: "PATCH",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -37,11 +50,12 @@ async function patchGridItem({
   }
 }
 
-export function useViewsGridMutation() {
+export function useViewsGridMutation(visibility: ViewsVisibilityOptions = {}) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: patchGridItem,
+    mutationFn: (variables: GridMetadataPatch) =>
+      patchGridItem(variables, visibility),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.views.all });
       void queryClient.invalidateQueries({ queryKey: queryKeys.browse.all });

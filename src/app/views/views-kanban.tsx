@@ -45,6 +45,8 @@ const compactDateFormatter = new Intl.DateTimeFormat(undefined, {
 export interface ViewsKanbanProps {
   projectId: string | null;
   onCardOpen: (id: string) => void;
+  includeHidden?: boolean;
+  includePrivate?: boolean;
 }
 
 export function groupRowsByStatus(
@@ -353,10 +355,20 @@ function KanbanColumn({
   );
 }
 
-export function ViewsKanban({ projectId, onCardOpen }: ViewsKanbanProps) {
-  const { data, isPending, isError, error, refetch } =
-    useViewsGridData(projectId);
-  const { moveCard } = useViewsKanbanMutation(projectId);
+export function ViewsKanban({
+  projectId,
+  onCardOpen,
+  includeHidden = false,
+  includePrivate = false,
+}: ViewsKanbanProps) {
+  const { data, isPending, isError, error, refetch } = useViewsGridData(
+    projectId,
+    { includeHidden, includePrivate }
+  );
+  const { moveCard } = useViewsKanbanMutation(projectId, {
+    includeHidden,
+    includePrivate,
+  });
   const [doneExpanded, setDoneExpanded] = useState(false);
   const rows = useMemo(() => data ?? [], [data]);
   const groups = useMemo(() => groupRowsByStatus(rows), [rows]);

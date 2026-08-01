@@ -6,6 +6,7 @@ import { formatAbsolute } from "@/lib/dates";
 import { parseBookmarkMeta } from "@/lib/metadata-fields";
 
 import { MetadataSection } from "@/app/browse/metadata-section";
+import { ProjectBoardSection } from "./project-board-section";
 import { CoverBackground } from "./cover-background";
 import { DetailLayout } from "./detail-layout";
 import { ItemEditor } from "./item-editor";
@@ -194,6 +195,10 @@ export default async function ItemDetailPage({
                 </span>
               ) : null}
             </p>
+          ) : null}
+
+          {item.type === "project" ? (
+            <ProjectBoardSection projectId={item.id} />
           ) : null}
         </DetailLayout>
       </div>

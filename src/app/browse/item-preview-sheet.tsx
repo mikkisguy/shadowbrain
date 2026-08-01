@@ -108,6 +108,17 @@ function resolveParentCrumb(
   return null;
 }
 
+function visibilityQuery(
+  includeHidden: boolean,
+  includePrivate: boolean
+): string {
+  const params = new URLSearchParams();
+  if (includeHidden) params.set("include_hidden", "1");
+  if (includePrivate) params.set("include_private", "1");
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 function hasWorkflowStatus(type: string): boolean {
   return type === "task" || type === "event";
 }
@@ -122,13 +133,22 @@ export interface ItemPreviewSheetProps {
   /** Called when the sheet is dismissed (Escape / outside-click / close
    *  button). The parent removes `?item=` from the URL. */
   onClose: () => void;
+  includeHidden?: boolean;
+  includePrivate?: boolean;
 }
 
-export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
+export function ItemPreviewSheet({
+  itemId,
+  onClose,
+  includeHidden = false,
+  includePrivate = false,
+}: ItemPreviewSheetProps) {
   const open = itemId !== null;
 
-  const { data, status, handleRetry, refetch, updateContent } =
-    useItemDetail(itemId);
+  const { data, status, handleRetry, refetch, updateContent } = useItemDetail(
+    itemId,
+    { includeHidden, includePrivate }
+  );
 
   const { open: editOpen, setOpen: setEditOpen } = useEditDialog();
   const { open: deleteOpen, setOpen: setDeleteOpen } = useDeleteDialog();
@@ -136,9 +156,12 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/items/${id}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        `/api/items/${id}${visibilityQuery(includeHidden, includePrivate)}`,
+        {
+          method: "DELETE",
+        }
+      );
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
         const msg: string | undefined = payload?.error?.message;
@@ -175,11 +198,14 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
         ...parseMetadataObject(metadata),
         status: nextStatus,
       };
-      const res = await fetch(`/api/items/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, metadata: merged }),
-      });
+      const res = await fetch(
+        `/api/items/${id}${visibilityQuery(includeHidden, includePrivate)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type, metadata: merged }),
+        }
+      );
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
         const msg: string | undefined = payload?.error?.message;
@@ -536,6 +562,8 @@ export function ItemPreviewSheet({ itemId, onClose }: ItemPreviewSheetProps) {
           open={editOpen}
           onOpenChange={setEditOpen}
           onSaved={handleEditSaved}
+          includeHidden={includeHidden}
+          includePrivate={includePrivate}
         />
       )}
 

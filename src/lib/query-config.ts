@@ -36,6 +36,16 @@ export const staleTimes = {
   views: 5_000,
 } as const;
 
+export type ViewsGridQueryKey = readonly [
+  "views",
+  "grid",
+  string,
+  {
+    includeHidden: boolean;
+    includePrivate: boolean;
+  },
+];
+
 export const queryKeys = {
   /**
    * Browse page queries.
@@ -98,8 +108,22 @@ export const queryKeys = {
    */
   views: {
     all: ["views"] as const,
-    grid: (projectId: string | null) =>
-      ["views", "grid", projectId ?? "global"] as const,
+    grid: (
+      projectId: string | null,
+      visibility: {
+        includeHidden?: boolean;
+        includePrivate?: boolean;
+      } = {}
+    ) =>
+      [
+        "views",
+        "grid",
+        projectId ?? "global",
+        {
+          includeHidden: visibility.includeHidden === true,
+          includePrivate: visibility.includePrivate === true,
+        },
+      ] as const,
     projects: (q: string) => ["views", "projects", q] as const,
   },
 } as const;

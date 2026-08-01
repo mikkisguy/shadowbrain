@@ -61,3 +61,32 @@ if (
     /* no-op — jsdom has no layout */
   };
 }
+
+// Node 24+ / non-jsdom environments may not expose Web Storage unless
+// `--localstorage-file` is provided. Draft/timeline tests call
+// `localStorage.clear()` in beforeEach; provide an in-memory shim.
+if (typeof globalThis.localStorage === "undefined") {
+  const store = new Map<string, string>();
+  const memoryStorage: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear() {
+      store.clear();
+    },
+    getItem(key: string) {
+      return store.has(key) ? store.get(key)! : null;
+    },
+    key(index: number) {
+      return Array.from(store.keys())[index] ?? null;
+    },
+    removeItem(key: string) {
+      store.delete(key);
+    },
+    setItem(key: string, value: string) {
+      store.set(key, String(value));
+    },
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).localStorage = memoryStorage;
+}

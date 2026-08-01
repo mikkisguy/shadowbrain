@@ -7,6 +7,37 @@ import { queryKeys, staleTimes } from "@/lib/query-config";
 import type { GridRow } from "./types";
 
 type GridRowType = "event" | "task";
+export interface ViewsVisibilityOptions {
+  includeHidden?: boolean;
+  includePrivate?: boolean;
+}
+
+function visibilityParams({
+  includeHidden = false,
+  includePrivate = false,
+}: ViewsVisibilityOptions = {}): URLSearchParams {
+  const params = new URLSearchParams();
+  if (includeHidden) params.set("include_hidden", "1");
+  if (includePrivate) params.set("include_private", "1");
+  return params;
+}
+
+function withVisibilityQuery(
+  path: string,
+  visibility?: ViewsVisibilityOptions
+): string {
+  const params = visibilityParams(visibility);
+  const query = params.toString();
+  if (!query) return path;
+  return path.includes("?") ? `${path}&${query}` : `${path}?${query}`;
+}
+
+function normalizedVisibility({
+  includeHidden = false,
+  includePrivate = false,
+}: ViewsVisibilityOptions = {}): Required<ViewsVisibilityOptions> {
+  return { includeHidden, includePrivate };
+}
 
 const GRID_TYPES = new Set<GridRowType>(["event", "task"]);
 
@@ -147,14 +178,18 @@ export function mapListItemsToGridRows(items: ListItemPayload[]): GridRow[] {
     .filter((row): row is GridRow => row != null);
 }
 
-async function fetchProjectGridRows(
+export async function fetchProjectGridRows(
   projectId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  visibility?: ViewsVisibilityOptions
 ): Promise<GridRow[]> {
-  const res = await fetch(`/api/items/${projectId}/related`, {
-    credentials: "same-origin",
-    signal,
-  });
+  const res = await fetch(
+    withVisibilityQuery(`/api/items/${projectId}/related`, visibility),
+    {
+      credentials: "same-origin",
+      signal,
+    }
+  );
   if (!res.ok) {
     throw new Error("Failed to load project grid");
   }
@@ -164,7 +199,8 @@ async function fetchProjectGridRows(
 
 export async function fetchAllItemsByType(
   type: GridRowType,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  visibility?: ViewsVisibilityOptions
 ): Promise<ListItemPayload[]> {
   const limit = 100;
   const items: ListItemPayload[] = [];
@@ -172,7 +208,10 @@ export async function fetchAllItemsByType(
 
   while (true) {
     const res = await fetch(
-      `/api/items?type=${encodeURIComponent(type)}&limit=${limit}&page=${page}`,
+      withVisibilityQuery(
+        `/api/items?type=${encodeURIComponent(type)}&limit=${limit}&page=${page}`,
+        visibility
+      ),
       {
         credentials: "same-origin",
         signal,
@@ -192,23 +231,28 @@ export async function fetchAllItemsByType(
 }
 
 export async function fetchGlobalGridRows(
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  visibility?: ViewsVisibilityOptions
 ): Promise<GridRow[]> {
   const [events, tasks] = await Promise.all([
-    fetchAllItemsByType("event", signal),
-    fetchAllItemsByType("task", signal),
+    fetchAllItemsByType("event", signal, visibility),
+    fetchAllItemsByType("task", signal, visibility),
   ]);
 
   return mapListItemsToGridRows([...events, ...tasks]);
 }
 
-export function useViewsGridData(projectId: string | null) {
+export function useViewsGridData(
+  projectId: string | null,
+  visibility: ViewsVisibilityOptions = {}
+) {
+  const resolvedVisibility = normalizedVisibility(visibility);
   return useQuery({
-    queryKey: queryKeys.views.grid(projectId),
+    queryKey: queryKeys.views.grid(projectId, resolvedVisibility),
     queryFn: ({ signal }) =>
       projectId
-        ? fetchProjectGridRows(projectId, signal)
-        : fetchGlobalGridRows(signal),
+        ? fetchProjectGridRows(projectId, signal, resolvedVisibility)
+        : fetchGlobalGridRows(signal, resolvedVisibility),
     staleTime: staleTimes.views,
   });
 }

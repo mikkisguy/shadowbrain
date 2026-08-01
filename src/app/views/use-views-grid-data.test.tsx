@@ -2,8 +2,11 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { queryKeys } from "@/lib/query-config";
+
 import {
   fetchGlobalGridRows,
+  fetchProjectGridRows,
   mapListItemToGridRow,
   mapListItemsToGridRows,
   mapRelatedItemToGridRow,
@@ -223,6 +226,37 @@ describe("fetchGlobalGridRows", () => {
     });
     expect(fetchMock.mock.calls.map(([url]) => url)).toContain(
       "/api/items?type=event&limit=100&page=2"
+    );
+  });
+});
+
+describe("fetchProjectGridRows", () => {
+  it("requests opted-in hidden and private related items", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ items: [] }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchProjectGridRows("project-1", undefined, {
+      includeHidden: true,
+      includePrivate: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/items/project-1/related?include_hidden=1&include_private=1",
+      { credentials: "same-origin", signal: undefined }
+    );
+  });
+});
+
+describe("views grid query keys", () => {
+  it("keeps visibility scopes in the cache identity", () => {
+    expect(queryKeys.views.grid("project-1")).not.toEqual(
+      queryKeys.views.grid("project-1", {
+        includeHidden: true,
+        includePrivate: true,
+      })
     );
   });
 });

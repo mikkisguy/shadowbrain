@@ -16,13 +16,20 @@ export default async function AddPage({ searchParams }: AddPageProps) {
   const type = typeof params.type === "string" ? params.type : undefined;
   const text = typeof params.text === "string" ? params.text : undefined;
   const url = typeof params.url === "string" ? params.url : undefined;
+  const project =
+    typeof params.project === "string" ? params.project : undefined;
 
   return (
     <main
       id="main-content"
       className="mx-auto flex w-full max-w-screen-2xl flex-col px-4 py-6 sm:px-6 sm:py-8"
     >
-      <AddPageForm prefillType={type} prefillText={text} prefillUrl={url} />
+      <AddPageForm
+        prefillType={type}
+        prefillText={text}
+        prefillUrl={url}
+        prefillProjectId={project}
+      />
     </main>
   );
 }

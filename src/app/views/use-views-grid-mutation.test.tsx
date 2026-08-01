@@ -99,6 +99,36 @@ describe("useViewsGridMutation", () => {
     });
   });
 
+  it("includes visibility flags when opted in", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(
+      () =>
+        useViewsGridMutation({
+          includeHidden: true,
+          includePrivate: true,
+        }),
+      { wrapper: QueryWrapper }
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: "item-visibility",
+        type: "task",
+        metadata: { status: "done" },
+      });
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/items/item-visibility?include_hidden=1&include_private=1",
+      expect.objectContaining({ method: "PATCH" })
+    );
+  });
+
   it("toasts on mutation error", async () => {
     vi.stubGlobal(
       "fetch",

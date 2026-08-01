@@ -91,6 +91,35 @@ describe("useViewsKanbanMutation", () => {
     expect(toastSuccess).not.toHaveBeenCalled();
   });
 
+  it("includes visibility flags when opted in", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    const queryClient = createQueryClient();
+    const { result } = renderHook(
+      () =>
+        useViewsKanbanMutation(null, {
+          includeHidden: true,
+          includePrivate: true,
+        }),
+      { wrapper: createWrapper(queryClient) }
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: row.id,
+        type: "task",
+        fromStatus: "todo",
+        toStatus: "done",
+        metadata: row.metadata,
+      });
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/items/task-1?include_hidden=1&include_private=1",
+      expect.objectContaining({ method: "PATCH" })
+    );
+  });
+
   it("does not PATCH a move to the card's current status", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

@@ -75,6 +75,10 @@ export interface EditDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Called after a successful save so the page can refresh its data. */
   onSaved?: () => void;
+  /** Include hidden items when loading and saving from a visibility-scoped view. */
+  includeHidden?: boolean;
+  /** Include private items when loading and saving from a visibility-scoped view. */
+  includePrivate?: boolean;
 }
 
 export function EditDialog({
@@ -83,6 +87,8 @@ export function EditDialog({
   open,
   onOpenChange,
   onSaved,
+  includeHidden = false,
+  includePrivate = false,
 }: EditDialogProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -132,6 +138,8 @@ export function EditDialog({
               onClose={handleClose}
               onForceClose={() => onOpenChange(false)}
               onSaved={onSaved}
+              includeHidden={includeHidden}
+              includePrivate={includePrivate}
               isExpanded={isExpanded}
               onToggleExpand={() => setIsExpanded((v) => !v)}
               hasChanges={hasChanges}
@@ -198,6 +206,8 @@ function EditForm({
   onClose,
   onForceClose,
   onSaved,
+  includeHidden,
+  includePrivate,
   isExpanded,
   onToggleExpand,
   hasChanges,
@@ -208,6 +218,8 @@ function EditForm({
   onClose: () => void;
   onForceClose: () => void;
   onSaved?: () => void;
+  includeHidden: boolean;
+  includePrivate: boolean;
   isExpanded: boolean;
   onToggleExpand: () => void;
   hasChanges: boolean;
@@ -260,6 +272,8 @@ function EditForm({
     onHasChangesChange,
     onSaved,
     onForceClose,
+    includeHidden,
+    includePrivate,
   });
 
   const handleSubmit = useCallback(() => {

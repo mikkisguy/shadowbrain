@@ -16,6 +16,8 @@ interface UseEditFormParams {
   onHasChangesChange: (hasChanges: boolean) => void;
   onSaved?: () => void;
   onForceClose: () => void;
+  includeHidden?: boolean;
+  includePrivate?: boolean;
 }
 
 export function useEditForm({
@@ -25,6 +27,8 @@ export function useEditForm({
   onHasChangesChange,
   onSaved,
   onForceClose,
+  includeHidden = false,
+  includePrivate = false,
 }: UseEditFormParams) {
   const queryClient = useQueryClient();
   const mountedRef = useRef(true);
@@ -79,7 +83,15 @@ export function useEditForm({
         body.metadata = meta ?? undefined;
       }
 
-      const res = await fetch(`/api/items/${item.id}`, {
+      const visibilityParams = new URLSearchParams();
+      if (includeHidden) visibilityParams.set("include_hidden", "1");
+      if (includePrivate) visibilityParams.set("include_private", "1");
+      const visibilityQuery = visibilityParams.toString();
+      const itemUrl = `/api/items/${item.id}${
+        visibilityQuery ? `?${visibilityQuery}` : ""
+      }`;
+
+      const res = await fetch(itemUrl, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
