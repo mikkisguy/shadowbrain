@@ -22,6 +22,7 @@ import {
   DEFAULT_TIMELINE_ZOOM,
   getTimelineLaneMinHeight,
   getTimelineNestedTopRem,
+  parseLocalDateInput,
   readStoredTimelineZoom,
   resolveItemSpan,
   shiftTimelineAnchor,
@@ -57,6 +58,9 @@ function formatRangeLabel(start: Date, end: Date, zoom: TimelineZoom): string {
       month: "long",
       year: "numeric",
     });
+  }
+  if (zoom === "quarter") {
+    return `Q${Math.floor(start.getMonth() / 3) + 1} ${start.getFullYear()}`;
   }
 
   const lastDay = new Date(end.getTime());
@@ -134,15 +138,14 @@ export function offsetLeftWithin(
 
   return left;
 }
-
-/** Scroll the timeline board so today's day column is centered. */
-export function scrollTodayIntoView(
+/** Scroll the timeline board so the requested day column is centered. */
+export function scrollDayIntoView(
   container: HTMLElement | null,
-  todayKey: string
+  dayKey: string
 ): void {
   if (!container) return;
   const day = container.querySelector<HTMLElement>(
-    `[data-timeline-day="${todayKey}"]`
+    `[data-timeline-day="${dayKey}"]`
   );
   if (!day) return;
 
@@ -383,34 +386,45 @@ export function ViewsTimeline({
   const [anchor, setAnchor] = useState<Date>(() => new Date(0));
   const [zoom, setZoom] = useState<TimelineZoom>(DEFAULT_TIMELINE_ZOOM);
   const [calendarReady, setCalendarReady] = useState(false);
-  const [todayScrollRequest, setTodayScrollRequest] = useState(0);
+  const [scrollTargetKey, setScrollTargetKey] = useState<string | null>(null);
+  const [scrollRequest, setScrollRequest] = useState(0);
   const timelineRef = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => data ?? [], [data]);
   const range = useMemo(
     () => buildTimelineRange(anchor, zoom, calendarReady ? new Date() : anchor),
     [anchor, calendarReady, zoom]
   );
-  const todayKey = calendarReady ? localDateKey(new Date()) : "";
   const model = useMemo(
     () => buildTimelineModel(rows, range.start, range.end),
     [range.end, range.start, rows]
   );
 
+  function requestScrollToDay(date: Date) {
+    setScrollTargetKey(localDateKey(date));
+    setScrollRequest((request) => request + 1);
+  }
+
   useEffect(() => {
     queueMicrotask(() => {
+      const today = new Date();
       setZoom(readStoredTimelineZoom());
-      setAnchor(new Date());
+      setAnchor(today);
+      requestScrollToDay(today);
       setCalendarReady(true);
     });
   }, []);
   useEffect(() => {
-    if (rows.length === 0 || !range.days.some((day) => day.key === todayKey)) {
+    if (
+      rows.length === 0 ||
+      !scrollTargetKey ||
+      !range.days.some((day) => day.key === scrollTargetKey)
+    ) {
       return;
     }
 
     let cancelled = false;
     const scroll = () => {
-      if (!cancelled) scrollTodayIntoView(timelineRef.current, todayKey);
+      if (!cancelled) scrollDayIntoView(timelineRef.current, scrollTargetKey);
     };
 
     if (
@@ -428,7 +442,7 @@ export function ViewsTimeline({
     return () => {
       cancelled = true;
     };
-  }, [range, rows.length, todayKey, todayScrollRequest]);
+  }, [range, rows.length, scrollTargetKey, scrollRequest]);
 
   function shiftAnchor(direction: -1 | 1) {
     setAnchor((current) => shiftTimelineAnchor(current, zoom, direction));
@@ -438,10 +452,15 @@ export function ViewsTimeline({
     setZoom(nextZoom);
     writeStoredTimelineZoom(nextZoom);
   }
-
   function goToToday() {
-    setAnchor(new Date());
-    setTodayScrollRequest((request) => request + 1);
+    const today = new Date();
+    setAnchor(today);
+    requestScrollToDay(today);
+  }
+
+  function goToDate(date: Date) {
+    setAnchor(date);
+    requestScrollToDay(date);
   }
 
   if (isPending) return <ViewsGridLoading noun="timeline" />;
@@ -502,6 +521,17 @@ export function ViewsTimeline({
               Next
             </Button>
           </div>
+          <input
+            type="date"
+            data-testid="views-timeline-date-jump"
+            aria-label="Jump to date"
+            value={localDateKey(anchor)}
+            onChange={(event) => {
+              const date = parseLocalDateInput(event.target.value);
+              if (date) goToDate(date);
+            }}
+            className="border-border bg-surface-muted text-foreground h-8 rounded-sm border px-2 font-mono text-xs"
+          />
           <div
             className="border-border flex rounded-sm border p-0.5"
             role="group"
@@ -519,6 +549,16 @@ export function ViewsTimeline({
             </Button>
             <Button
               type="button"
+              variant={zoom === "two_week" ? "secondary" : "ghost"}
+              size="sm"
+              data-testid="views-timeline-zoom-two-week"
+              aria-pressed={zoom === "two_week"}
+              onClick={() => setTimelineZoom("two_week")}
+            >
+              2 weeks
+            </Button>
+            <Button
+              type="button"
               variant={zoom === "month" ? "secondary" : "ghost"}
               size="sm"
               data-testid="views-timeline-zoom-month"
@@ -526,6 +566,16 @@ export function ViewsTimeline({
               onClick={() => setTimelineZoom("month")}
             >
               Month
+            </Button>
+            <Button
+              type="button"
+              variant={zoom === "quarter" ? "secondary" : "ghost"}
+              size="sm"
+              data-testid="views-timeline-zoom-quarter"
+              aria-pressed={zoom === "quarter"}
+              onClick={() => setTimelineZoom("quarter")}
+            >
+              Quarter
             </Button>
           </div>
         </div>

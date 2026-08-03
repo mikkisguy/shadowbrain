@@ -19,6 +19,7 @@ import { useMemo, useState } from "react";
 
 import { ContentTypeLabel } from "@/components/content-type-label";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   parseWorkflowStatus,
   WORKFLOW_STATUS_OPTIONS,
@@ -63,6 +64,19 @@ export function groupRowsByStatus(
   }
 
   return groups;
+}
+
+export function matchesKanbanQuery(row: GridRow, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+
+  return [row.title, row.parent?.title, row.type, ...row.tags].some(
+    (value) => value != null && value.toLowerCase().includes(normalizedQuery)
+  );
+}
+
+export function filterKanbanRows(rows: GridRow[], query: string): GridRow[] {
+  return rows.filter((row) => matchesKanbanQuery(row, query));
 }
 
 function formatKeyDate(value: string): string | null {
@@ -370,23 +384,31 @@ export function ViewsKanban({
     includePrivate,
   });
   const [doneExpanded, setDoneExpanded] = useState(false);
+  const [query, setQuery] = useState("");
   const rows = useMemo(() => data ?? [], [data]);
-  const groups = useMemo(() => groupRowsByStatus(rows), [rows]);
+  const filteredRows = useMemo(
+    () => filterKanbanRows(rows, query),
+    [rows, query]
+  );
+  const groups = useMemo(() => groupRowsByStatus(filteredRows), [filteredRows]);
   const keyboardCoordinateGetter = useMemo(
-    () => createKanbanKeyboardCoordinateGetter(rows),
-    [rows]
+    () => createKanbanKeyboardCoordinateGetter(filteredRows),
+    [filteredRows]
   );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: keyboardCoordinateGetter })
   );
-  const announcements = useMemo(() => createKanbanAnnouncements(rows), [rows]);
+  const announcements = useMemo(
+    () => createKanbanAnnouncements(filteredRows),
+    [filteredRows]
+  );
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     executeKanbanMove({
       activeId: String(active.id),
       overId: over == null ? null : String(over.id),
-      rows,
+      rows: filteredRows,
       moveCard,
     });
   }
@@ -411,18 +433,50 @@ export function ViewsKanban({
       onDragEnd={handleDragEnd}
       accessibility={{ announcements }}
     >
-      <div data-testid="views-kanban" className="grid gap-4 lg:grid-cols-3">
-        {WORKFLOW_STATUS_OPTIONS.map(({ value, label }) => (
-          <KanbanColumn
-            key={value}
-            status={value}
-            label={label}
-            rows={groups[value]}
-            onCardOpen={onCardOpen}
-            doneExpanded={doneExpanded}
-            onDoneToggle={() => setDoneExpanded((expanded) => !expanded)}
+      <div className="space-y-4">
+        <div className="border-border flex items-center gap-2 rounded-sm border p-2">
+          <label htmlFor="kanban-filter" className="sr-only">
+            Filter cards
+          </label>
+          <Input
+            id="kanban-filter"
+            placeholder="Search cards…"
+            aria-label="Filter cards"
+            data-testid="kanban-filter"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
           />
-        ))}
+        </div>
+        {filteredRows.length === 0 && (
+          <div
+            data-testid="kanban-no-matches"
+            className="border-border bg-surface-muted/35 text-muted-foreground flex items-center justify-between gap-3 rounded-sm border px-3 py-2 text-sm"
+          >
+            <span>No cards match “{query.trim()}”.</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              data-testid="kanban-filter-clear"
+              onClick={() => setQuery("")}
+            >
+              Clear filter
+            </Button>
+          </div>
+        )}
+        <div data-testid="views-kanban" className="grid gap-4 lg:grid-cols-3">
+          {WORKFLOW_STATUS_OPTIONS.map(({ value, label }) => (
+            <KanbanColumn
+              key={value}
+              status={value}
+              label={label}
+              rows={groups[value]}
+              onCardOpen={onCardOpen}
+              doneExpanded={doneExpanded}
+              onDoneToggle={() => setDoneExpanded((expanded) => !expanded)}
+            />
+          ))}
+        </div>
       </div>
     </DndContext>
   );
