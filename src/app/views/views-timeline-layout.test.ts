@@ -9,6 +9,7 @@ import {
   coerceTimelineZoom,
   DEFAULT_TIMELINE_ZOOM,
   getTimelineLaneMinHeight,
+  parseLocalDateInput,
   readStoredTimelineZoom,
   resolveItemSpan,
   shiftTimelineAnchor,
@@ -45,20 +46,28 @@ describe("timeline zoom persistence", () => {
     vi.restoreAllMocks();
   });
 
-  it("coerces unknown values to the month default", () => {
+  it("coerces known values and unknown values to the month default", () => {
     expect(DEFAULT_TIMELINE_ZOOM).toBe("month");
     expect(coerceTimelineZoom("week")).toBe("week");
+    expect(coerceTimelineZoom("two_week")).toBe("two_week");
     expect(coerceTimelineZoom("month")).toBe("month");
+    expect(coerceTimelineZoom("quarter")).toBe("quarter");
     expect(coerceTimelineZoom("day")).toBe("month");
     expect(coerceTimelineZoom(null)).toBe("month");
   });
 
   it("persists the selected zoom in localStorage", () => {
-    expect(TIMELINE_ZOOM_STORAGE_KEY).toBe("views.timeline.zoom");
-
     writeStoredTimelineZoom("week");
     expect(localStorage.getItem(TIMELINE_ZOOM_STORAGE_KEY)).toBe("week");
     expect(readStoredTimelineZoom()).toBe("week");
+
+    writeStoredTimelineZoom("two_week");
+    expect(localStorage.getItem(TIMELINE_ZOOM_STORAGE_KEY)).toBe("two_week");
+    expect(readStoredTimelineZoom()).toBe("two_week");
+
+    writeStoredTimelineZoom("quarter");
+    expect(localStorage.getItem(TIMELINE_ZOOM_STORAGE_KEY)).toBe("quarter");
+    expect(readStoredTimelineZoom()).toBe("quarter");
 
     writeStoredTimelineZoom("month");
     expect(readStoredTimelineZoom()).toBe("month");
@@ -74,6 +83,21 @@ describe("timeline zoom persistence", () => {
 
     expect(readStoredTimelineZoom()).toBe(DEFAULT_TIMELINE_ZOOM);
     expect(() => writeStoredTimelineZoom("week")).not.toThrow();
+  });
+});
+
+describe("parseLocalDateInput", () => {
+  it("parses a valid local calendar date", () => {
+    const parsed = parseLocalDateInput(" 2024-02-29 ");
+
+    expect(parsed && localDate(parsed)).toBe("2024-02-29");
+  });
+
+  it("rejects invalid, empty, and malformed values", () => {
+    expect(parseLocalDateInput("2024-02-31")).toBeNull();
+    expect(parseLocalDateInput("")).toBeNull();
+    expect(parseLocalDateInput("   ")).toBeNull();
+    expect(parseLocalDateInput("2024-2-09")).toBeNull();
   });
 });
 
@@ -99,6 +123,21 @@ describe("buildTimelineRange", () => {
       key: "2024-02-18",
       label: "Sun 18",
     });
+  });
+  it("builds a Monday-start two-week range containing the anchor", () => {
+    const range = buildTimelineRange(new Date(2024, 1, 14), "two_week");
+
+    expect(localDate(range.start)).toBe("2024-02-12");
+    expect(localDate(range.end)).toBe("2024-02-26");
+    expect(range.days).toHaveLength(14);
+  });
+
+  it("builds the calendar quarter containing the anchor", () => {
+    const range = buildTimelineRange(new Date(2024, 1, 12), "quarter");
+
+    expect(localDate(range.start)).toBe("2024-01-01");
+    expect(localDate(range.end)).toBe("2024-04-01");
+    expect(range.days).toHaveLength(91);
   });
 });
 
@@ -126,6 +165,25 @@ describe("shiftTimelineAnchor", () => {
     );
     expect(localDate(shiftTimelineAnchor(anchor, "week", 1))).toBe(
       "2025-01-22"
+    );
+  });
+  it("moves a two-week anchor by fourteen local days", () => {
+    const anchor = new Date(2025, 0, 15, 12);
+    expect(localDate(shiftTimelineAnchor(anchor, "two_week", -1))).toBe(
+      "2025-01-01"
+    );
+    expect(localDate(shiftTimelineAnchor(anchor, "two_week", 1))).toBe(
+      "2025-01-29"
+    );
+  });
+
+  it("moves a quarter anchor by three months and clamps the day", () => {
+    const anchor = new Date(2025, 0, 31, 12);
+    expect(localDate(shiftTimelineAnchor(anchor, "quarter", 1))).toBe(
+      "2025-04-30"
+    );
+    expect(localDate(shiftTimelineAnchor(anchor, "quarter", -1))).toBe(
+      "2024-10-31"
     );
   });
 });

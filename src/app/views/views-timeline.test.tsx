@@ -1,14 +1,18 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as ViewsGridDataModule from "./use-views-grid-data";
 import type { GridRow } from "./types";
-import { computeCenteredScrollLeft, ViewsTimeline } from "./views-timeline";
+import {
+  applyTimelineBoardWheel,
+  computeCenteredScrollLeft,
+  ViewsTimeline,
+} from "./views-timeline";
 
 const useViewsGridDataMock = vi.fn();
 
@@ -156,14 +160,17 @@ describe("ViewsTimeline", () => {
     expect(onItemOpen).toHaveBeenCalledWith("task-unscheduled");
   });
 
-  it("exposes navigation controls", async () => {
+  it("exposes navigation controls and date jump", async () => {
     renderTimeline();
     await waitForTimeline();
     expect(screen.getByTestId("views-timeline-prev")).toBeInTheDocument();
     expect(screen.getByTestId("views-timeline-today")).toBeInTheDocument();
     expect(screen.getByTestId("views-timeline-next")).toBeInTheDocument();
+    expect(screen.getByTestId("views-timeline-date-jump")).toHaveAttribute(
+      "aria-label",
+      "Jump to date"
+    );
   });
-
   it("defaults to month zoom and persists switching to week", async () => {
     const user = userEvent.setup();
     renderTimeline();
@@ -173,12 +180,70 @@ describe("ViewsTimeline", () => {
     const week = screen.getByTestId("views-timeline-zoom-week");
     expect(month).toHaveAttribute("aria-pressed", "true");
     expect(week).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByTestId("views-timeline-zoom-two-week")
+    ).toHaveTextContent("2 weeks");
+    expect(screen.getByTestId("views-timeline-zoom-quarter")).toHaveTextContent(
+      "Quarter"
+    );
 
     await user.click(week);
 
     expect(week).toHaveAttribute("aria-pressed", "true");
     expect(month).toHaveAttribute("aria-pressed", "false");
     expect(localStorage.getItem("views.timeline.zoom")).toBe("week");
+    await user.click(screen.getByTestId("views-timeline-zoom-quarter"));
+    const quarter = Math.floor(new Date().getMonth() / 3) + 1;
+    expect(screen.getByTestId("views-timeline-zoom-quarter")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(
+      screen.getByText(new RegExp(`Q${quarter} ${new Date().getFullYear()}`))
+    ).toBeInTheDocument();
+    expect(window.location.search).toBe("");
+  });
+  it("persists two-week zoom and renders fourteen days", async () => {
+    const user = userEvent.setup();
+    renderTimeline();
+    await waitForTimeline();
+
+    await user.click(screen.getByTestId("views-timeline-zoom-two-week"));
+
+    expect(localStorage.getItem("views.timeline.zoom")).toBe("two_week");
+    expect(screen.getByTestId("views-timeline-zoom-two-week")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await waitFor(() => expect(screen.getAllByRole("time")).toHaveLength(14));
+  });
+  it("applies a pre-seeded two-week zoom with fourteen time columns", async () => {
+    localStorage.setItem("views.timeline.zoom", "two_week");
+    renderTimeline();
+
+    await waitForTimeline();
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("views-timeline-zoom-two-week")
+      ).toHaveAttribute("aria-pressed", "true")
+    );
+    expect(screen.getAllByRole("time")).toHaveLength(14);
+  });
+  it("jumps to a picked local date in the current month window", async () => {
+    renderTimeline();
+    await waitForTimeline();
+
+    const input = screen.getByTestId("views-timeline-date-jump");
+    fireEvent.change(input, { target: { value: "2024-06-15" } });
+
+    await waitFor(() => {
+      expect(screen.getByText("June 2024")).toBeInTheDocument();
+      expect(
+        screen
+          .getByTestId("views-timeline-board")
+          .querySelector('[data-timeline-day="2024-06-15"]')
+      ).not.toBeNull();
+    });
   });
 
   it("applies a pre-seeded week zoom after the initial month/loading paint", async () => {
@@ -322,6 +387,91 @@ describe("ViewsTimeline", () => {
     expect(screen.getByTestId("views-timeline-unscheduled")).toHaveTextContent(
       "under Conference launch"
     );
+  });
+
+  it("scrolls the timeline board horizontally on vertical wheel", async () => {
+    renderTimeline();
+    await waitForTimeline();
+
+    const board = screen.getByTestId("views-timeline-board");
+    Object.defineProperty(board, "clientWidth", {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(board, "scrollWidth", {
+      configurable: true,
+      value: 2000,
+    });
+    board.scrollLeft = 120;
+
+    fireEvent.wheel(board, { deltaY: 50, deltaX: 0, deltaMode: 0 });
+    expect(board.scrollLeft).toBe(170);
+  });
+});
+
+describe("applyTimelineBoardWheel", () => {
+  function makeContainer(scrollLeft = 0) {
+    return {
+      clientWidth: 400,
+      scrollWidth: 2000,
+      scrollLeft,
+    };
+  }
+
+  function makeEvent(partial: {
+    deltaX?: number;
+    deltaY?: number;
+    deltaMode?: number;
+  }) {
+    return {
+      deltaX: partial.deltaX ?? 0,
+      deltaY: partial.deltaY ?? 0,
+      deltaMode: partial.deltaMode ?? 0,
+      preventDefault: vi.fn(),
+    };
+  }
+
+  it("maps vertical wheel delta onto scrollLeft and prevents default", () => {
+    const container = makeContainer(100);
+    const event = makeEvent({ deltaY: 80 });
+
+    expect(applyTimelineBoardWheel(container, event)).toBe(true);
+    expect(container.scrollLeft).toBe(180);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it("ignores native-dominant horizontal deltas", () => {
+    const container = makeContainer(100);
+    const event = makeEvent({ deltaX: 40, deltaY: 10 });
+
+    expect(applyTimelineBoardWheel(container, event)).toBe(false);
+    expect(container.scrollLeft).toBe(100);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("no-ops when the board cannot scroll horizontally", () => {
+    const container = { clientWidth: 800, scrollWidth: 800, scrollLeft: 0 };
+    const event = makeEvent({ deltaY: 40 });
+
+    expect(applyTimelineBoardWheel(container, event)).toBe(false);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("no-ops at the scroll edge instead of trapping the page wheel", () => {
+    const container = makeContainer(0);
+    const event = makeEvent({ deltaY: -40 });
+
+    expect(applyTimelineBoardWheel(container, event)).toBe(false);
+    expect(container.scrollLeft).toBe(0);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("converts line-mode deltas into pixel scroll", () => {
+    const container = makeContainer(0);
+    const event = makeEvent({ deltaY: 3, deltaMode: 1 });
+
+    expect(applyTimelineBoardWheel(container, event)).toBe(true);
+    expect(container.scrollLeft).toBe(48);
   });
 });
 

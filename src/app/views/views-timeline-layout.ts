@@ -1,21 +1,26 @@
 /**
  * Shared date and lane layout for the Views timeline.
  *
- * The default zoom is month. The week|month choice is persisted via
- * TIMELINE_ZOOM_STORAGE_KEY.
+ * The default zoom is month. The week|two_week|month|quarter choice is
+ * persisted via TIMELINE_ZOOM_STORAGE_KEY.
  * Prev/Next/Today shift the anchor window.
  * All calendar calculations use the local timezone.
  */
 
 import type { GridRow } from "./types";
 
-export type TimelineZoom = "week" | "month";
+export type TimelineZoom = "week" | "two_week" | "month" | "quarter";
 
 export const DEFAULT_TIMELINE_ZOOM: TimelineZoom = "month";
 export const TIMELINE_ZOOM_STORAGE_KEY = "views.timeline.zoom";
 
 export function coerceTimelineZoom(value: unknown): TimelineZoom {
-  return value === "week" ? "week" : DEFAULT_TIMELINE_ZOOM;
+  return value === "week" ||
+    value === "two_week" ||
+    value === "month" ||
+    value === "quarter"
+    ? value
+    : DEFAULT_TIMELINE_ZOOM;
 }
 
 export function readStoredTimelineZoom(): TimelineZoom {
@@ -95,6 +100,22 @@ function sameLocalDay(left: Date, right: Date): boolean {
   return localDateKey(left) === localDateKey(right);
 }
 
+export function parseLocalDateInput(value: string): Date | null {
+  const text = value.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const local = new Date(year, month - 1, day);
+  return local.getFullYear() === year &&
+    local.getMonth() === month - 1 &&
+    local.getDate() === day
+    ? local
+    : null;
+}
+
 function parseDateValue(value: unknown): Date | null {
   if (typeof value !== "string" || value.trim() === "") return null;
   const text = value.trim();
@@ -113,7 +134,7 @@ function parseDateValue(value: unknown): Date | null {
       return null;
     }
 
-    if (text.length === 10) return local;
+    if (text.length === 10) return parseLocalDateInput(text);
 
     // Timestamp positions use the timestamp's local calendar day, rather
     // than allowing UTC parsing to change the header day.
@@ -148,7 +169,6 @@ function spanFromDates(
         : resolvedEnd,
   };
 }
-
 export function buildTimelineRange(
   anchor: Date,
   zoom: TimelineZoom,
@@ -157,14 +177,19 @@ export function buildTimelineRange(
   const safeAnchor = Number.isNaN(anchor.getTime()) ? new Date() : anchor;
   const safeZoom = coerceTimelineZoom(zoom);
   const anchorDay = startOfLocalDay(safeAnchor);
-  const start =
-    safeZoom === "week"
-      ? addLocalDays(anchorDay, -((anchorDay.getDay() + 6) % 7))
-      : new Date(anchorDay.getFullYear(), anchorDay.getMonth(), 1);
-  const end =
-    safeZoom === "week"
-      ? addLocalDays(start, 7)
-      : new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  let start: Date;
+  let end: Date;
+  if (safeZoom === "week" || safeZoom === "two_week") {
+    start = addLocalDays(anchorDay, -((anchorDay.getDay() + 6) % 7));
+    end = addLocalDays(start, safeZoom === "week" ? 7 : 14);
+  } else if (safeZoom === "quarter") {
+    const quarterStartMonth = Math.floor(anchorDay.getMonth() / 3) * 3;
+    start = new Date(anchorDay.getFullYear(), quarterStartMonth, 1);
+    end = new Date(anchorDay.getFullYear(), quarterStartMonth + 3, 1);
+  } else {
+    start = new Date(anchorDay.getFullYear(), anchorDay.getMonth(), 1);
+    end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  }
 
   const days: TimelineDay[] = [];
   for (let date = cloneDate(start); date < end; date = addLocalDays(date, 1)) {
@@ -186,17 +211,20 @@ export function shiftTimelineAnchor(
 ): Date {
   const safeAnchor = Number.isNaN(anchor.getTime()) ? new Date() : anchor;
   const safeZoom = coerceTimelineZoom(zoom);
-  if (safeZoom === "week") return addLocalDays(safeAnchor, direction * 7);
+  if (safeZoom === "week" || safeZoom === "two_week") {
+    return addLocalDays(safeAnchor, direction * (safeZoom === "week" ? 7 : 14));
+  }
 
   const result = cloneDate(safeAnchor);
   const day = result.getDate();
+  const monthDelta = safeZoom === "quarter" ? direction * 3 : direction;
   const targetMonth = new Date(
     result.getFullYear(),
-    result.getMonth() + direction + 1,
+    result.getMonth() + monthDelta + 1,
     0
   );
   result.setDate(1);
-  result.setMonth(result.getMonth() + direction);
+  result.setMonth(result.getMonth() + monthDelta);
   result.setDate(Math.min(day, targetMonth.getDate()));
   return result;
 }
