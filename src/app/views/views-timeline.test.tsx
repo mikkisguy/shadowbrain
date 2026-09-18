@@ -8,7 +8,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as ViewsGridDataModule from "./use-views-grid-data";
 import type { GridRow } from "./types";
-import { computeCenteredScrollLeft, ViewsTimeline } from "./views-timeline";
+import {
+  applyTimelineBoardWheel,
+  computeCenteredScrollLeft,
+  ViewsTimeline,
+} from "./views-timeline";
 
 const useViewsGridDataMock = vi.fn();
 
@@ -383,6 +387,91 @@ describe("ViewsTimeline", () => {
     expect(screen.getByTestId("views-timeline-unscheduled")).toHaveTextContent(
       "under Conference launch"
     );
+  });
+
+  it("scrolls the timeline board horizontally on vertical wheel", async () => {
+    renderTimeline();
+    await waitForTimeline();
+
+    const board = screen.getByTestId("views-timeline-board");
+    Object.defineProperty(board, "clientWidth", {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(board, "scrollWidth", {
+      configurable: true,
+      value: 2000,
+    });
+    board.scrollLeft = 120;
+
+    fireEvent.wheel(board, { deltaY: 50, deltaX: 0, deltaMode: 0 });
+    expect(board.scrollLeft).toBe(170);
+  });
+});
+
+describe("applyTimelineBoardWheel", () => {
+  function makeContainer(scrollLeft = 0) {
+    return {
+      clientWidth: 400,
+      scrollWidth: 2000,
+      scrollLeft,
+    };
+  }
+
+  function makeEvent(partial: {
+    deltaX?: number;
+    deltaY?: number;
+    deltaMode?: number;
+  }) {
+    return {
+      deltaX: partial.deltaX ?? 0,
+      deltaY: partial.deltaY ?? 0,
+      deltaMode: partial.deltaMode ?? 0,
+      preventDefault: vi.fn(),
+    };
+  }
+
+  it("maps vertical wheel delta onto scrollLeft and prevents default", () => {
+    const container = makeContainer(100);
+    const event = makeEvent({ deltaY: 80 });
+
+    expect(applyTimelineBoardWheel(container, event)).toBe(true);
+    expect(container.scrollLeft).toBe(180);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it("ignores native-dominant horizontal deltas", () => {
+    const container = makeContainer(100);
+    const event = makeEvent({ deltaX: 40, deltaY: 10 });
+
+    expect(applyTimelineBoardWheel(container, event)).toBe(false);
+    expect(container.scrollLeft).toBe(100);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("no-ops when the board cannot scroll horizontally", () => {
+    const container = { clientWidth: 800, scrollWidth: 800, scrollLeft: 0 };
+    const event = makeEvent({ deltaY: 40 });
+
+    expect(applyTimelineBoardWheel(container, event)).toBe(false);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("no-ops at the scroll edge instead of trapping the page wheel", () => {
+    const container = makeContainer(0);
+    const event = makeEvent({ deltaY: -40 });
+
+    expect(applyTimelineBoardWheel(container, event)).toBe(false);
+    expect(container.scrollLeft).toBe(0);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("converts line-mode deltas into pixel scroll", () => {
+    const container = makeContainer(0);
+    const event = makeEvent({ deltaY: 3, deltaMode: 1 });
+
+    expect(applyTimelineBoardWheel(container, event)).toBe(true);
+    expect(container.scrollLeft).toBe(48);
   });
 });
 

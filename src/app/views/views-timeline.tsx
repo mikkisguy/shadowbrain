@@ -156,6 +156,55 @@ export function scrollDayIntoView(
   );
 }
 
+function wheelDeltaPixels(
+  delta: number,
+  deltaMode: number,
+  lineSize = 16
+): number {
+  if (deltaMode === 1) return delta * lineSize;
+  if (deltaMode === 2) return delta * lineSize * 16;
+  return delta;
+}
+
+/**
+ * Map vertical mouse-wheel movement onto a horizontal timeline scroller.
+ * Returns true when the event was consumed (attach with `{ passive: false }`
+ * so `preventDefault` works).
+ */
+export function applyTimelineBoardWheel(
+  container: {
+    clientWidth: number;
+    scrollWidth: number;
+    scrollLeft: number;
+  },
+  event: {
+    deltaX: number;
+    deltaY: number;
+    deltaMode: number;
+    preventDefault: () => void;
+  }
+): boolean {
+  const maxScroll = Math.max(0, container.scrollWidth - container.clientWidth);
+  if (maxScroll <= 0) return false;
+
+  const deltaX = wheelDeltaPixels(event.deltaX, event.deltaMode);
+  const deltaY = wheelDeltaPixels(event.deltaY, event.deltaMode);
+
+  // Native horizontal / shift-wheel / trackpad pan: leave it alone.
+  if (Math.abs(deltaX) > Math.abs(deltaY)) return false;
+  if (deltaY === 0) return false;
+
+  const nextLeft = Math.min(
+    maxScroll,
+    Math.max(0, container.scrollLeft + deltaY)
+  );
+  if (nextLeft === container.scrollLeft) return false;
+
+  event.preventDefault();
+  container.scrollLeft = nextLeft;
+  return true;
+}
+
 function dayHeader(day: TimelineDay) {
   return (
     <div
@@ -443,6 +492,20 @@ export function ViewsTimeline({
       cancelled = true;
     };
   }, [range, rows.length, scrollTargetKey, scrollRequest]);
+
+  useEffect(() => {
+    const node = timelineRef.current;
+    if (!node) return;
+
+    const onWheel = (event: WheelEvent) => {
+      applyTimelineBoardWheel(node, event);
+    };
+
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      node.removeEventListener("wheel", onWheel);
+    };
+  }, [calendarReady, range.days.length, rows.length]);
 
   function shiftAnchor(direction: -1 | 1) {
     setAnchor((current) => shiftTimelineAnchor(current, zoom, direction));
